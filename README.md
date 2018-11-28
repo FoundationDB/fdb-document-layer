@@ -1,10 +1,10 @@
 # FoundationDB Document Layer
 
-FoundationDB Document Layer is a stateless microserver that exposes a document-oriented database API. The Document Layer speaks the MongoDB® wire protocol, allowing the use of the MongoDB® API via existing MongoDB® client bindings. All persistent data are stored in the FoundationDB Key-Value Store.
+The FoundationDB Document Layer is a stateless microserver that exposes a document-oriented database API. The Document Layer speaks the MongoDB® wire protocol, allowing the use of the MongoDB® API via existing MongoDB® client bindings. All persistent data are stored in the FoundationDB Key-Value Store.
 
-Document Layer implements a subset of the MongoDB® API (v 3.0.0) with some [differences](docs/known-differences.md). This subset is mainly focused on CRUD operations, indexes and transactions. Document Layer works with all the latest official MongoDB® drivers.
+The Document Layer implements a subset of the MongoDB® API (v 3.0.0) with some [differences](docs/known-differences.md). This subset is mainly focused on CRUD operations, indexes and transactions. The Document Layer works with all the latest official MongoDB® drivers.
 
-As Document Layer is built on top of FoundationDB, it inherits the strong guarantees of FoundationDB. Causal
+As the Document Layer is built on top of FoundationDB, it inherits the strong guarantees of FoundationDB. Causal
 consistency and strong consistency are the default mode of operation.
 Indexes are always consistent with the inserts. Shard keys are not
 needed as data distribution is taken care by FoundationDB backend
@@ -14,7 +14,7 @@ You can find more details at the documentation [here](docs/index.md)
 
 ## Developer Guide
 
-Document Layer is written in [Flow](https://github.com/apple/foundationdb/blob/master/flow/README.md) C++ just like FoundationDB.
+The Document Layer is written in [Flow](https://github.com/apple/foundationdb/blob/master/flow/README.md) C++ just like FoundationDB.
 
 ### Dependencies
 
@@ -55,7 +55,7 @@ FdbDocServer (1.5): listening on 127.0.0.1:27017
 
 ```
 
-Note that, Document Layer connects to the FoundationDB cluster to persist documents. If you don't provide any cluster file, it tries to find the cluster file in the default locations. If you have installed FoundationDB on your box, this should work just fine. Otherwise, one can pass the cluster file with the `-C` option.
+Note that, the Document Layer connects to the FoundationDB cluster to persist documents. If you don't provide any cluster file, it tries to find the cluster file in the default locations. If you have installed FoundationDB on your box, this should work just fine. Otherwise, one can pass the cluster file with the `-C` option.
 
 ### IDE Setup
 
@@ -71,7 +71,7 @@ NOTE: This setup helps you to make auto-complete work in CLion. You won't be abl
 
 ## Contributing
 
-Contributing to FoundationDB Document Layer can be in contributions to the code base, sharing your experience and insights in the community on the Forums. Please see the [contributing guide](CONTRIBUTING.md) for more specifics.
+Contributing to the FoundationDB Document Layer can be in contributions to the code base, sharing your experience and insights in the community on the Forums. Please see the [contributing guide](CONTRIBUTING.md) for more specifics.
 
 ## License and Trademarks
 The FoundationDB Document Layer is under the [Apache License, Version 2.0](LICENSE).
