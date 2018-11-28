@@ -1,0 +1,37 @@
+version: "3"
+
+services:
+  common: &common
+    image: fdb-document-layer-build:0.0.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  build-setup: &build-setup
+    <<: *common
+    depends_on: [common]
+    volumes:
+      - ..:/fdb-document-layer
+    working_dir: /fdb-document-layer
+
+  build-release: &build-release
+    <<: *build-setup
+    environment:
+      - MAKEPROCS=1
+      - RELEASE=1
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}"'
+
+  build-snapshot: &build-snapshot
+    <<: *build-setup
+    environment:
+      - MAKEPROCS=1
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}"'
+
+  build-prb:
+    <<: *build-snapshot
+
+  shell:
+    <<: *build-setup
+    volumes:
+      - ..:/fdb-document-layer
+    entrypoint: /bin/bash

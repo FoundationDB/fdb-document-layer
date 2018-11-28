@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# fdb-document-layer		Start the FDB Document Layer
+#
+# chkconfig: 2345 85 15
+# description: FDB Document Layer
+# processname: fdbdocmonitor
+# config: /etc/foundationdb/document/document.conf
+# pidfile: /var/run/fdb-document-layer.pid
+
+. /etc/rc.d/init.d/functions
+
+start()
+{
+    echo -n $"Starting FDB Document Layer: "
+    eval daemon /usr/lib/foundationdb/document/fdbdocmonitor --conffile /etc/foundationdb/document/document.conf --lockfile /var/run/fdb-document-layer.pid --daemonize
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && touch /var/lock/subsys/fdb-document-layer
+}
+
+stop()
+{
+    echo -n $"Stopping FDB Document Layer: "
+    killproc -p /var/run/fdb-document-layer.pid -d 300 /usr/lib/foundationdb/fdbdocmonitor
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/fdb-document-layer
+}
+
+restart() {
+    stop
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|reload|force-reload)
+        restart
+        ;;
+    condrestart)
+        [ -f /var/lock/subsys/fdb-document-layer ] && restart || :
+        ;;
+    status)
+        status /usr/lib/foundationdb/fdbdocmonitor
+        RETVAL=$?
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|restart|reload|force-reload|condrestart}"
+        RETVAL=1
+esac
+
+exit $RETVAL

@@ -1,0 +1,22 @@
+#!/bin/sh -e
+
+# summary of how this script can be called:
+#        * <postrm> `remove'
+#        * <postrm> `purge'
+#        * <old-postrm> `upgrade' <new-version>
+#        * <new-postrm> `failed-upgrade' <old-version>
+#        * <new-postrm> `abort-install'
+#        * <new-postrm> `abort-install' <old-version>
+#        * <new-postrm> `abort-upgrade' <old-version>
+#        * <disappearer's-postrm> `disappear' <overwriter>
+#          <overwriter-version>
+# for details, see http://www.debian.org/doc/debian-policy/ or
+# the debian-policy package
+
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+    update-rc.d -f fdb-document-layer remove || :
+fi
+
+if [ "$1" = "purge" ]; then
+    rm -rf /var/log/foundationdb/document /etc/foundationdb/document
+fi

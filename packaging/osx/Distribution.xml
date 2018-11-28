@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-gui-script minSpecVersion="1">
+  <pkg-ref id="FoundationDB"/>
+  <background file="logo.png" mime-type="image/png" alignment="bottomleft" scaling="tofit"/>
+  <title>FoundationDB Document Layer</title>
+  <allowed-os-versions>
+    <os-version min="10.7"/>
+  </allowed-os-versions>
+  <options customize="always" require-scripts="true" rootVolumeOnly="true" allow-external-scripts="no"/>
+  <choices-outline>
+    <line choice="document-layer"/>
+  </choices-outline>
+
+  <script>
+    <![CDATA[
+        var gMinFDBCVersion = "6.0.0";
+        
+        function findFDBClient() {
+            var fdbc = my.target.receiptForIdentifier("FoundationDB-clients");
+            if(fdbc == null) {
+                system.log('FDB Document Layer: No FoundationDB Client library found');
+                return false;
+            }
+            var installedVersion = fdbc.version;
+            var versionCmp = system.compareVersions(gMinFDBCVersion, installedVersion);
+            if(versionCmp > 0) {
+                system.log('FDB Document Layer: Unsupported FoundationDB Client version: ' + installedVersion)
+                return false;
+            }
+            return true;
+        }
+    ]]>
+    </script>
+
+  <choice id="document-layer" 
+    visible="true" 
+    enabled="findFDBClient();"
+    selected="findFDBClient();" 
+    title="FoundationDB Document Layer" 
+    description="The FoundationDB Document Layer is a stateless microserver which supports the MongoDB® wire protocol and implements a subset of the MongoDB® API. This package contains only the Document Layer. The FoundationDB Client Library must be installed separately.">
+    <pkg-ref id="fdb-document-layer"/>
+  </choice>
+  <pkg-ref id="fdb-document-layer" onConclusion="none">fdb-document-layer.pkg</pkg-ref>
+  <conclusion mime-type="application/rtf" file="conclusion.rtf"/>
+</installer-gui-script>

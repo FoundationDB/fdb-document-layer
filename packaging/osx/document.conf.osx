@@ -1,0 +1,26 @@
+## document.conf 
+##
+## Configuration file for FoundationDB Document Layer server processes 
+## Full documentation is available in the FoundationDB Document Layer Configuration document.
+
+[general]
+restart_delay = 60
+cluster_file = /usr/local/etc/foundationdb/fdb.cluster
+
+## Default parameters for individual fdbdoc processes
+[fdbdoc]
+command = /usr/local/libexec/fdbdoc
+listen_address = 127.0.0.1:$ID
+logdir = /usr/local/foundationdb/document/logs
+# root-directory = document
+# logsize = 10Mib
+# maxlogssize = 100MiB
+# implicit-transaction-max-retries = 3
+# implicit-transaction-timeout = 7000
+# pipeline = aggressive 
+# slow-query-log = all
+
+## An individual fdbdoc process with id 27016
+## Parameters set here override defaults from the [fdbdoc] section
+[fdbdoc.27016]
+

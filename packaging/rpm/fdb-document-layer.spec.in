@@ -1,0 +1,78 @@
+Name: fdb-document-layer
+Version: BDVERSION
+Release: BDRELEASE
+Group: Applications/Databases
+License: Apache v2 License
+URL: https://github.com/FoundationDB/fdb-document-layer
+Packager: FoundationDB <fdb-dist@apple.com>
+BuildArch: x86_64
+Summary: FoundationDB Document Layer
+Vendor: FoundationDB
+Requires: foundationdb-clients >= 6.0.0
+ifdef(`RHEL6', `Requires(post): chkconfig >= 0.9, /sbin/service')
+Requires(pre): /usr/sbin/useradd, /usr/sbin/groupadd, /usr/bin/getent
+
+%description
+The FoundationDB Document Layer is a stateless microserver which 
+supports the MongoDB® wire protocol and implements a subset of the 
+MongoDB® API. All stateful operations are delegated to the FoundationDB 
+Key-Value Store.
+
+This package contains only the Document Layer. The FoundationDB Client 
+Library must be installed separately.
+
+Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.
+
+%prep
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+tar -xzf %{_sourcedir}/install-files.tar.gz -C %{buildroot}
+ifdef(`RHEL6', `rm -r %{buildroot}/lib', `rm -r %{buildroot}/etc/rc.d')
+
+%pre
+getent group foundationdb >/dev/null || groupadd -r foundationdb >/dev/null
+getent passwd foundationdb >/dev/null || useradd -c "FoundationDB" -g foundationdb -s /bin/false -r -d /var/lib/foundationdb foundationdb >/dev/null
+exit 0
+
+%post
+if [ $1 -eq 1 ]; then
+ifdef(`RHEL6', `
+    /sbin/chkconfig --add fdb-document-layer >/dev/null 2>&1
+    /sbin/service fdb-document-layer start >/dev/null 2>&1
+', `
+    /usr/bin/systemctl enable fdb-document-layer >/dev/null 2>&1
+    /usr/bin/systemctl start fdb-document-layer >/dev/null 2>&1
+')
+else
+    ifdef(`RHEL6', `/sbin/service fdb-document-layer condrestart >/dev/null 2>&1', `/usr/bin/systemctl condrestart fdb-document-layer >/dev/null 2>&1')
+fi
+exit 0
+
+%preun
+if [ $1 -eq 0 ]; then
+ifdef(`RHEL6', `
+    /sbin/service fdb-document-layer stop >/dev/null 2>&1
+    /sbin/chkconfig --del fdb-document-layer
+', `
+    /usr/bin/systemctl stop fdb-document-layer >/dev/null 2>&1
+    /usr/bin/systemctl disable fdb-document-layer >/dev/null 2>&1
+')
+fi
+exit 0
+
+%postun
+if [ $1 -eq 0 ]; then
+    rm -rf /var/log/foundationdb/document /etc/foundationdb/document
+fi
+exit 0
+
+%files
+%defattr(-,root,root)
+%doc /usr/share/doc/fdb-document-layer
+ifdef(`RHEL6', `%attr(-,foundationdb,foundationdb) %dir /etc/foundationdb')
+%attr(-,foundationdb,foundationdb) %dir /etc/foundationdb/document
+%config(noreplace) /etc/foundationdb/document/document.conf
+%attr(0700,foundationdb,foundationdb) %dir /var/log/foundationdb/document
+ifdef(`RHEL6', `/etc/rc.d/init.d/fdb-document-layer', `/lib/systemd/system/fdb-document-layer.service')
+/usr/sbin/fdbdoc
+/usr/lib/foundationdb/document

@@ -1,0 +1,12 @@
+[Unit]
+Description=FoundationDB Document Layer
+After=syslog.target network.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/fdb-document-layer.pid
+ExecStart=/usr/lib/foundationdb/document/fdbdocmonitor --conffile /etc/foundationdb/document/document.conf --lockfile /var/run/fdb-document-layer.pid --daemonize
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

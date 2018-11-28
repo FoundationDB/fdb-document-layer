@@ -1,0 +1,18 @@
+Package: fdb-document-layer
+Version: VERSION-RELEASE
+Section: database
+Priority: optional
+Architecture: amd64
+Depends: foundationdb-clients (>= 6.0.0-1), adduser, libc6 (>= 2.11)
+Maintainer: FoundationDB <distribution@foundationdb.com>
+Homepage: https://github.com/FoundationDB/fdb-document-layer
+Description: FoundationDB Document Layer
+ The FoundationDB Document Layer is a stateless microserver which 
+ supports the MongoDB® wire protocol and implements a subset of the 
+ MongoDB® API. All stateful operations are delegated to the FoundationDB 
+ Key-Value Store.
+ .
+ This package contains only the Document Layer. The FoundationDB Client 
+ Library must be installed separately.
+ .
+ Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.

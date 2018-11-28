@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ -f /usr/local/etc/foundationdb/document/document.conf.old ]; then
+    mv /usr/local/etc/foundationdb/document/document.conf.old /usr/local/etc/foundationdb/document/document.conf
+else
+    mv /usr/local/etc/foundationdb/document/document.conf.new /usr/local/etc/foundationdb/document/document.conf
+fi
+
+/bin/launchctl load -w /Library/LaunchDaemons/com.foundationdb.fdbdocmonitor.plist
+
+exit 0

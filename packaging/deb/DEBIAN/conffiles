@@ -1,0 +1,2 @@
+/etc/foundationdb/document/document.conf
+/etc/init.d/fdb-document-layer
