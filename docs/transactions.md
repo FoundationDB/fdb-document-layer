@@ -6,7 +6,7 @@ Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.
 
 This guide describes the use of transactions in the Document Layer.
 Transactions are one of the distinctive features of the FoundationDB
-Key-Value Store, and Document Layer transactions inherit many of the
+Key-Value Store, and the Document Layer transactions inherit many of the
 capabilities and limitations of FoundationDB.
 
 ## What is a transaction?

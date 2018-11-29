@@ -41,6 +41,8 @@ tags
 smoke_tests/nodejs/node_modules/
 smoke_tests/**/target/
 
+test/correctness/upsert_test.csv
+
 *.out
 scrap/
 

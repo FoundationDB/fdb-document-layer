@@ -89,7 +89,7 @@ write concern requested by the client.
 
 ## Read concern and Read preference
 
-Document Layer exposes itself as a standalone MongoDB® server. And the
+The Document Layer exposes itself as a standalone MongoDB® server. And the
 write acknowledgement is sent back to client only after it is pesisted on all
 FoundationDB replicas. So, read concern and read preference are irrelavant and
 reads are always returned with fully consistent results.

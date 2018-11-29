@@ -74,9 +74,9 @@ The Document Layer does not implement the MongoDB® aggregation
 pipeline and operators.
 
 #### Sessions
-MongoDB® has introduced sessions in v3.6. Document Layer doesn't support
+MongoDB® has introduced sessions in v3.6. The Document Layer doesn't support
 sessions yet. Sessions in MongoDB® enable better consistency guarentees.
-It's important to note that, even though Document Layer doesn't support
+It's important to note that, even though the Document Layer doesn't support
 sessions, it has better consistency guarentees by default due to FoundationDB
 backend.
 
