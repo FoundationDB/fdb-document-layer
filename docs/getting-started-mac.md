@@ -4,6 +4,15 @@ Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.
 
 # Getting Started on a macOS
 
+## First steps
+
+* Validate that your system has
+    * x86-64 processor architecture
+    * 4 GB RAM (per Document Layer instance)
+    * macOS 10.7 or newer
+* Download the FoundationDB and the Document Layer packages for your system from [Downloads](https://apple.github.io/foundationdb/downloads.html).
+
+
 ## Setting up the Key-Value Store
 
 The Document Layer requires the FoundationDB Key-Value Store to store
