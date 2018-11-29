@@ -1,0 +1,15 @@
+<h2></h2>
+<footer>
+  <h4>
+    <div>
+      <div>
+        {%- if site.footer.copy -%}
+          <p>&copy {{ site.footer.copy | escape }}</p>
+        {%- endif -%}
+      </div>
+      <div>
+        <p>{{- site.footer.description | escape -}}</p>
+      </div>
+    </div>
+  </h4>
+</footer>
