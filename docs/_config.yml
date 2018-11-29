@@ -1,0 +1,8 @@
+title: FoundationDB Document Layer
+footer: 
+  copy: Copyright 2013-2018 Apple, Inc and the FoundationDB project authors.
+  description: MongoDB is a registered trademark of MongoDB, Inc.
+markdown: kramdown
+
+kramdown:
+  parse_block_html: true
