@@ -10,7 +10,7 @@ Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.
     * x86-64 processor architecture
     * 4 GB RAM (per Document Layer instance)
     * macOS 10.7 or newer
-* Download the FoundationDB and the Document Layer packages for your system from [Downloads](https://apple.github.io/foundationdb/downloads.html).
+* Download the FoundationDB and the Document Layer packages for your system from [Downloads](https://www.foundationdb.org/download/).
 
 
 ## Setting up the Key-Value Store
