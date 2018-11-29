@@ -4,10 +4,12 @@ Disclaimer: MongoDB is a registered trademark of MongoDB, Inc.
 
 # Getting Started on Linux
 
-## System requirements
+## First steps
 
-The Document Layer requires a 64-bit Linux operating system that works
-with .deb or .rpm packages.
+* Validate system requirements
+    * 64-bit Linux operating system that works with .deb or .rpm packages.
+    * 4GB RAM (per Document Layer instance)
+* Download the FoundationDB and the Document Layer packages for your system from [Downloads](https://www.foundationdb.org/download).
 
 ## Setting up the Key-Value Store
 
