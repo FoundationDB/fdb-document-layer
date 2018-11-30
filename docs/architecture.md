@@ -25,7 +25,7 @@ The Document Layer can be deployed either as a sidecar or an instance pool.
 
 The Document Layer instance runs on the same host as
 the application instance. Each application instance is coupled
-with the local the Document Layer instance and only connects to it.
+with the local Document Layer instance and only connects to it.
 This makes both security and service discovery easy.
 
 Application deployment needs to make sure, the Document Layer instances
