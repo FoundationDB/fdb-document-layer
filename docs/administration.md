@@ -37,9 +37,9 @@ On RHEL/CentOS, it can be prevented from starting at boot as follows
 $ sudo chkconfig fdb-document-layer off 
 ```
 
-### Mac OS X
+### macOS
 
-On OS X, the Document Layer is started and stopped using `launchctl` as
+On macOS, the Document Layer is started and stopped using `launchctl` as
 follows:
 
 ```
@@ -82,7 +82,7 @@ By default, trace files are output to:
   
   `/var/log/foundationdb/document/`
   
-  ### Mac OS X
+  ### macOS
   
   `/usr/local/foundationdb/document/logs/`
 
@@ -106,7 +106,7 @@ queries present in the logs can be recovered with the following command:
   
   `grep SlowQuery /var/log/foundationdb/document/fdbdoc-trace*`
   
-  ### Mac OS X
+  ### macOS
   
   `grep SlowQuery /usr/local/foundationdb/document/logs/fdbdoc-trace*`
 
@@ -166,7 +166,7 @@ To uninstall the Document Layer from a cluster of one or more machines:
     $ sudo rpm -e fdb-document-layer
     ```
 
-    **Mac OS X**
+    **macOS**
 
     ```
     $ sudo /usr/local/foundationdb/document/uninstall-FoundationDB-Document-Layer.sh
