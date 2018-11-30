@@ -11,7 +11,7 @@ The `fdbdoc` server process is run and monitored on each server by the
 controlled by the `document.conf` file located at
 
   - `/etc/foundationdb/document/document.conf` on Linux
-  - `/usr/local/etc/foundationdb/document/document.conf` on OS X
+  - `/usr/local/etc/foundationdb/document/document.conf` on macOS
 
 The `document.conf` file contains several sections, detailed below. Note
 that the presence of individual `[fdbdoc.<ID>]` sections actually causes
