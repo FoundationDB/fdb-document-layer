@@ -29,7 +29,7 @@ with the local the Document Layer instance and only connects to it.
 This makes both security and service discovery easy.
 
 Application deployment needs to make sure, the Document Layer instances
-start and stop together with appplication intances. Also,
+start and stop together with application instances. Also,
 FoundationDB C libraries need to installed on application instances
 and updated on FoundationDB server upgrades.
 
@@ -37,7 +37,7 @@ and updated on FoundationDB server upgrades.
 
 ### Instance pool with Load balancer
 
-The Document Layer instances are maintained as a service seperate from
+The Document Layer instances are maintained as a service separate from
 application. Applications connect to the Document Layer instances through
 a load balancer which rotates new connections through the Document Layer instances.
 Application deployment need not do anything special for either the Document Layer or
@@ -46,7 +46,7 @@ FoundationDB.
 As the application sees the instance pool through load balancer, reconnection
 to the same IP could go to different instance. This makes it hard to depend on
 any server state. In this setup, the Document Layer transactions do not provide
-correct consistency guarentees. Transactions should not be used in this model.
+correct consistency guarantees. Transactions should not be used in this model.
 
 **Note:** Cursors work properly as cursor requests come with an ID, which is used
 to fail the request that went to wrong server.
