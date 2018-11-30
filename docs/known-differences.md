@@ -57,7 +57,7 @@ Multikey compound indexes in the Document Layer permit the
 document to have array values for more than one of the indexed
 fields. Care should be taken with this feature, however, as
 updates to such a document may generate a number of index
-updates equal to the cartesian product of the lengths of all of
+updates equal to the Cartesian product of the lengths of all of
 the indexed arrays. Currently, the Document Layer will not
 permit the insertion or updating of a document which generates
 more than `1000` updates to a single index in this way. In a
@@ -75,9 +75,9 @@ pipeline and operators.
 
 #### Sessions
 MongoDB® has introduced sessions in v3.6. The Document Layer doesn't support
-sessions yet. Sessions in MongoDB® enable better consistency guarentees.
+sessions yet. Sessions in MongoDB® enable better consistency guarantees.
 It's important to note that, even though the Document Layer doesn't support
-sessions, it has better consistency guarentees by default due to FoundationDB
+sessions, it has better consistency guarantees by default due to FoundationDB
 backend.
 
 #### Oplog (Change Streams)
@@ -156,11 +156,11 @@ future.
 
 ## Behavioral differences
 
-#### Numeric fieldnames
+#### Numeric field names
 
-Use of array-like numeric fieldnames are not supported in non-array
+Use of array-like numeric field names are not supported in non-array
 BSON documents. The Document Layer does not support the use of array-like
-numeric fieldnames (e.g. "1") in non-array BSON documents.
+numeric field names (e.g. "1") in non-array BSON documents.
 
 #### listDatabases command
 

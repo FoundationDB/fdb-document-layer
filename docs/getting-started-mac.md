@@ -29,7 +29,7 @@ of a running FoundationDB system.
 The Document Layer stores all of its data in a directory managed by the
 [Directory Layer](https://apple.github.io/foundationdb/developer-guide.html#directories).
 This means that the Document Layer will not conflict with any other
-appilcation or layer using Key-Value Store
+application or layer using Key-Value Store
 [tuples](https://apple.github.io/foundationdb/data-modeling.html#tuples),
 [subspaces](https://apple.github.io/foundationdb/developer-guide.html#subspaces),
 or

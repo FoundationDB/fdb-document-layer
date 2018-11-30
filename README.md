@@ -40,11 +40,11 @@ We depend on FoundationDB for the flow, fdb_flow and fdb_c libraries. CMake shou
 
 #### Mono
 
-Flow actor files needs to be pre compiled with Flow actor compiler which generates regular C++ code. Flow actor compiler needs Mono to run.
+Flow actor files needs to be precompiled with Flow actor compiler which generates regular C++ code. Flow actor compiler needs Mono to run.
 
 ### Build
 
-Build files are written in CMake. Its best to keep the build directory seperate. CMake scripts get the FoundationDB sources from GitHub and build them. So, first ever build after you cloned the repo might take a while.
+Build files are written in CMake. Its best to keep the build directory separate. CMake scripts get the FoundationDB sources from GitHub and build them. So, first ever build after you cloned the repo might take a while.
 
 ```
 $ mkdir build && cd build && cmake .. && make

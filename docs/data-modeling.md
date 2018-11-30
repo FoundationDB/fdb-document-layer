@@ -13,7 +13,7 @@ transactions, see [transactions](transactions.md).
 The Document Layer implements a subset of the MongoDB® API (v 3.0.0)
 with a few [known differences](known-differences.md). As a result,
 most of the data modeling techniques used with MongoDB® are
-applicapble to the Document Layer as well. However, the Document
+applicable to the Document Layer as well. However, the Document
 Layer adds transactions in a way that differs from the way transactions
 were added to the MongoDB® v 4.0 API, which means that client code
 written to use multi-document transactions may need to be modified
