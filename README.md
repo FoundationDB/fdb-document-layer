@@ -23,16 +23,15 @@ The Document Layer is written in [Flow](https://github.com/apple/foundationdb/bl
 We depend on Boost 1.67 for Boost.DLL. Even though the DLL is a header only library, it depends on the non-header only libraries - filesystem and system. You can setup Boost as below:
 
 ```
+cd /tmp/ && \
 curl -L -J -O https://dl.bintray.com/boostorg/release/1.67.0/source/boost_1_67_0.tar.gz && \
 tar -xzf boost_1_67_0.tar.gz && \
 cd boost_1_67_0 && \
 ./bootstrap.sh --prefix=./ && \
-echo "using gcc : fdb : ${CXX} ;" >> ./tools/build/src/user-config.jam && \
-cat ./tools/build/src/user-config.jam && \
-./b2 toolset=gcc-fdb install --with-filesystem --with-system
+./b2 install --with-filesystem --with-system
 ```
 
-and set the `BOOST_ROOT` environment variable. This is how CMake build picks the Boost packages.
+and set the `BOOST_ROOT` environment variable to be `/tmp/boost_1_67_0/`. This is how CMake build picks the Boost packages. Since Boost is statically linked, it does not matter where you installed it.
 
 #### FoundationDB
 
