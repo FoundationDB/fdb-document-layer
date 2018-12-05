@@ -25,7 +25,7 @@ ExternalProject_Add(FoundationDB
 ExternalProject_Add_Step(FoundationDB server
         WORKING_DIRECTORY <SOURCE_DIR>
         EXCLUDE_FROM_MAIN 1
-        COMMAND make -j8 fdbserver fdbcli TLS_DISABLED=1)
+        COMMAND BOOSTDIR=${Boost_INCLUDE_DIRS} $(MAKE) fdbserver fdbcli TLS_DISABLED=1)
 ExternalProject_Add_StepTargets(FoundationDB server)
 
 ExternalProject_Get_Property(FoundationDB source_dir)
