@@ -72,6 +72,20 @@ target_include_directories(fdbdoc
 target_compile_features(fdbdoc PRIVATE cxx_std_11)
 target_sources(fdbdoc PRIVATE ${ACTOR_G_CPP_FILES})
 
+if(NOT TLS_DISABLED)
+    find_library(LibSSL_LIBRARY NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX} ssl)
+    find_library(LibCRYPTO_LIBRARY NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX} crypto)
+    find_library(LibTLS_LIBRARY NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}tls${CMAKE_STATIC_LIBRARY_SUFFIX} tls)
+    set(TLS_LIBS
+            ${FDB_RPC_LIBRARY}
+            ${FDBTLS_LIBRARY}
+            ${LibTLS_LIBRARY}
+            ${LibSSL_LIBRARY}
+            ${LibCRYPTO_LIBRARY})
+else()
+    set(TLS_LIBS)
+endif()
+
 target_link_libraries(fdbdoc
         PRIVATE
         ${Third_party_LIBS}
@@ -79,7 +93,8 @@ target_link_libraries(fdbdoc
         ${Boost_LIBRARIES}
         ${Flow_LIBRARY}
         ${FdbFlow_LIBRARY}
-        ${FDB_C_LIBRARY})
+        ${FDB_C_LIBRARY}
+        ${TLS_LIBS})
 
 if (APPLE)
     find_library(CoreFoundation CoreFoundation)

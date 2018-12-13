@@ -8,6 +8,15 @@ if(NOT DEFINED FDB_VERSION)
     set(FDB_VERSION "5.2.5")
 endif()
 
+if(NOT TLS_DISABLED)
+    message(STATUS Building FDB with TLS bits)
+    set(FDB_BUILD_COMMAND $(MAKE) flow fdb_flow fdb_c fdbmonitor FDBLibTLS fdbrpc)
+    set(FDB_SERVER_BUILD_COMMAND make -j8 fdbserver fdbcli)
+else()
+    set(FDB_BUILD_COMMAND $(MAKE) flow fdb_flow fdb_c fdbmonitor TLS_DISABLED=1)
+    set(FDB_SERVER_BUILD_COMMAND make -j8 fdbserver fdbcli TLS_DISABLED=1)
+endif()
+
 include(ExternalProject)
 ExternalProject_Add(FoundationDB
         GIT_REPOSITORY "https://github.com/apple/foundationdb.git"
@@ -17,7 +26,7 @@ ExternalProject_Add(FoundationDB
         PATCH_COMMAND ""
 
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND BOOSTDIR=${Boost_INCLUDE_DIRS} $(MAKE) flow fdb_flow fdb_c fdbmonitor TLS_DISABLED=1
+        BUILD_COMMAND ${FDB_BUILD_COMMAND}
         BUILD_IN_SOURCE true
         INSTALL_COMMAND ""
 )
@@ -25,7 +34,7 @@ ExternalProject_Add(FoundationDB
 ExternalProject_Add_Step(FoundationDB server
         WORKING_DIRECTORY <SOURCE_DIR>
         EXCLUDE_FROM_MAIN 1
-        COMMAND make -j8 fdbserver fdbcli TLS_DISABLED=1)
+        COMMAND ${FDB_SERVER_BUILD_COMMAND})
 ExternalProject_Add_StepTargets(FoundationDB server)
 
 ExternalProject_Get_Property(FoundationDB source_dir)
@@ -37,6 +46,10 @@ set(Flow_INCLUDE_DIRS ${source_dir})
 set(Flow_LIBRARY ${source_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}flow${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(FdbFlow_LIBRARY ${source_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fdb_flow${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(FDB_C_LIBRARY ${source_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}fdb_c${CMAKE_SHARED_LIBRARY_SUFFIX})
+if(NOT TLS_DISABLED)
+    set(FDBTLS_LIBRARY ${source_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}FDBLibTLS${CMAKE_STATIC_LIBRARY_SUFFIX})
+    set(FDB_RPC_LIBRARY ${source_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}fdbrpc${CMAKE_STATIC_LIBRARY_SUFFIX})
+endif()
 
 add_dependencies(fdbdoc FoundationDB)
 

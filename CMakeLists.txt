@@ -26,7 +26,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-set(FDB_VERSION 6.0.11)
+set(FDB_VERSION release-6.0)
 
 if(DEFINED ENV{IDE_BUILD})
     message(STATUS "Doing IDE build")
@@ -34,6 +34,15 @@ if(DEFINED ENV{IDE_BUILD})
 else()
     message(STATUS "Doing Normal build")
     set(DO_IDE_BUILD OFF)
+endif()
+
+if(DEFINED ENV{TLS_DISABLED})
+    message(STATUS "TLS disabled")
+    set(TLS_DISABLED ON)
+    add_definitions(-DTLS_DISABLED)
+else()
+    message(STATUS "TLS enabled")
+    set(TLS_DISABLED OFF)
 endif()
 
 find_package(Boost 1.67 EXACT REQUIRED COMPONENTS filesystem system)
