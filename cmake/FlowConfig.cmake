@@ -10,10 +10,10 @@ endif()
 
 if(NOT TLS_DISABLED)
     message(STATUS Building FDB with TLS bits)
-    set(FDB_BUILD_COMMAND $(MAKE) flow fdb_flow fdb_c fdbmonitor FDBLibTLS fdbrpc)
+    set(FDB_BUILD_COMMAND BOOSTDIR=${Boost_INCLUDE_DIRS} $(MAKE) flow fdb_flow fdb_c fdbmonitor FDBLibTLS fdbrpc)
     set(FDB_SERVER_BUILD_COMMAND make -j8 fdbserver fdbcli)
 else()
-    set(FDB_BUILD_COMMAND $(MAKE) flow fdb_flow fdb_c fdbmonitor TLS_DISABLED=1)
+    set(FDB_BUILD_COMMAND BOOSTDIR=${Boost_INCLUDE_DIRS} $(MAKE) flow fdb_flow fdb_c fdbmonitor TLS_DISABLED=1)
     set(FDB_SERVER_BUILD_COMMAND make -j8 fdbserver fdbcli TLS_DISABLED=1)
 endif()
 
