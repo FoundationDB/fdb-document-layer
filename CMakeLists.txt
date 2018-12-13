@@ -26,7 +26,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-set(FDB_VERSION release-6.0)
+set(FDB_VERSION 6.0.17)
 
 if(DEFINED ENV{IDE_BUILD})
     message(STATUS "Doing IDE build")
