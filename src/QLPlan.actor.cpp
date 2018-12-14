@@ -72,8 +72,8 @@ Reference<Plan> FilterPlan::construct_filter_plan(Reference<UnboundCollectionCon
 	if (pdPlan.present()) {
 		if (verboseLogging) {
 			TraceEvent("BD_construct_filter_plan")
-			    .detail("source_plan", source->describe().toString().c_str())
-			    .detail("pushed_down_into", pdPlan.get()->describe().toString().c_str());
+			    .detail("source_plan", source->describe().toString())
+			    .detail("pushed_down_into", pdPlan.get()->describe().toString());
 		}
 		return pdPlan.get();
 	}
@@ -137,8 +137,8 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 			std::vector<Reference<IPredicate>> pdTerms = std::vector<Reference<IPredicate>>(terms);
 			pdTerms.pop_back();
 			std::vector<Reference<IPredicate>> and_terms;
-			and_terms.push_back(ref(new OrPredicate(pdTerms)));
-			and_terms.push_back(ref(new NotPredicate(last)));
+			and_terms.emplace_back(new OrPredicate(pdTerms));
+			and_terms.emplace_back(new NotPredicate(last));
 			Optional<Reference<Plan>> pd = push_down(cx, ref(new AndPredicate(and_terms))->simplify());
 			if (pd.present()) {
 				return Optional<Reference<Plan>>(ref(new UnionPlan(pd.get(), lastPlan.get())));
@@ -165,7 +165,7 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 				break;
 			}
 		}
-		if (plans.size()) {
+		if (!plans.empty()) {
 			// SOMEDAY: return race(plans);
 			return Optional<Reference<Plan>>(plans.front());
 		} else {
@@ -244,7 +244,7 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 					break;
 				}
 			}
-			if (plans.size()) {
+			if (!plans.empty()) {
 				// SOMEDAY: return race(plans);
 				return plans.front();
 			} else {
@@ -275,7 +275,7 @@ ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,
 						futures.push_back(std::pair<Reference<ScanReturnedContext>, Future<bool>>(
 						    nextInput, predicate->evaluate(nextInput)));
 					}
-					when(bool pass = wait(futures.size() == 0 ? Never() : futures.front().second)) {
+					when(bool pass = wait(futures.empty() ? Never() : futures.front().second)) {
 						if (pass)
 							output.send(futures.front().first);
 						else
@@ -291,7 +291,7 @@ ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,
 			}
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			p = futures.front();
 			bool pass = wait(p.second);
 			if (pass)
@@ -387,14 +387,14 @@ ACTOR static Future<bool> compoundWouldBeLast(Reference<ScanReturnedContext> doc
                                               std::vector<Reference<IExpression>> exprs,
                                               FDB::Key indexUpperBound) {
 	std::vector<Future<std::vector<DataValue>>> f_old_values;
-	for (auto expr : exprs) {
+	for (const auto &expr : exprs) {
 		f_old_values.push_back(consumeAll(mapAsync(
 		    expr->evaluate(doc), [](Reference<IReadContext> valcx) { return getMaybeRecursive(valcx, StringRef()); })));
 	}
 	state std::vector<std::vector<DataValue>> old_values = wait(getAll(f_old_values));
 
 	int old_values_size = 1;
-	for (auto v : old_values) {
+	for (const auto &v : old_values) {
 		old_values_size *= v.size();
 	}
 
@@ -446,7 +446,7 @@ ACTOR static Future<Void> deduplicateIndexStream(PlanCheckpoint* checkpoint,
 						    nextInput, (self.size() == 1 ? simpleWouldBeLast : compoundWouldBeLast)(nextInput, exprs,
 						                                                                            indexUpperBound)));
 					}
-					when(bool pass = wait(futures.size() == 0 ? Never() : futures.front().second)) {
+					when(bool pass = wait(futures.empty() ? Never() : futures.front().second)) {
 						if (pass)
 							filtered.send(futures.front().first);
 						else
@@ -462,7 +462,7 @@ ACTOR static Future<Void> deduplicateIndexStream(PlanCheckpoint* checkpoint,
 			}
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			p = futures.front();
 			bool pass = wait(p.second);
 			if (pass)
@@ -823,7 +823,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 
 				// This section MUST come before the call to dtr->cancel_ongoing_index_reads(), since these futures
 				// refer to documents that we are considering committed.
-				while (committingDocs.size()) {
+				while (!committingDocs.empty()) {
 					Void _ = wait(committingDocs.front().second);
 					bufferedDocs.push_back(committingDocs.front().first);
 					committingDocs.pop_front();
@@ -933,7 +933,7 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 						throw;
 				}
 
-				while (committing.size()) {
+				while (!committing.empty()) {
 					Void _ = wait(committing.front().second);
 					ret.push_back(committing.front().first);
 					committing.pop_front();
@@ -947,7 +947,7 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 				tr->tr = self->newTransaction()->tr;
 
 				state Reference<ScanReturnedContext> r;
-				for (Reference<ScanReturnedContext> loopThing : ret) {
+				for (const Reference<ScanReturnedContext> &loopThing : ret) {
 					r = loopThing;
 					Void _ = wait(outerLock->take(1));
 					output.send(r);
@@ -997,7 +997,7 @@ ACTOR static Future<Void> doProject(PlanCheckpoint* checkpoint,
 						futures.push_back(std::pair<Reference<ScanReturnedContext>, Future<bson::BSONObj>>(
 						    nextInput, projectDocument(nextInput, projection, ordering)));
 					}
-					when(bson::BSONObj proj = wait(futures.size() == 0 ? Never() : futures.front().second)) {
+					when(bson::BSONObj proj = wait(futures.empty() ? Never() : futures.front().second)) {
 						output.send(ref(new ScanReturnedContext(ref(new BsonContext(proj, false)),
 						                                        futures.front().first->scanId(),
 						                                        futures.front().first->scanKey())));
@@ -1012,7 +1012,7 @@ ACTOR static Future<Void> doProject(PlanCheckpoint* checkpoint,
 			}
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			bson::BSONObj proj = wait(futures.front().second);
 			output.send(ref(new ScanReturnedContext(ref(new BsonContext(proj, false)), futures.front().first->scanId(),
 			                                        futures.front().first->scanKey())));
@@ -1052,7 +1052,7 @@ ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
 						    nextInput->commitChanges())); // FIXME: this will be unsafe with unique indexes. Something
 						                                  // has to happen here that doesn't kill performance.
 					}
-					when(Void _ = wait(futures.size() == 0 ? Never() : futures.front().second)) {
+					when(Void _ = wait(futures.empty() ? Never() : futures.front().second)) {
 						output.send(futures.front().first);
 						futures.pop_front();
 					}
@@ -1065,7 +1065,7 @@ ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
 			}
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			Void _ = wait(futures.front().second);
 			output.send(futures.front().first);
 			futures.pop_front();
@@ -1115,7 +1115,7 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 				throw;
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			Void _ = wait(futures.front().second);
 			output.send(futures.front().first);
 			futures.pop_front();
@@ -1400,7 +1400,7 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 		state Reference<Plan> getIndexesPlan = getIndexesForCollectionPlan(unbound, ns);
 		try {
 			std::vector<bson::BSONObj> indexObjs = wait(getIndexesTransactionally(getIndexesPlan, tr));
-			for (auto existingindexObj : indexObjs) {
+			for (const auto &existingindexObj : indexObjs) {
 				if (indexObj.getObjectField("key").woCompare(existingindexObj.getObjectField("key")) == 0) {
 					throw index_already_exists();
 				}
@@ -1694,7 +1694,7 @@ ACTOR static Future<Void> scanAndBuildIndex(PlanCheckpoint* checkpoint,
 				throw;
 		}
 
-		while (futures.size()) {
+		while (!futures.empty()) {
 			Void _ = wait(futures.front().second);
 			output.send(futures.front().first);
 			futures.pop_front();
@@ -1872,23 +1872,22 @@ Reference<PlanCheckpoint> PlanCheckpoint::stopAndCheckpoint() {
 
 	Reference<PlanCheckpoint> rest(new PlanCheckpoint);
 	rest->scans.resize(scans.size());
-	for (int s = 0; s < scans.size(); s++)
-		rest->scans[s].bounds = KeyRangeRef(scans[s].split, scans[s].bounds.end);
+	for (int i = 0; i < scans.size(); i++)
+		rest->scans[i].bounds = KeyRangeRef(scans[i].split, scans[i].bounds.end);
 	rest->states.reserve(states.size());
-	for (int s = 0; s < states.size(); s++)
-		rest->states.emplace_back(states[s].split);
+	for (auto &s : states)
+		rest->states.emplace_back(s.split);
 
 	return rest;
 }
 
 void PlanCheckpoint::boundToStopPoint() {
-	for (int s = 0; s < scans.size(); s++)
-		scans[s].bounds = KeyRangeRef(scans[s].bounds.begin, scans[s].split);
+	for (auto &scan : scans)
+		scan.bounds = KeyRangeRef(scan.bounds.begin, scan.split);
 }
 
 ACTOR void uncancellableHoldActor(Future<Void> held) {
 	Void _ = wait(held);
-	return;
 }
 
 void PlanCheckpoint::stop() {
@@ -1899,7 +1898,7 @@ void PlanCheckpoint::stop() {
 	// Operations don't send errors to their outputs when cancelled, because those could cause subsequent actors
 	// to die out of topological order.  So we would send broken_promise errors when we clear `ops` below.  Send
 	// operation_cancelled to the final output instead (e.g. these are expected by NonIsolatedRW)
-	if (ops.size())
+	if (!ops.empty())
 		ops.back().output.sendError(operation_cancelled());
 	ops.clear();
 	scansAdded = 0;
@@ -1909,7 +1908,7 @@ void PlanCheckpoint::stop() {
 }
 
 void PlanCheckpoint::addOperation(Future<Void> actors, PromiseStream<Reference<ScanReturnedContext>> output) {
-	ops.push_back(OpInfo(actors, output));
+	ops.emplace_back(actors, output);
 }
 
 int PlanCheckpoint::addScan() {
