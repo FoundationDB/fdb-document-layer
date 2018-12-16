@@ -88,12 +88,8 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 }
 
-ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> constructContext(
-    std::string dbName,
-    std::string collectionName,
-    Reference<DocTransaction> tr,
-    DocumentLayer* docLayer,
-    bool includeIndex = true) {
+ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>>
+constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docLayer, bool includeIndex = true) {
 	try {
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
@@ -102,11 +98,11 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		FDB::Version v = wait(tr->tr->getReadVersion());
 		snapshotTr->setVersion(v);
 		state Future<Reference<DirectorySubspace>> fcollectionDirectory =
-		    docLayer->rootDirectory->open(snapshotTr, {StringRef(dbName), StringRef(collectionName)});
+		    docLayer->rootDirectory->open(snapshotTr, {StringRef(ns.first), StringRef(ns.second)});
 		state Future<Reference<DirectorySubspace>> findexDirectory =
-		    docLayer->rootDirectory->open(snapshotTr, {StringRef(dbName), LiteralStringRef("system.indexes")});
+		    docLayer->rootDirectory->open(snapshotTr, {StringRef(ns.first), LiteralStringRef("system.indexes")});
 		state Reference<DirectorySubspace> metadataDirectory = wait(docLayer->rootDirectory->open(
-		    snapshotTr, {StringRef(dbName), StringRef(collectionName), LiteralStringRef("metadata")}));
+		    snapshotTr, {StringRef(ns.first), StringRef(ns.second), LiteralStringRef("metadata")}));
 
 		state Future<uint64_t> fv = getMetadataVersion(tr, metadataDirectory);
 		state Reference<DirectorySubspace> collectionDirectory = wait(fcollectionDirectory);
@@ -120,7 +116,7 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		if (includeIndex) {
 			state Reference<UnboundCollectionContext> indexCx = Reference<UnboundCollectionContext>(
 			    new UnboundCollectionContext(indexDirectory, Reference<DirectorySubspace>()));
-			state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexCx, dbName, collectionName);
+			state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexCx, ns);
 			std::vector<bson::BSONObj> allIndexes = wait(getIndexesTransactionally(indexesPlan, tr));
 
 			for (const auto& indexObj : allIndexes) {
@@ -149,11 +145,11 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		// NB: These directory creations are not parallelized deliberately, because it is unsafe to create directories
 		// in parallel with the same transaction in the Flow directory layer.
 		state Reference<DirectorySubspace> tcollectionDirectory =
-		    wait(docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(dbName), StringRef(collectionName)}));
+		    wait(docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(ns.first), StringRef(ns.second)}));
 		state Reference<DirectorySubspace> tindexDirectory = wait(
-		    docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(dbName), LiteralStringRef("system.indexes")}));
+		    docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(ns.first), LiteralStringRef("system.indexes")}));
 		state Reference<DirectorySubspace> tmetadataDirectory = wait(docLayer->rootDirectory->createOrOpen(
-		    tr->tr, {StringRef(dbName), StringRef(collectionName), LiteralStringRef("metadata")}));
+		    tr->tr, {StringRef(ns.first), StringRef(ns.second), LiteralStringRef("metadata")}));
 		state Reference<UnboundCollectionContext> tcx =
 		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(tcollectionDirectory, tmetadataDirectory));
 		// fprintf(stderr, "%s.%s Creating: Collection dir: %s Metadata dir:%s Caller:%s\n", dbName.c_str(),
@@ -166,23 +162,20 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 }
 
 ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionContext(Reference<DocTransaction> tr,
-                                                                                   std::string dbName,
-                                                                                   std::string collectionName,
+                                                                                   Namespace ns,
                                                                                    Reference<MetadataManager> self,
-                                                                                   bool allowSystemNamespace,
                                                                                    bool includeIndex = true) {
 	if (self->contexts.size() > 100)
 		self->contexts.clear();
-	state std::pair<std::string, std::string> fullCollectionName = std::make_pair(dbName, collectionName);
 
-	auto match = self->contexts.find(fullCollectionName);
+	auto match = self->contexts.find(ns);
 
 	if (match == self->contexts.end()) {
 		std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
-		    wait(constructContext(dbName, collectionName, tr, self->docLayer, includeIndex));
+		    wait(constructContext(ns, tr, self->docLayer, includeIndex));
 		if (unboundPair.second != -1) { // Here and below don't pollute the cache if we just created the directory,
 			                            // since this transaction might not commit.
-			auto insert_result = self->contexts.insert(std::make_pair(fullCollectionName, unboundPair));
+			auto insert_result = self->contexts.insert(std::make_pair(ns, unboundPair));
 			// somebody else may have done the lookup and finished ahead of us. Either way, replace it with ours (can no
 			// longer optimize this by only replacing if ours is newer, because the directory may have moved or
 			// vanished.
@@ -197,19 +190,19 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 		uint64_t version = wait(getMetadataVersion(tr, oldUnbound->metadataDirectory));
 		if (version != oldVersion) {
 			std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
-			    wait(constructContext(dbName, collectionName, tr, self->docLayer, includeIndex));
+			    wait(constructContext(ns, tr, self->docLayer, includeIndex));
 			if (unboundPair.second != -1) {
 				// create the iterator again instead of making the previous value state, because the map could have
 				// changed during the previous wait. Either way, replace it with ours (can no longer optimize this by
 				// only replacing if ours is newer, because the directory may have moved or vanished.
 				// std::map<std::pair<std::string, std::string>, std::pair<Reference<UnboundCollectionContext>,
-				// uint64_t>>::iterator match = self->contexts.find(fullCollectionName);
-				auto match = self->contexts.find(fullCollectionName);
+				// uint64_t>>::iterator match = self->contexts.find(ns);
+				auto match = self->contexts.find(ns);
 
 				if (match != self->contexts.end())
 					match->second = unboundPair;
 				else
-					self->contexts.insert(std::make_pair(fullCollectionName, unboundPair));
+					self->contexts.insert(std::make_pair(ns, unboundPair));
 			}
 			return unboundPair.first;
 		} else {
@@ -218,61 +211,30 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 	}
 }
 
-Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(
-    Reference<DocTransaction> tr,
-    StringRef fullCollectionName /*database.collection*/,
-    bool allowSystemNamespace) {
-	std::string fullCollectionNameStr = fullCollectionName.toString();
-	const size_t pos = fullCollectionNameStr.find('.');
-	std::string collectionName = fullCollectionNameStr.substr(pos + 1);
-	if (!allowSystemNamespace && collectionName.find("system.") == 0)
+Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(Reference<DocTransaction> tr,
+                                                                                         Namespace const& ns,
+                                                                                         bool allowSystemNamespace,
+                                                                                         bool includeIndex) {
+	if (!allowSystemNamespace && startsWith(ns.second.c_str(), "system."))
 		throw write_system_namespace();
-	std::string dbName = fullCollectionNameStr.substr(0, pos);
-	return assembleCollectionContext(tr, dbName, collectionName, Reference<MetadataManager>::addRef(this),
-	                                 allowSystemNamespace);
-}
-
-Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(
-    Reference<DocTransaction> tr,
-    std::string const& dbName,
-    std::string const& collectionName,
-    bool allowSystemNamespace,
-    bool includeIndex) {
-	if (!allowSystemNamespace && startsWith(collectionName.c_str(), "system."))
-		throw write_system_namespace();
-	return assembleCollectionContext(tr, dbName, collectionName, Reference<MetadataManager>::addRef(this),
-	                                 allowSystemNamespace, includeIndex);
+	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex);
 }
 
 Future<Reference<UnboundCollectionContext>> MetadataManager::refreshUnboundCollectionContext(
     Reference<UnboundCollectionContext> cx,
     Reference<DocTransaction> tr) {
-	return assembleCollectionContext(tr, cx->databaseName(), cx->collectionName(),
-	                                 Reference<MetadataManager>::addRef(this), true);
-}
-
-Future<Reference<UnboundCollectionContext>> MetadataManager::indexesCollection(Reference<DocTransaction> tr,
-                                                                               std::string const& dbName) {
-	return getUnboundCollectionContext(tr, dbName, std::string("system.indexes"), true);
-}
-
-Future<Reference<UnboundCollectionContext>> MetadataManager::refreshUnboundCollectionContextNoCache(
-    Reference<UnboundCollectionContext> cx,
-    Reference<DocTransaction> tr) {
-	return map(constructContext(cx->databaseName(), cx->collectionName(), tr, docLayer),
-	           [](std::pair<Reference<UnboundCollectionContext>, uint64_t> pair) { return pair.first; });
+	return assembleCollectionContext(tr, std::make_pair(cx->databaseName(), cx->collectionName()),
+	                                 Reference<MetadataManager>::addRef(this), false);
 }
 
 ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
-                                          std::string dbName,
-                                          std::string collectionName,
+                                          Namespace ns,
                                           Standalone<StringRef> encodedIndexId,
                                           Reference<ExtConnection> ec,
                                           UID build_id) {
 	try {
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
-		state Reference<UnboundCollectionContext> mcx =
-		    wait(ec->mm->getUnboundCollectionContext(tr, dbName, collectionName, false, false));
+		state Reference<UnboundCollectionContext> mcx = wait(ec->mm->getUnboundCollectionContext(tr, ns, false, false));
 		// do no include existing index
 		state IndexInfo info;
 		info = MetadataManager::indexInfoFromObj(indexObj, mcx);
@@ -281,13 +243,11 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 		mcx->addIndex(info);
 
 		state Reference<Plan> buildingPlan = ec->wrapOperationPlan(
-		    ref(new BuildIndexPlan(ref(new TableScanPlan(mcx)), info, dbName, encodedIndexId, ec->mm)), false, mcx);
+		    ref(new BuildIndexPlan(ref(new TableScanPlan(mcx)), info, ns.first, encodedIndexId, ec->mm)), false, mcx);
 		int64_t _ = wait(executeUntilCompletionTransactionally(buildingPlan, tr));
 
-		state Reference<Plan> finalizePlan =
-		    ec->isolatedWrapOperationPlan(ref(new UpdateIndexStatusPlan(dbName, collectionName, encodedIndexId, ec->mm,
-		                                                                std::string("ready"), info.buildId)),
-		                                  0, -1);
+		state Reference<Plan> finalizePlan = ec->isolatedWrapOperationPlan(
+		    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm, std::string("ready"), info.buildId)), 0, -1);
 		int64_t _ = wait(executeUntilCompletionTransactionally(finalizePlan, ec->getOperationTransaction()));
 
 		return Void();
@@ -301,9 +261,7 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 			// UpdateIndexStatusPlan, if it has that optional parameter, will return an error in the event that the
 			// buildId field does not exist (as is the case for 'ready' indexes).
 			state Reference<Plan> errorPlan = ec->isolatedWrapOperationPlan(
-			    ref(new UpdateIndexStatusPlan(dbName, collectionName, encodedIndexId, ec->mm, std::string("error"),
-			                                  info.buildId)),
-			    0, -1);
+			    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm, std::string("error"), info.buildId)), 0, -1);
 			try {
 				int64_t _ = wait(executeUntilCompletionTransactionally(errorPlan, ec->getOperationTransaction()));
 				okay = true;
@@ -321,10 +279,9 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 }
 
 Future<Void> MetadataManager::buildIndex(bson::BSONObj indexObj,
-                                         std::string const& dbName,
-                                         std::string const& collectionName,
+                                         Namespace const& ns,
                                          Standalone<StringRef> encodedIndexId,
                                          Reference<ExtConnection> ec,
                                          UID build_id) {
-	return buildIndex_impl(indexObj, dbName, collectionName, encodedIndexId, ec, build_id);
+	return buildIndex_impl(indexObj, ns, encodedIndexId, ec, build_id);
 }

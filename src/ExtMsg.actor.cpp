@@ -53,6 +53,20 @@ REGISTER_MSG(ExtMsgGetMore);
 REGISTER_MSG(ExtMsgDelete);
 REGISTER_MSG(ExtMsgKillCursors);
 
+// ns -> database.collection
+Namespace getDBCollectionPair(const char* ns, std::pair<std::string, std::string> errMsg) {
+	const auto dotPtr = strchr(ns, '.');
+	if (dotPtr == nullptr) {
+		TraceEvent(SevWarn, "WireBadCollectionName").detail(errMsg.first, errMsg.second).suppressFor(1.0);
+		throw wire_protocol_mismatch();
+	}
+	return std::make_pair(std::string(ns, dotPtr - ns), std::string(dotPtr + 1));
+}
+
+std::string fullCollNameToString(Namespace const& ns) {
+	return ns.first + "." + (ns.second.empty() ? "$cmd" : ns.second);
+}
+
 /**
  * query := { $bool_op : [ query* ],   *          (a predicate)
  * 			  path : literal_match,    *
@@ -174,14 +188,22 @@ Reference<Plan> planProjection(Reference<Plan> plan,
 	return Reference<Plan>(new ProjectionPlan(parseProjection(selector), plan, ordering));
 }
 
+const char* getFirstKey(bson::BSONObj const& doc) {
+	auto i = doc.begin();
+	auto e = i.next();
+	return e.fieldName();
+}
+
 ExtMsgQuery::ExtMsgQuery(ExtMsgHeader* header, const uint8_t* body) : header(header) {
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (uint8_t*)header + header->messageLength;
 
 	flags = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
-	fullCollectionName = (const char*)ptr;
-	ptr += strlen(fullCollectionName) + 1;
+
+	const char* collName = (const char*)ptr;
+	ptr += strlen(collName) + 1;
+
 	numberToSkip = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
 	numberToReturn = *(int32_t*)ptr;
@@ -195,20 +217,23 @@ ExtMsgQuery::ExtMsgQuery(ExtMsgHeader* header, const uint8_t* body) : header(hea
 		ptr += returnFieldSelector.objsize();
 	}
 
+	ns = getDBCollectionPair(collName, std::make_pair("query", query.toString()));
+	if (ns.second == "$cmd") {
+		isCmd = true;
+		// Mark it empty for now, command would be responsible for setting collection name later.
+		ns.second = "";
+	} else {
+		isCmd = false;
+	}
+
 	/* We should have consumed all the bytes specified by header */
 	ASSERT(ptr == eom);
 }
 
 std::string ExtMsgQuery::toString() {
 	return format("QUERY: %s, collection=%s, flags=%d, numberToSkip=%d, numberToReturn=%d (%s)",
-	              query.toString(false, true).c_str(), fullCollectionName, flags, numberToSkip, numberToReturn,
-	              header->toString().c_str());
-}
-
-const char* getFirstKey(bson::BSONObj const& doc) {
-	auto i = doc.begin();
-	auto e = i.next();
-	return e.fieldName();
+	              query.toString(false, true).c_str(), fullCollNameToString(ns).c_str(), flags, numberToSkip,
+	              numberToReturn, header->toString().c_str());
 }
 
 ACTOR Future<Void> runCommand(Reference<ExtConnection> nmc,
@@ -367,15 +392,14 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 	                                                : Optional<bson::BSONObj>();
 
 	try {
-		// Return `listCollections()` if `fullCollectionName` is like "name.system.namespaces"
-		if (strcmp(strchr(msg->fullCollectionName, '.') + 1, namespaces) == 0) {
+		// Return `listCollections()` if `ns` is like "name.system.namespaces"
+		if (msg->ns.second == namespaces) {
 			Reference<ExtMsgReply> collections = wait(listCollections(msg, dtr, ec->docLayer->rootDirectory));
 			replyStream.send(collections);
 			throw end_of_stream();
 		}
 
-		state Reference<UnboundCollectionContext> cx =
-		    wait(ec->mm->getUnboundCollectionContext(dtr, StringRef(msg->fullCollectionName), true));
+		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, msg->ns, true));
 
 		// The following is required by ambiguity in the wire protocol we are speaking
 		bson::BSONObj queryObject =
@@ -471,7 +495,7 @@ ACTOR static Future<Void> doRun(Reference<ExtMsgQuery> query, Reference<ExtConne
 	state uint64_t startTime = timer_int();
 
 	DocumentLayer::metricReporter->captureMeter("queryRate", 1);
-	if (!strcmp(query->fullCollectionName + strlen(query->fullCollectionName) - 5, ".$cmd")) {
+	if (query->isCmd) {
 		// It's a command
 		x = runCommand(ec, query, replyStream);
 	} else {
@@ -499,15 +523,7 @@ ACTOR static Future<Void> doRun(Reference<ExtMsgQuery> query, Reference<ExtConne
 }
 
 std::string ExtMsgQuery::getDBName() {
-	const auto dotPtr = strchr(fullCollectionName, '.');
-	if (dotPtr == nullptr) {
-		TraceEvent(SevWarn, "WireBadCollectionName").detail("query", query.toString()).suppressFor(1.0);
-		throw wire_protocol_mismatch();
-	}
-
-	std::string databaseName;
-	databaseName.append(fullCollectionName, dotPtr - fullCollectionName);
-	return databaseName;
+	return ns.first;
 }
 
 Future<Void> ExtMsgQuery::run(Reference<ExtConnection> nmc) {
@@ -577,8 +593,10 @@ ExtMsgInsert::ExtMsgInsert(ExtMsgHeader* header, const uint8_t* body) : header(h
 
 	flags = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
-	fullCollectionName = (const char*)ptr;
-	ptr += strlen(fullCollectionName) + 1;
+
+	const char* collName = (const char*)ptr;
+	ptr += strlen(collName) + 1;
+	ns = getDBCollectionPair(collName, std::make_pair("msgType", "OP_INSERT"));
 
 	while (ptr < eom) {
 		bson::BSONObj doc = bson::BSONObj((const char*)ptr);
@@ -597,7 +615,8 @@ std::string ExtMsgInsert::toString() {
 		buf += " ";
 	}
 
-	buf += format("], collection=%s, flags=%d (%s)", fullCollectionName, flags, header->toString().c_str());
+	buf +=
+	    format("], collection=%s, flags=%d (%s)", fullCollNameToString(ns).c_str(), flags, header->toString().c_str());
 
 	return buf;
 }
@@ -725,7 +744,7 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
                                                    Reference<ExtConnection> ec,
                                                    Reference<DocTransaction> tr,
-                                                   std::string fullCollectionName) {
+                                                   Namespace ns) {
 
 	if (!indexObj.hasField("name"))
 		throw no_index_name();
@@ -764,10 +783,6 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 		}
 	}
 
-	const char* fullCollectionNameCstr = fullCollectionName.c_str();
-	auto dot = strchr(fullCollectionNameCstr, '.');
-	state std::string dbName = std::string(fullCollectionNameCstr, dot - fullCollectionNameCstr);
-	state std::string collectionName = std::string(dot + 1);
 	state bool background = indexObj.hasField("background") && indexObj.getField("background").trueValue();
 	if (indexObj.hasField("unique") && indexObj.getBoolField("unique") && background) {
 		throw unique_index_background_construction();
@@ -775,9 +790,8 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 
 	// Let's add this index
 	state UID build_id = g_random->randomUniqueID();
-	Reference<IInsertOp> indexOp(new ExtIndexInsert(indexObj, build_id, fullCollectionName));
-	Reference<Plan> plan =
-	    ec->isolatedWrapOperationPlan(ref(new IndexInsertPlan(indexOp, indexObj, dbName, collectionName, ec->mm)));
+	Reference<IInsertOp> indexOp(new ExtIndexInsert(indexObj, build_id, ns.first + "." + ns.second));
+	Reference<Plan> plan = ec->isolatedWrapOperationPlan(ref(new IndexInsertPlan(indexOp, indexObj, ns, ec->mm)));
 
 	state std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 	    wait(executeUntilCompletionAndReturnLastTransactionally(plan, tr));
@@ -787,10 +801,9 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 		    wait(pair.second->getKeyEncodedId()); // FIXME: Is this actually transactional? Safe? Maybe project it?
 
 		if (background && !ec->explicitTransaction)
-			ec->docLayer->backgroundTasks.add(
-			    wrapError(MetadataManager::buildIndex(indexObj, dbName, collectionName, id, ec, build_id)));
+			ec->docLayer->backgroundTasks.add(wrapError(MetadataManager::buildIndex(indexObj, ns, id, ec, build_id)));
 		else
-			Void _ = wait(MetadataManager::buildIndex(indexObj, dbName, collectionName, id, ec, build_id));
+			Void _ = wait(MetadataManager::buildIndex(indexObj, ns, id, ec, build_id));
 
 		return WriteCmdResult(1);
 	} else {
@@ -798,21 +811,22 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 	}
 }
 
-ACTOR Future<WriteCmdResult> doInsertCmd(const char* fullCollectionName,
+ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
                                          std::list<bson::BSONObj>* documents,
                                          Reference<ExtConnection> ec) {
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
 
-	auto dot = strchr(fullCollectionName, '.');
-	if (strcmp(dot + 1, indexes_collection) == 0) {
+	if (ns.second == indexes_collection) {
 		if (verboseLogging)
 			TraceEvent("BD_doInsertRun").detail("AttemptIndexInsertion", "");
 		if (documents->size() != 1) {
 			throw multiple_index_construction();
 		}
 		bson::BSONObj firstDoc = documents->front();
-		WriteCmdResult result =
-		    wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, firstDoc.getField("ns").String()));
+
+		const char* ns = firstDoc.getField("ns").String().c_str();
+		const auto fullCollName = getDBCollectionPair(ns, std::make_pair("msg", "Bad coll name in index insert"));
+		WriteCmdResult result = wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, fullCollName));
 		return result;
 	}
 
@@ -829,8 +843,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(const char* fullCollectionName,
 		inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
 	}
 
-	Reference<Plan> plan =
-	    ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, std::string(fullCollectionName))));
+	Reference<Plan> plan = ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, ns)));
 	int64_t i = wait(executeUntilCompletionTransactionally(plan, tr));
 	return WriteCmdResult(i);
 }
@@ -839,7 +852,7 @@ ACTOR static Future<WriteResult> doInsertMsg(Future<Void> readyToWrite,
                                              Reference<ExtMsgInsert> insert,
                                              Reference<ExtConnection> ec) {
 	Void _ = wait(readyToWrite);
-	WriteCmdResult cmdResult = wait(doInsertCmd(insert->fullCollectionName, &insert->documents, ec));
+	WriteCmdResult cmdResult = wait(doInsertCmd(insert->ns, &insert->documents, ec));
 	return WriteResult(cmdResult, WriteType::INSERT);
 }
 
@@ -853,8 +866,10 @@ ExtMsgUpdate::ExtMsgUpdate(ExtMsgHeader* header, const uint8_t* body) : header(h
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
 	ptr += sizeof(int32_t); // mongo OP_UPDATE begins with int32 ZERO, reserved for future use
-	fullCollectionName = (const char*)ptr;
-	ptr += strlen(fullCollectionName) + 1;
+
+	const char* collName = (const char*)ptr;
+	ptr += strlen(collName) + 1;
+	ns = getDBCollectionPair(collName, std::make_pair("msgType", "OP_UPDATE"));
 
 	flags = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
@@ -872,7 +887,7 @@ ExtMsgUpdate::ExtMsgUpdate(ExtMsgHeader* header, const uint8_t* body) : header(h
 
 std::string ExtMsgUpdate::toString() {
 	return format("UPDATE: selector=%s, update=%s, collection=%s, flags=%d (%s)", selector.toString().c_str(),
-	              update.toString().c_str(), fullCollectionName, flags, header->toString().c_str());
+	              update.toString().c_str(), fullCollNameToString(ns).c_str(), flags, header->toString().c_str());
 }
 
 void staticValidateModifiedFields(std::string fieldName,
@@ -988,7 +1003,7 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 	return Void();
 }
 
-ACTOR Future<WriteCmdResult> doUpdateCmd(const char* fullCollectionName,
+ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
                                          bool ordered,
                                          std::vector<ExtUpdateCmd>* cmds,
                                          Reference<ExtConnection> ec) {
@@ -1010,8 +1025,7 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(const char* fullCollectionName,
 
 			state Optional<bson::BSONObj> upserted = Optional<bson::BSONObj>();
 			state Reference<DocTransaction> dtr = ec->getOperationTransaction();
-			Reference<UnboundCollectionContext> ocx =
-			    wait(ec->mm->getUnboundCollectionContext(dtr, StringRef(fullCollectionName)));
+			Reference<UnboundCollectionContext> ocx = wait(ec->mm->getUnboundCollectionContext(dtr, ns));
 			state Reference<UnboundCollectionContext> cx =
 			    Reference<UnboundCollectionContext>(new UnboundCollectionContext(*ocx));
 			cx->setBannedFieldNames(bannedIndexFields);
@@ -1060,7 +1074,7 @@ ACTOR static Future<WriteResult> doUpdateMsg(Future<Void> readyToWrite,
 	Void _ = wait(readyToWrite);
 	state std::vector<ExtUpdateCmd> cmds;
 	cmds.emplace_back(msg->selector, msg->update, msg->upsert, msg->multi);
-	WriteCmdResult cmdResult = wait(doUpdateCmd(msg->fullCollectionName, true, &cmds, ec));
+	WriteCmdResult cmdResult = wait(doUpdateCmd(msg->ns, true, &cmds, ec));
 	if (cmdResult.writeErrors.empty()) {
 		return WriteResult(cmdResult, WriteType::UPDATE);
 	} else {
@@ -1077,8 +1091,11 @@ ExtMsgGetMore::ExtMsgGetMore(ExtMsgHeader* header, const uint8_t* body) : header
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
 	ptr += sizeof(int32_t); // mongo OP_GET_MORE begins with int32 ZERO, reserved for future use
-	fullCollectionName = (const char*)ptr;
-	ptr += strlen(fullCollectionName) + 1;
+
+	const char* collName = (const char*)ptr;
+	ptr += strlen(collName) + 1;
+	ns = getDBCollectionPair(collName, std::make_pair("msgType", "OP_GETMORE"));
+
 	numberToReturn = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
 	cursorID = *(int64_t*)ptr;
@@ -1088,8 +1105,8 @@ ExtMsgGetMore::ExtMsgGetMore(ExtMsgHeader* header, const uint8_t* body) : header
 }
 
 std::string ExtMsgGetMore::toString() {
-	return format("GET_MORE: collection=%s, numberToReturn=%d, cursorID=%d (%s)", fullCollectionName, numberToReturn,
-	              cursorID, header->toString().c_str());
+	return format("GET_MORE: collection=%s, numberToReturn=%d, cursorID=%d (%s)", fullCollNameToString(ns).c_str(),
+	              numberToReturn, cursorID, header->toString().c_str());
 }
 
 ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Reference<ExtConnection> ec) {
@@ -1119,8 +1136,11 @@ ExtMsgDelete::ExtMsgDelete(ExtMsgHeader* header, const uint8_t* body) : header(h
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
 	ptr += sizeof(int32_t); // mongo OP_DELETE begins with int32 ZERO, reserved for future use
-	fullCollectionName = (const char*)ptr;
-	ptr += strlen(fullCollectionName) + 1;
+
+	const char* collName = (const char*)ptr;
+	ptr += strlen(collName) + 1;
+	ns = getDBCollectionPair(collName, std::make_pair("msgType", "OP_DELETE"));
+
 	flags = *(int32_t*)ptr;
 	ptr += sizeof(int32_t);
 
@@ -1144,18 +1164,17 @@ std::string ExtMsgDelete::toString() {
 	}
 	stringStream << "]";
 
-	return format("DELETE: %s, collection=%s, flags=%d (%s)", stringStream.str().c_str(), fullCollectionName, flags,
-	              header->toString().c_str());
+	return format("DELETE: %s, collection=%s, flags=%d (%s)", stringStream.str().c_str(),
+	              fullCollNameToString(ns).c_str(), flags, header->toString().c_str());
 }
 
-ACTOR Future<WriteCmdResult> doDeleteCmd(const char* fullCollectionName,
+ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
                                          bool ordered,
                                          std::vector<bson::BSONObj>* selectors,
                                          Reference<ExtConnection> ec) {
 	try {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
-		state Reference<UnboundCollectionContext> cx =
-		    wait(ec->mm->getUnboundCollectionContext(dtr, StringRef(fullCollectionName)));
+		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true));
 		state int64_t nrDeletedRecords = 0;
 
 		state std::vector<bson::BSONObj> writeErrors;
@@ -1189,7 +1208,7 @@ ACTOR static Future<WriteResult> doDeleteMsg(Future<Void> readyToWrite,
                                              Reference<ExtMsgDelete> msg,
                                              Reference<ExtConnection> ec) {
 	Void _ = wait(readyToWrite);
-	WriteCmdResult cmdResult = wait(doDeleteCmd(msg->fullCollectionName, true, &msg->selectors, ec));
+	WriteCmdResult cmdResult = wait(doDeleteCmd(msg->ns, true, &msg->selectors, ec));
 	if (cmdResult.writeErrors.empty())
 		return WriteResult(cmdResult, WriteType::REMOVAL);
 	else

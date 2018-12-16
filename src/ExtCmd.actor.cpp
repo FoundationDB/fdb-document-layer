@@ -45,23 +45,17 @@ Future<Reference<UnboundCollectionContext>> getCollectionContextForCommand(Refer
                                                                            Reference<ExtMsgQuery> query,
                                                                            Reference<DocTransaction> dtr,
                                                                            bool allowSystemNamespace = false) {
-	std::string fullCollectionName =
-	    std::string(query->fullCollectionName,
-	                (size_t)(strchr(query->fullCollectionName, '.') + 1 - query->fullCollectionName)) +
-	    query->query.getStringField(getFirstKey(query->query));
-	return ec->mm->getUnboundCollectionContext(dtr, StringRef(fullCollectionName), allowSystemNamespace);
+	return ec->mm->getUnboundCollectionContext(dtr, query->ns, allowSystemNamespace);
 }
 
 ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransaction> tr,
-                                                           std::string dbName,
-                                                           std::string collectionName,
+                                                           Namespace ns,
                                                            std::string field,
                                                            DataValue value,
                                                            Reference<MetadataManager> mm) {
-	state Reference<UnboundCollectionContext> indexesCollection = wait(mm->indexesCollection(tr, dbName));
-	state Reference<UnboundCollectionContext> targetedCollection =
-	    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
-	state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexesCollection, dbName, collectionName);
+	state Reference<UnboundCollectionContext> indexesCollection = wait(mm->indexesCollection(tr, ns.first));
+	state Reference<UnboundCollectionContext> targetedCollection = wait(mm->getUnboundCollectionContext(tr, ns));
+	state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexesCollection, ns);
 	state std::vector<bson::BSONObj> indexes = wait(getIndexesTransactionally(indexesPlan, tr));
 	state int count = 0;
 	state bool any = false;
@@ -109,9 +103,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 ACTOR static Future<Void> Internal_doDropDatabase(Reference<DocTransaction> tr,
                                                   Reference<ExtMsgQuery> query,
                                                   Reference<DirectorySubspace> rootDirectory) {
-	std::string dbName = std::string(query->fullCollectionName,
-	                                 (size_t)(strchr(query->fullCollectionName, '.') - query->fullCollectionName));
-	bool _ = wait(rootDirectory->removeIfExists(tr->tr, {StringRef(dbName)}));
+	bool _ = wait(rootDirectory->removeIfExists(tr->tr, {StringRef(query->ns.first)}));
 	return Void();
 }
 
@@ -232,7 +224,7 @@ struct GetLogCmd {
 	                                           Reference<ExtMsgReply> reply) {
 		bson::BSONObjBuilder bob;
 
-		if (strcmp(query->fullCollectionName, "admin.$cmd") != 0) {
+		if (query->ns.first != "admin") {
 			reply->addDocument((bob << "ok" << 0.0 << "errmsg"
 			                        << "access denied; use admin db")
 			                       .obj());
@@ -350,13 +342,11 @@ struct GetNonceCmd {
 REGISTER_CMD(GetNonceCmd, "getnonce");
 
 ACTOR static Future<int> internal_doDropIndexesActor(Reference<DocTransaction> tr,
-                                                     std::string dbName,
-                                                     std::string collectionName,
+                                                     Namespace ns,
                                                      Reference<MetadataManager> mm) {
-	state Reference<UnboundCollectionContext> indexesCollection = wait(mm->indexesCollection(tr, dbName));
-	state Reference<Plan> plan = getIndexesForCollectionPlan(indexesCollection, dbName, collectionName);
-	state Reference<UnboundCollectionContext> unbound =
-	    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
+	state Reference<UnboundCollectionContext> indexesCollection = wait(mm->indexesCollection(tr, ns.first));
+	state Reference<Plan> plan = getIndexesForCollectionPlan(indexesCollection, ns);
+	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, ns));
 	plan = flushChanges(deletePlan(plan, indexesCollection, std::numeric_limits<int64_t>::max()));
 
 	state int64_t count = wait(executeUntilCompletionTransactionally(plan, tr));
@@ -371,12 +361,9 @@ ACTOR static Future<int> internal_doDropIndexesActor(Reference<DocTransaction> t
 ACTOR static Future<Void> Internal_doDropCollection(Reference<DocTransaction> tr,
                                                     Reference<ExtMsgQuery> query,
                                                     Reference<MetadataManager> mm) {
-	state std::string dbName = std::string(
-	    query->fullCollectionName, (size_t)(strchr(query->fullCollectionName, '.') - query->fullCollectionName));
-	state std::string collectionName = query->query.getField("drop").String();
-	state Reference<UnboundCollectionContext> unbound =
-	    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
-	int _ = wait(internal_doDropIndexesActor(tr, dbName, collectionName, mm));
+	query->ns.second = query->query.getField("drop").String();
+	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
+	int _ = wait(internal_doDropIndexesActor(tr, query->ns, mm));
 	Void _ = wait(unbound->collectionDirectory->remove(tr->tr));
 	return Void();
 }
@@ -449,6 +436,7 @@ struct GetCountCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("count").String();
 		return getStreamCount(ec, query, reply);
 	}
 };
@@ -564,6 +552,7 @@ struct FindAndModifyCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("findandmodify").String();
 		return doFindAndModify(ec, query, reply);
 	}
 };
@@ -571,11 +560,8 @@ REGISTER_CMD(FindAndModifyCmd, "findandmodify");
 
 ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConnection> ec,
                                                                Reference<ExtMsgQuery> query,
-                                                               Reference<ExtMsgReply> reply,
-                                                               const char* fieldname) {
+                                                               Reference<ExtMsgReply> reply) {
 	state int dropped;
-	std::string dbName = query->getDBName();
-	std::string collectionName = std::string(query->query.getField(fieldname).String());
 
 	try {
 		if (query->query.hasField("index")) {
@@ -588,14 +574,13 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					// transaction, the ranges we write ensure that this will conflict with anything it needs to
 					// conflict with.
 					if (ec->explicitTransaction) {
-						int result = wait(internal_doDropIndexesActor(ec->tr, dbName, collectionName, ec->mm));
+						int result = wait(internal_doDropIndexesActor(ec->tr, query->ns, ec->mm));
 						dropped = result;
 					} else {
 						int result =
 						    wait(runRYWTransaction(ec->docLayer->database,
-						                           [this, dbName, collectionName](Reference<DocTransaction> tr) {
-							                           return internal_doDropIndexesActor(tr, dbName, collectionName,
-							                                                              ec->mm);
+						                           [this](Reference<DocTransaction> tr) {
+							                           return internal_doDropIndexesActor(tr, query->ns, ec->mm);
 						                           },
 						                           ec->options.retryLimit, ec->options.timeout));
 						dropped = result;
@@ -607,15 +592,14 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					return reply;
 				} else {
 					if (ec->explicitTransaction) {
-						std::pair<int, int> result =
-						    wait(dropIndexMatching(ec->tr, dbName, collectionName, "name",
-						                           DataValue(el.String(), DVTypeCode::STRING), ec->mm));
+						std::pair<int, int> result = wait(dropIndexMatching(
+						    ec->tr, query->ns, "name", DataValue(el.String(), DVTypeCode::STRING), ec->mm));
 						dropped = result.first;
 					} else {
 						std::pair<int, int> result = wait(runRYWTransaction(
 						    ec->docLayer->database,
-						    [this, dbName, collectionName, el](Reference<DocTransaction> tr) {
-							    return dropIndexMatching(tr, dbName, collectionName, "name",
+						    [this, el](Reference<DocTransaction> tr) {
+							    return dropIndexMatching(tr, query->ns, "name",
 							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
 						    },
 						    ec->options.retryLimit, ec->options.timeout));
@@ -628,14 +612,14 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 			} else if (el.type() == bson::BSONType::Object) {
 				if (ec->explicitTransaction) {
 					std::pair<int, int> result =
-					    wait(dropIndexMatching(ec->tr, dbName, collectionName, "key", DataValue(el.Obj()), ec->mm));
+					    wait(dropIndexMatching(ec->tr, query->ns, "key", DataValue(el.Obj()), ec->mm));
 					dropped = result.first;
 				} else {
 					std::pair<int, int> result =
 					    wait(runRYWTransaction(ec->docLayer->database,
-					                           [this, dbName, collectionName, el](Reference<DocTransaction> tr) {
-						                           return dropIndexMatching(tr, dbName, collectionName, "key",
-						                                                    DataValue(el.Obj()), ec->mm);
+					                           [this, el](Reference<DocTransaction> tr) {
+						                           return dropIndexMatching(tr, query->ns, "key", DataValue(el.Obj()),
+						                                                    ec->mm);
 					                           },
 					                           ec->options.retryLimit, ec->options.timeout));
 					dropped = result.first;
@@ -649,15 +633,13 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 			}
 		} else {
 			if (ec->explicitTransaction) {
-				int result = wait(internal_doDropIndexesActor(ec->tr, dbName, collectionName, ec->mm));
+				int result = wait(internal_doDropIndexesActor(ec->tr, query->ns, ec->mm));
 				dropped = result;
 			} else {
-				int result =
-				    wait(runRYWTransaction(ec->docLayer->database,
-				                           [this, dbName, collectionName](Reference<DocTransaction> tr) {
-					                           return internal_doDropIndexesActor(tr, dbName, collectionName, ec->mm);
-				                           },
-				                           ec->options.retryLimit, ec->options.timeout));
+				int result = wait(runRYWTransaction(
+				    ec->docLayer->database,
+				    [this](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
+				    ec->options.retryLimit, ec->options.timeout));
 				dropped = result;
 			}
 
@@ -677,7 +659,8 @@ struct DropIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		return doDropIndexesActor(nmc, query, reply, "dropIndexes");
+		query->ns.second = query->query.getField("dropIndexes").String();
+		return doDropIndexesActor(nmc, query, reply);
 	}
 };
 REGISTER_CMD(DropIndexesCmd, "dropindexes");
@@ -688,7 +671,8 @@ struct DeleteIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		return doDropIndexesActor(nmc, query, reply, "deleteIndexes");
+		query->ns.second = query->query.getField("deleteIndexes").String();
+		return doDropIndexesActor(nmc, query, reply);
 	}
 };
 REGISTER_CMD(DeleteIndexesCmd, "deleteindexes");
@@ -696,12 +680,11 @@ REGISTER_CMD(DeleteIndexesCmd, "deleteindexes");
 ACTOR static Future<Reference<ExtMsgReply>> doCreateIndexes(Reference<ExtConnection> ec,
                                                             Reference<ExtMsgQuery> query,
                                                             Reference<ExtMsgReply> reply) {
-	std::string fullCollectionName = query->getDBName() + "." + query->query.getStringField("createIndexes");
 	std::vector<Future<WriteCmdResult>> f;
 	std::vector<bson::BSONElement> arr = query->query.getField("indexes").Array();
 	for (auto el : arr) {
 		bson::BSONObj indexDoc = el.Obj();
-		f.push_back(attemptIndexInsertion(indexDoc, ec, ec->getOperationTransaction(), fullCollectionName));
+		f.push_back(attemptIndexInsertion(indexDoc, ec, ec->getOperationTransaction(), query->ns));
 	}
 	try {
 		Void _ = wait(waitForAll(f));
@@ -717,6 +700,7 @@ struct CreateIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getStringField("createIndexes");
 		return doCreateIndexes(ec, query, reply);
 	}
 };
@@ -785,14 +769,12 @@ REGISTER_CMD(ListDatabasesCmd, "listdatabases");
 ACTOR static Future<Reference<ExtMsgReply>> getDBStats(Reference<ExtConnection> ec,
                                                        Reference<ExtMsgQuery> query,
                                                        Reference<ExtMsgReply> reply) {
-	state std::string dbname = std::string(
-	    query->fullCollectionName, (size_t)(strchr(query->fullCollectionName, '.') - query->fullCollectionName));
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
 	state Standalone<VectorRef<StringRef>> collections =
-	    wait(ec->docLayer->rootDirectory->list(tr->tr, {StringRef(dbname)}));
-	state Reference<UnboundCollectionContext> cx = wait(ec->mm->indexesCollection(tr, dbname));
+	    wait(ec->docLayer->rootDirectory->list(tr->tr, {StringRef(query->ns.first)}));
+	state Reference<UnboundCollectionContext> cx = wait(ec->mm->indexesCollection(tr, query->ns.first));
 	state int64_t indexes = wait(executeUntilCompletionTransactionally(ref(new TableScanPlan(cx)), tr));
-	reply->addDocument(BSON("db" << dbname << "collections" << collections.size() << "indexes"
+	reply->addDocument(BSON("db" << query->ns.first << "collections" << collections.size() << "indexes"
 	                             << (int)(indexes + collections.size()) << "ok" << 1.0));
 	return reply;
 }
@@ -812,14 +794,11 @@ REGISTER_CMD(DBStatsCmd, "dbstats");
 ACTOR static Future<Reference<ExtMsgReply>> getCollectionStats(Reference<ExtConnection> ec,
                                                                Reference<ExtMsgQuery> query,
                                                                Reference<ExtMsgReply> reply) {
-	state std::string dbName = std::string(
-	    query->fullCollectionName, (size_t)(strchr(query->fullCollectionName, '.') - query->fullCollectionName));
-	state std::string collectionName = query->query.getField(getFirstKey(query->query)).String();
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
-	state Reference<Plan> plan = wait(getIndexesForCollectionPlan(dbName, collectionName, tr, ec->mm));
+	state Reference<Plan> plan = wait(getIndexesForCollectionPlan(query->ns, tr, ec->mm));
 	state int64_t indexesCount = wait(executeUntilCompletionTransactionally(plan, tr));
 	reply->addDocument(
-	    BSON("ns" << dbName + "." + collectionName << "nindexes" << (int)indexesCount + 1 << "ok" << 1.0));
+	    BSON("ns" << query->ns.first + "." + query->ns.second << "nindexes" << (int)indexesCount + 1 << "ok" << 1.0));
 	return reply;
 }
 
@@ -828,6 +807,7 @@ struct CollectionStatsCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("collstats").String();
 		return getCollectionStats(ec, query, reply);
 	}
 };
@@ -836,11 +816,7 @@ REGISTER_CMD(CollectionStatsCmd, "collstats");
 ACTOR static Future<Void> Internal_doCreateCollection(Reference<DocTransaction> tr,
                                                       Reference<ExtMsgQuery> query,
                                                       Reference<MetadataManager> mm) {
-	state std::string dbName = std::string(
-	    query->fullCollectionName, (size_t)(strchr(query->fullCollectionName, '.') - query->fullCollectionName));
-	state std::string collectionName = query->query.getField("create").String();
-	state Reference<UnboundCollectionContext> unbound =
-	    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
+	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
 	return Void();
 }
 
@@ -870,6 +846,7 @@ struct CreateCollectionCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("create").String();
 		return doCreateCollection(ec, query, reply);
 	}
 };
@@ -1081,6 +1058,7 @@ struct InsertCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("insert").String();
 		return insertAndReply(nmc, query, reply);
 	}
 };
@@ -1094,17 +1072,13 @@ ACTOR static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnecti
 		throw wire_protocol_mismatch();
 	}
 
-	// Collection name is with command element - { insert : <collection name> }. Database name has to be parsed out
-	// from fullCollectionName - <database name>.$cmd
-	state std::string fullCollectionName = getFullCollectionName(msg, InsertCmd::name);
-
 	state std::list<bson::BSONObj> docs;
 	for (auto& bsonElement : msg->query.getField("documents").Array()) {
 		docs.push_back(bsonElement.Obj());
 	}
 
 	try {
-		WriteCmdResult ret = wait(doInsertCmd(fullCollectionName.c_str(), &docs, nmc));
+		WriteCmdResult ret = wait(doInsertCmd(msg->ns, &docs, nmc));
 		reply->addDocument(BSON("ok" << 1 << "n" << (long long)ret.n));
 	} catch (Error& e) {
 		// all or nothing. If we see any error, we assume all inserts have failed. All inserts are going under
@@ -1127,6 +1101,7 @@ struct DeleteCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("delete").String();
 		return deleteAndReply(nmc, query, reply);
 	}
 };
@@ -1140,10 +1115,6 @@ ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnecti
 		throw wire_protocol_mismatch();
 	}
 
-	// Collection name is with command element - { delete : <collection name> }. Database name has to be parsed out
-	// from fullCollectionName - <database name>.$cmd
-	state std::string fullCollectionName = getFullCollectionName(msg, DeleteCmd::name);
-
 	bool ordered = msg->query.getField("ordered").Bool();
 	state std::vector<bson::BSONObj> deleteQueries;
 	for (auto& bsonElement : msg->query.getField("deletes").Array()) {
@@ -1155,7 +1126,7 @@ ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnecti
 		deleteQueries.push_back(cmd);
 	}
 
-	WriteCmdResult ret = wait(doDeleteCmd(fullCollectionName.c_str(), ordered, &deleteQueries, nmc));
+	WriteCmdResult ret = wait(doDeleteCmd(msg->ns, ordered, &deleteQueries, nmc));
 
 	if (ret.writeErrors.empty()) {
 		reply->addDocument(BSON("ok" << 1 << "n" << (long long)ret.n));
@@ -1183,6 +1154,7 @@ struct UpdateCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("update").String();
 		return updateAndReply(nmc, query, reply);
 	}
 };
@@ -1195,10 +1167,6 @@ ACTOR static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnecti
 		TraceEvent(SevWarn, "WireBadUpdate").detail("query", msg->query.toString()).suppressFor(1.0);
 		throw wire_protocol_mismatch();
 	}
-
-	// Collection name is with command element - { update : <collection name> }. Database name has to be parsed out
-	// from fullCollectionName - <database name>.$cmd
-	state std::string fullCollectionName = getFullCollectionName(msg, UpdateCmd::name);
 
 	// Bulk update command is not all or nothing. It is possible, some updates succeed and some don't. So, that
 	// makes it important to consider "ordered" flag.
@@ -1216,7 +1184,7 @@ ACTOR static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnecti
 		                  bsonCmdO.hasField("multi") && bsonCmdO.getField("multi").Bool());
 	}
 
-	WriteCmdResult ret = wait(doUpdateCmd(fullCollectionName.c_str(), ordered, &cmds, nmc));
+	WriteCmdResult ret = wait(doUpdateCmd(msg->ns, ordered, &cmds, nmc));
 
 	bson::BSONObjBuilder replyBuilder;
 	replyBuilder << "ok" << 1 << "n" << (long long)ret.n << "nModified" << (long long)ret.nModified;
@@ -1319,12 +1287,11 @@ struct ListIndexesCmd {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 		loop {
 			try {
-				state std::string dbName = msg->getDBName();
-				state std::string collName = msg->query.getStringField("listIndexes");
+				msg->ns.second = msg->query.getStringField("listIndexes");
 
-				Reference<UnboundCollectionContext> unbound = wait(ec->mm->indexesCollection(dtr, dbName));
+				Reference<UnboundCollectionContext> unbound = wait(ec->mm->indexesCollection(dtr, msg->ns.first));
 
-				auto getIndexesPlan = getIndexesForCollectionPlan(unbound, dbName, collName);
+				auto getIndexesPlan = getIndexesForCollectionPlan(unbound, msg->ns);
 				std::vector<bson::BSONObj> indexObjs = wait(getIndexesTransactionally(getIndexesPlan, dtr));
 
 				bson::BSONArrayBuilder indexList;
@@ -1337,7 +1304,7 @@ struct ListIndexesCmd {
 				    // clang-format off
 					                   "cursor" << BSON(
 						                   "id" << 0 <<
-						                        "ns" << dbName + ".$cmd.listIndexes." + collName <<
+						                        "ns" << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
 						                        "firstBatch" << indexList.arr()) <<
 					                            "ok" << 1.0
 				    // clang-format on
@@ -1423,6 +1390,7 @@ struct GetDistinctCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		query->ns.second = query->query.getField("distinct").String();
 		return getStreamDistinct(ec, query, reply);
 	}
 };
