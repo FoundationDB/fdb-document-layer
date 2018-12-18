@@ -21,8 +21,7 @@
 #ifndef FDB_DOC_LAYER_IMETRIC_H
 #define FDB_DOC_LAYER_IMETRIC_H
 
-#include <string>
-#include <unordered_map>
+#include <cstdint>
 
 enum class IMetricType {
 	COUNT, // Measures how many times an event appears. E.g. total requests.
@@ -37,26 +36,26 @@ enum class IMetricType {
  */
 class IMetricReporter {
 public:
-	explicit IMetricReporter(std::string& config) : config(config){};
+	explicit IMetricReporter(const char* config) : config(config){};
 	// Move ctor
-	IMetricReporter(IMetricReporter&& reporter) noexcept : config(std::move(reporter.config)){};
+	IMetricReporter(IMetricReporter&& reporter) noexcept : config(reporter.config){};
 	IMetricReporter() = delete;
 	virtual ~IMetricReporter() = default;
 
-	virtual void captureMetric(const std::string& metricName, int64_t metricValue, IMetricType metricType) = 0;
+	virtual void captureMetric(const char* metricName, int64_t metricValue, IMetricType metricType) = 0;
 
-	void captureCount(const std::string& metricName);
-	void captureTime(const std::string& metricName, int64_t metricValue);
-	void captureGauge(const std::string& metricName, int64_t metricValue);
-	void captureMeter(const std::string& metricName, int64_t metricValue);
-	void captureHistogram(const std::string& metricName, int64_t metricValue);
+	void captureCount(const char* metricName);
+	void captureTime(const char* metricName, int64_t metricValue);
+	void captureGauge(const char* metricName, int64_t metricValue);
+	void captureMeter(const char* metricName, int64_t metricValue);
+	void captureHistogram(const char* metricName, int64_t metricValue);
 	/**
 	 * Load the dylib and call the static creator function defined to get a reference to the plugin.
 	 */
-	static IMetricReporter* init(const char* libPath, const std::string& libConfig);
+	static IMetricReporter* init(const char* libPath, const char* libConfig);
 
 protected:
-	std::string config;
+	const char* config;
 
 private:
 	static constexpr auto pluginCreatorName = "CreatPlugin";
@@ -70,7 +69,7 @@ private:
 template <class MetricReportImpl>
 class IMetricReporterFactory {
 public:
-	static MetricReportImpl* CreatPlugin(std::string& config) { return MetricReportImpl::CreatPluginImpl(config); }
+	static MetricReportImpl* CreatPlugin(const char* config) { return MetricReportImpl::CreatPluginImpl(config); }
 };
 
 #endif // FDB_DOC_LAYER_IMETRIC_H

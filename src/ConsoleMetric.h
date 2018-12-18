@@ -26,6 +26,7 @@
 #include <ctime>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 #include "flow/Arena.h"
 #include "flow/ThreadPrimitives.h"
@@ -71,16 +72,16 @@ private:
 class ConsoleMetric : public IMetricReporter, public IMetricReporterFactory<ConsoleMetric> {
 public:
 	// ctor
-	explicit ConsoleMetric(std::string& config);
+	explicit ConsoleMetric(const char* config);
 
 	// Since the metric reporter will have a static lifetime, it's OK to simply use the default dtor
 	~ConsoleMetric() override = default;
 
-	void captureMetric(const std::string& metricName, int64_t metricValue, IMetricType metricType) override;
+	void captureMetric(const char* metricName, int64_t metricValue, IMetricType metricType) override;
 	void publish();
 
 	// factory creator
-	static ConsoleMetric* CreatPluginImpl(std::string& config) { return new ConsoleMetric(config); }
+	static ConsoleMetric* CreatPluginImpl(const char* config) { return new ConsoleMetric(config); }
 
 	int64_t flushIntervalSeconds = 5; // default to aggregate and publish metrics over 5 seconds.
 private:

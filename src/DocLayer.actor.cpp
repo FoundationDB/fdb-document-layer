@@ -879,10 +879,10 @@ int main(int argc, char** argv) {
 	g_network = newNet2(NetworkAddress(), false);
 
 	if (metricPluginPath && metricPluginPath[0]) {
-		DocumentLayer::metricReporter = IMetricReporter::init(metricPluginPath, metricReporterConfig);
+		DocumentLayer::metricReporter = IMetricReporter::init(metricPluginPath, metricReporterConfig.c_str());
 	} else {
 		// default to use `ConsoleMetric` plugin
-		DocumentLayer::metricReporter = new ConsoleMetric(metricReporterConfig);
+		DocumentLayer::metricReporter = new ConsoleMetric(metricReporterConfig.c_str());
 	}
 
 	if (proxyfrom.present()) {

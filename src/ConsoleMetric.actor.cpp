@@ -168,12 +168,12 @@ ACTOR static Future<Void> publisher(ConsoleMetric* self) {
 	}
 }
 
-ConsoleMetric::ConsoleMetric(std::string& config) : IMetricReporter(config) {
+ConsoleMetric::ConsoleMetric(const char* config) : IMetricReporter(config) {
 	// Start the publishing loop
 	publisherHandle = publisher(this);
 }
 
-void ConsoleMetric::captureMetric(const std::string& metricName, int64_t metricValue, IMetricType metricType) {
+void ConsoleMetric::captureMetric(const char* metricName, int64_t metricValue, IMetricType metricType) {
 	if (metricStats.find(metricName) == metricStats.end()) {
 		// insert new stat
 		auto metric = MetricStat(metricName, metricType);
