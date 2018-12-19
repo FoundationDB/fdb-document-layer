@@ -824,9 +824,9 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 		}
 		bson::BSONObj firstDoc = documents->front();
 
-		const char* ns = firstDoc.getField("ns").String().c_str();
-		const auto fullCollName = getDBCollectionPair(ns, std::make_pair("msg", "Bad coll name in index insert"));
-		WriteCmdResult result = wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, fullCollName));
+		const char* collnsStr = firstDoc.getField("ns").String().c_str();
+		const auto collns = getDBCollectionPair(collnsStr, std::make_pair("msg", "Bad coll name in index insert"));
+		WriteCmdResult result = wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, collns));
 		return result;
 	}
 
