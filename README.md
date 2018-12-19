@@ -18,6 +18,8 @@ The Document Layer is written in [Flow](https://github.com/apple/foundationdb/bl
 
 ### Dependencies
 
+Document Layer build depends on the following projects. If you are building using docker image, it should come with all the dependencies.
+
 #### Boost
 
 We depend on Boost 1.67 for Boost.DLL. Even though the DLL is a header only library, it depends on the non-header only libraries - filesystem and system. You can setup Boost as below:
@@ -55,6 +57,17 @@ FdbDocServer (1.5): listening on 127.0.0.1:27017
 ```
 
 Note that, the Document Layer connects to the FoundationDB cluster to persist documents. If you don't provide any cluster file, it tries to find the cluster file in the default locations. If you have installed FoundationDB on your box, this should work just fine. Otherwise, one can pass the cluster file with the `-C` option.
+
+#### Build with Docker
+
+Docker image used for Document Layer CI is published to [Docker Hub](https://hub.docker.com/r/foundationdb/fdb-document-layer-build). You can use the following command to build the project using Docker.
+
+```
+docker run -it -v ~/src/fdb-document-layer:/code \
+    -w /code \
+    foundationdb/fdb-document-layer-build \
+    /bin/bash -c "mkdir build && cd build && cmake .. && make"
+```
 
 ### IDE Setup
 
