@@ -1,5 +1,8 @@
 FROM foundationdb/foundationdb-build:0.0.2
 LABEL version=0.0.2
+LABEL description="This image contains all the dependecies for FoundationDB Document Layer CI. \
+For more details on how to use this image look at project README file at \
+https://github.com/FoundationDB/fdb-document-layer"
 
 RUN mkdir -p /opt && \
     cd /opt && \
