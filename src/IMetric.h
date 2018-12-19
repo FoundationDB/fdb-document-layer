@@ -21,7 +21,7 @@
 #ifndef FDB_DOC_LAYER_IMETRIC_H
 #define FDB_DOC_LAYER_IMETRIC_H
 
-#include <cstdint>
+#include <stdint.h>
 
 enum class IMetricType {
 	COUNT, // Measures how many times an event appears. E.g. total requests.
