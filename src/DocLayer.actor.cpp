@@ -930,7 +930,7 @@ int main(int argc, char** argv) {
 
 		tlsOptions->register_network();
 	} catch (Error& e) {
-		printf("Error: %s \n", e.what());
+		fprintf(stderr, "Error: %s \n", e.what());
 		throw e;
 	}
 #endif
