@@ -27,39 +27,33 @@
 #include "QLTypes.h"
 #include "bindings/flow/DirectorySubspace.h"
 
+using Namespace = std::pair<std::string, std::string>;
+
 struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	explicit MetadataManager(struct DocumentLayer* docLayer) : docLayer(docLayer) {}
 	~MetadataManager() = default;
 
-	Future<Reference<UnboundCollectionContext>> getUnboundCollectionContext(
-	    Reference<DocTransaction> tr,
-	    StringRef fullCollectionName /*database.collection*/,
-	    bool allowSystemNamespace = false);
 	Future<Reference<UnboundCollectionContext>> getUnboundCollectionContext(Reference<DocTransaction> tr,
-	                                                                        const std::string& dbName,
-	                                                                        const std::string& collectionName,
-	                                                                        bool allowSystemNamespace,
+	                                                                        Namespace const& ns,
+	                                                                        bool allowSystemNamespace = false,
 	                                                                        bool includeIndex = true);
 	Future<Reference<UnboundCollectionContext>> refreshUnboundCollectionContext(Reference<UnboundCollectionContext> cx,
 	                                                                            Reference<DocTransaction> tr);
+
 	Future<Reference<UnboundCollectionContext>> indexesCollection(Reference<DocTransaction> tr,
-	                                                              const std::string& dbName);
-	Future<Reference<UnboundCollectionContext>> refreshUnboundCollectionContextNoCache(
-	    Reference<UnboundCollectionContext> cx,
-	    Reference<DocTransaction> tr);
+	                                                              std::string const& dbName) {
+		return getUnboundCollectionContext(tr, std::make_pair(dbName, std::string("system.indexes")), true);
+	}
 
 	static Future<Void> buildIndex(bson::BSONObj indexObj,
-	                               std::string const& dbName,
-	                               std::string const& collectionName,
+	                               Namespace const& ns,
 	                               Standalone<StringRef> encodedIndexId,
 	                               Reference<struct ExtConnection> ec,
 	                               UID build_id);
 	static IndexInfo indexInfoFromObj(const bson::BSONObj& indexObj, Reference<UnboundCollectionContext> cx);
 
-	std::map<std::pair<std::string, std::string>, std::pair<Reference<UnboundCollectionContext>, uint64_t>> contexts;
+	std::map<Namespace, std::pair<Reference<UnboundCollectionContext>, uint64_t>> contexts;
 	DocumentLayer* docLayer;
-
-private:
 };
 
 #endif /* _METADATA_MANAGER_H_ */

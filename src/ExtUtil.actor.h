@@ -134,13 +134,10 @@ Optional<IdInfo> extractEncodedIds(bson::BSONObj obj);
  */
 Optional<IdInfo> extractEncodedIdsFromUpdate(bson::BSONObj update);
 
-Future<Reference<Plan>> getIndexesForCollectionPlan(std::string const& dbName,
-                                                    std::string const& collectionName,
+Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
                                                     Reference<DocTransaction> tr,
                                                     Reference<MetadataManager> mm);
-Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection,
-                                            std::string const& dbName,
-                                            std::string const& collectionName);
+Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection, Namespace const& ns);
 Future<std::vector<bson::BSONObj>> getIndexesTransactionally(const Reference<Plan>& indexMetadataPlan,
                                                              const Reference<DocTransaction>& tr);
 

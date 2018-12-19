@@ -71,11 +71,12 @@ struct ExtMsgQuery : ExtMsg, FastAllocated<ExtMsgQuery> {
 
 	ExtMsgHeader* header;
 	int32_t flags;
-	const char* fullCollectionName;
+	Namespace ns;
 	int32_t numberToSkip;
 	int32_t numberToReturn;
 	bson::BSONObj query;
 	bson::BSONObj returnFieldSelector;
+	bool isCmd;
 
 	std::string toString() override;
 	Future<Void> run(Reference<ExtConnection>) override;
@@ -135,7 +136,7 @@ struct ExtMsgUpdate : ExtMsg, FastAllocated<ExtMsgUpdate> {
 	enum Flags { UPSERT = 0x01, MULTI = 0x02 };
 
 	ExtMsgHeader* header;
-	const char* fullCollectionName;
+	Namespace ns;
 	int32_t flags;
 	bson::BSONObj selector;
 	bson::BSONObj update;
@@ -156,7 +157,7 @@ struct ExtMsgInsert : ExtMsg, FastAllocated<ExtMsgInsert> {
 
 	ExtMsgHeader* header;
 	int32_t flags;
-	const char* fullCollectionName;
+	Namespace ns;
 	std::list<bson::BSONObj> documents;
 
 	std::string toString() override;
@@ -171,7 +172,7 @@ struct ExtMsgGetMore : ExtMsg, FastAllocated<ExtMsgGetMore> {
 	enum { opcode = 2005 };
 
 	ExtMsgHeader* header;
-	const char* fullCollectionName;
+	Namespace ns;
 	int32_t numberToReturn;
 	int64_t cursorID;
 
@@ -187,7 +188,7 @@ struct ExtMsgDelete : ExtMsg, FastAllocated<ExtMsgDelete> {
 	enum { opcode = 2006 };
 
 	ExtMsgHeader* header;
-	const char* fullCollectionName;
+	Namespace ns;
 	int32_t flags;
 	std::vector<bson::BSONObj> selectors;
 
@@ -224,15 +225,15 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj const& firstDoc,
                                              Reference<ExtConnection> const& ec,
                                              Reference<DocTransaction> const& tr,
-                                             std::string const& fullCollectionName);
-Future<WriteCmdResult> doInsertCmd(const char* const& fullCollectionName,
+                                             Namespace const& ns);
+Future<WriteCmdResult> doInsertCmd(Namespace const& ns,
                                    std::list<bson::BSONObj>* const& documents,
                                    Reference<ExtConnection> const& ec);
-Future<WriteCmdResult> doDeleteCmd(const char* const& fullCollectionName,
+Future<WriteCmdResult> doDeleteCmd(Namespace const& ns,
                                    bool const& ordered,
                                    std::vector<bson::BSONObj>* const& selectors,
                                    Reference<ExtConnection> const& ec);
-Future<WriteCmdResult> doUpdateCmd(const char* const& fullCollectionName,
+Future<WriteCmdResult> doUpdateCmd(Namespace const& ns,
                                    bool const& ordered,
                                    std::vector<ExtUpdateCmd>* const& updateCmds,
                                    Reference<ExtConnection> const& ec);

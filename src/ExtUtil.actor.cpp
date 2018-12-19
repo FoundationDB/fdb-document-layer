@@ -766,23 +766,21 @@ Optional<IdInfo> extractEncodedIdsFromUpdate(bson::BSONObj update) {
 	return Optional<IdInfo>();
 }
 
-Future<Reference<Plan>> getIndexesForCollectionPlan(std::string const& dbName,
-                                                    std::string const& collectionName,
+Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
                                                     Reference<DocTransaction> tr,
                                                     Reference<MetadataManager> mm) {
-	std::string fullCollectionName = dbName + "." + collectionName;
-	Future<Reference<UnboundCollectionContext>> unbound = mm->indexesCollection(tr, dbName);
-	return map(unbound, [fullCollectionName](Reference<UnboundCollectionContext> unbound) {
-		Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(fullCollectionName))), false);
+	std::string nsStr = ns.first + "." + ns.second;
+	Future<Reference<UnboundCollectionContext>> unbound = mm->indexesCollection(tr, ns.first);
+	return map(unbound, [nsStr](Reference<UnboundCollectionContext> unbound) {
+		Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(nsStr))), false);
 		return FilterPlan::construct_filter_plan_no_pushdown(unbound, ref(new TableScanPlan(unbound)), pred);
 	});
 }
 
 Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection,
-                                            std::string const& dbName,
-                                            std::string const& collectionName) {
-	std::string fullCollectionName = dbName + "." + collectionName;
-	Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(fullCollectionName))), false);
+                                            Namespace const& ns) {
+	std::string nsStr = ns.first + "." + ns.second;
+	Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(nsStr))), false);
 	return FilterPlan::construct_filter_plan_no_pushdown(indexesCollection, ref(new TableScanPlan(indexesCollection)),
 	                                                     pred);
 }

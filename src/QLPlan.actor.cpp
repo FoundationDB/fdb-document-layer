@@ -1389,17 +1389,15 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
                                         Reference<DocTransaction> tr,
                                         Reference<IInsertOp> indexInsert,
                                         bson::BSONObj indexObj,
-                                        std::string dbName,
-                                        std::string collectionName,
+                                        Namespace ns,
                                         PromiseStream<Reference<ScanReturnedContext>> output,
                                         Reference<MetadataManager> mm) {
 	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		Void _ = wait(flowControlLock->take(1));
-		state Reference<UnboundCollectionContext> mcx =
-		    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
-		state Reference<UnboundCollectionContext> unbound = wait(mm->indexesCollection(tr, dbName));
-		state Reference<Plan> getIndexesPlan = getIndexesForCollectionPlan(unbound, dbName, collectionName);
+		state Reference<UnboundCollectionContext> mcx = wait(mm->getUnboundCollectionContext(tr, ns));
+		state Reference<UnboundCollectionContext> unbound = wait(mm->indexesCollection(tr, ns.first));
+		state Reference<Plan> getIndexesPlan = getIndexesForCollectionPlan(unbound, ns);
 		try {
 			std::vector<bson::BSONObj> indexObjs = wait(getIndexesTransactionally(getIndexesPlan, tr));
 			for (auto existingindexObj : indexObjs) {
@@ -1431,8 +1429,7 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> IndexInsertPlan::execute(PlanCheckpoint* checkpoint,
                                                                       Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> docs;
-	checkpoint->addOperation(doIndexInsert(checkpoint, tr, indexInsert, indexObj, dbName, collectionName, docs, mm),
-	                         docs);
+	checkpoint->addOperation(doIndexInsert(checkpoint, tr, indexInsert, indexObj, ns, docs, mm), docs);
 	return docs.getFuture();
 }
 
@@ -1440,7 +1437,7 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
                                    std::vector<Reference<IInsertOp>> docs,
                                    Reference<DocTransaction> tr,
                                    Reference<MetadataManager> mm,
-                                   std::string fullCollectionName,
+                                   Namespace ns,
                                    PromiseStream<Reference<ScanReturnedContext>> output) {
 	// state int64_t& inserted = checkpoint->getIntState(0); <- This is broken for now.
 	state Deque<Future<Reference<IReadWriteContext>>> f;
@@ -1448,8 +1445,7 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
 	state int i = 0; // = inserted;
 
 	try {
-		state Reference<UnboundCollectionContext> ucx =
-		    wait(mm->getUnboundCollectionContext(tr, fullCollectionName, false));
+		state Reference<UnboundCollectionContext> ucx = wait(mm->getUnboundCollectionContext(tr, ns));
 		loop {
 			if (i >= docs.size())
 				break;
@@ -1482,7 +1478,7 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> InsertPlan::execute(PlanCheckpoint* checkpoint,
                                                                  Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> output;
-	checkpoint->addOperation(doInsert(checkpoint, docs, tr, mm, fullCollectionName, output), output);
+	checkpoint->addOperation(doInsert(checkpoint, docs, tr, mm, ns, output), output);
 	return output.getFuture();
 }
 
@@ -1551,8 +1547,7 @@ FutureStream<Reference<ScanReturnedContext>> SortPlan::execute(PlanCheckpoint* c
 
 ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
                                             Reference<DocTransaction> tr,
-                                            std::string dbName,
-                                            std::string collectionName,
+                                            Namespace ns,
                                             Standalone<StringRef> encodedIndexId,
                                             Reference<MetadataManager> mm,
                                             std::string newStatus,
@@ -1562,11 +1557,10 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	try {
-		state Reference<UnboundCollectionContext> indexCollection = wait(mm->indexesCollection(tr, dbName));
+		state Reference<UnboundCollectionContext> indexCollection = wait(mm->indexesCollection(tr, ns.first));
 		state Reference<QueryContext> indexDoc =
 		    indexCollection->bindCollectionContext(tr)->cx->getSubContext(encodedIndexId);
-		Reference<UnboundCollectionContext> ucx =
-		    wait(mm->getUnboundCollectionContext(tr, dbName, collectionName, false));
+		Reference<UnboundCollectionContext> ucx = wait(mm->getUnboundCollectionContext(tr, ns));
 		state Reference<CollectionContext> mcx = ucx->bindCollectionContext(tr);
 		if (buildId.present()) {
 			Optional<DataValue> dv = wait(indexDoc->get(DataValue("build id", DVTypeCode::STRING).encode_key_part()));
@@ -1605,9 +1599,8 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> UpdateIndexStatusPlan::execute(PlanCheckpoint* checkpoint,
                                                                             Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> output;
-	checkpoint->addOperation(
-	    updateIndexStatus(checkpoint, tr, dbName, collectionName, encodedIndexId, mm, newStatus, buildId, output),
-	    output);
+	checkpoint->addOperation(updateIndexStatus(checkpoint, tr, ns, encodedIndexId, mm, newStatus, buildId, output),
+	                         output);
 	return output.getFuture();
 }
 
@@ -1672,10 +1665,10 @@ ACTOR static Future<Void> scanAndBuildIndex(PlanCheckpoint* checkpoint,
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
 	// Only unique index needs a lock to do the build.
 	try {
-		Reference<UnboundCollectionContext> indexCollection = wait(mm->indexesCollection(tr, dbName));
-		state Reference<QueryContext> indexDoc =
-		    indexCollection->bindCollectionContext(tr)->cx->getSubContext(encodedIndexId);
 		if (checkpoint->getBounds(0).begin.size()) {
+			Reference<UnboundCollectionContext> indexCollection = wait(mm->indexesCollection(tr, dbName));
+			state Reference<QueryContext> indexDoc =
+			    indexCollection->bindCollectionContext(tr)->cx->getSubContext(encodedIndexId);
 			try {
 				std::string encodedId = unstrincObjectId(checkpoint->getBounds(0).begin);
 				indexDoc->set(DataValue("currently processing document", DVTypeCode::STRING).encode_key_part(),

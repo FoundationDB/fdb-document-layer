@@ -446,7 +446,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 	void addref() override { ReferenceCounted<SimpleIndexPlugin>::addref(); }
 	void delref() override { ReferenceCounted<SimpleIndexPlugin>::delref(); }
 
-	// documentPath is fullCollectionName + docId
+	// documentPath is ns + docId
 	Future<Void> doIndexUpdate(Reference<DocTransaction> tr,
 	                           Reference<DocumentDeferred> dd,
 	                           DataKey documentPath) override {

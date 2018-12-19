@@ -576,8 +576,8 @@ struct SkipPlan : ConcretePlan<SkipPlan> {
 };
 
 struct InsertPlan : ConcretePlan<InsertPlan> {
-	InsertPlan(std::vector<Reference<IInsertOp>> docs, Reference<MetadataManager> mm, std::string fullCollectionName)
-	    : docs(docs), mm(mm), fullCollectionName(fullCollectionName) {}
+	InsertPlan(std::vector<Reference<IInsertOp>> docs, Reference<MetadataManager> mm, Namespace ns)
+	    : docs(docs), mm(mm), ns(ns) {}
 
 	bson::BSONObj describe() override {
 		return BSON(
@@ -594,7 +594,7 @@ struct InsertPlan : ConcretePlan<InsertPlan> {
 private:
 	std::vector<Reference<IInsertOp>> docs;
 	Reference<MetadataManager> mm;
-	std::string fullCollectionName;
+	Namespace ns;
 };
 
 struct SortPlan : ConcretePlan<SortPlan> {
@@ -619,16 +619,14 @@ struct SortPlan : ConcretePlan<SortPlan> {
 struct IndexInsertPlan : ConcretePlan<IndexInsertPlan> {
 	Reference<IInsertOp> indexInsert;
 	bson::BSONObj indexObj;
-	std::string dbName;
-	std::string collectionName;
+	Namespace ns;
 	Reference<MetadataManager> mm;
 
 	IndexInsertPlan(Reference<IInsertOp> indexInsert,
 	                bson::BSONObj indexObj,
-	                std::string dbName,
-	                ::string collectionName,
+	                Namespace ns,
 	                Reference<MetadataManager> mm)
-	    : indexInsert(indexInsert), indexObj(indexObj), dbName(dbName), collectionName(collectionName), mm(mm) {}
+	    : indexInsert(indexInsert), indexObj(indexObj), ns(ns), mm(mm) {}
 
 	bson::BSONObj describe() override {
 		return BSON("type"
@@ -664,25 +662,18 @@ struct BuildIndexPlan : ConcretePlan<BuildIndexPlan> {
 };
 
 struct UpdateIndexStatusPlan : ConcretePlan<UpdateIndexStatusPlan> {
-	std::string dbName;
-	std::string collectionName;
+	Namespace ns;
 	Standalone<StringRef> encodedIndexId;
 	Reference<MetadataManager> mm;
 	std::string newStatus;
 	Optional<UID> buildId;
 
-	UpdateIndexStatusPlan(std::string const& dbName,
-	                      std::string const& collectionName,
+	UpdateIndexStatusPlan(Namespace const& ns,
 	                      Standalone<StringRef> encodedIndexId,
 	                      Reference<MetadataManager> mm,
 	                      std::string newStatus,
 	                      Optional<UID> buildId = Optional<UID>())
-	    : dbName(dbName),
-	      collectionName(collectionName),
-	      encodedIndexId(encodedIndexId),
-	      mm(mm),
-	      newStatus(newStatus),
-	      buildId(buildId) {}
+	    : ns(ns), encodedIndexId(encodedIndexId), mm(mm), newStatus(newStatus), buildId(buildId) {}
 
 	bson::BSONObj describe() override {
 		return BSON("type"
