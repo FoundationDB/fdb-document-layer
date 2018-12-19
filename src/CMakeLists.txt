@@ -95,6 +95,7 @@ if (APPLE)
             )
 else()
     target_link_libraries(fdbdoc PRIVATE rt dl)
+    target_link_libraries(fdbdoc PRIVATE -static-libstdc++ -static-libgcc)
 endif()
 
 set_target_properties(fdbdoc
