@@ -28,7 +28,7 @@
 
 static boost::dll::shared_library _loadedLib;
 
-IMetricReporter* IMetricReporter::init(const char* libPath, const std::string& libConfig) {
+IMetricReporter* IMetricReporter::init(const char* libPath, const char* libConfig) {
 	typedef IMetricReporter*(creator_t)(const std::string&);
 
 	// Code from Boost::DLL::import_alias begin
@@ -43,18 +43,18 @@ IMetricReporter* IMetricReporter::init(const char* libPath, const std::string& l
 	return reporter;
 }
 
-void IMetricReporter::captureCount(const std::string& metricName) {
+void IMetricReporter::captureCount(const char* metricName) {
 	captureMetric(metricName, 1, IMetricType::COUNT);
 }
-void IMetricReporter::captureTime(const std::string& metricName, int64_t metricValue) {
+void IMetricReporter::captureTime(const char* metricName, int64_t metricValue) {
 	captureMetric(metricName, metricValue, IMetricType::TIMER);
 }
-void IMetricReporter::captureGauge(const std::string& metricName, int64_t metricValue) {
+void IMetricReporter::captureGauge(const char* metricName, int64_t metricValue) {
 	captureMetric(metricName, metricValue, IMetricType::GAUGE);
 }
-void IMetricReporter::captureMeter(const std::string& metricName, int64_t metricValue) {
+void IMetricReporter::captureMeter(const char* metricName, int64_t metricValue) {
 	captureMetric(metricName, metricValue, IMetricType::METER);
 }
-void IMetricReporter::captureHistogram(const std::string& metricName, int64_t metricValue) {
+void IMetricReporter::captureHistogram(const char* metricName, int64_t metricValue) {
 	captureMetric(metricName, metricValue, IMetricType::HISTOGRAMS);
 }
