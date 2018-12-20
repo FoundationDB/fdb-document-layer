@@ -124,6 +124,20 @@ the value. For example, `listen_address = 127.0.0.1:$ID` makes each
              The path of the metric plugin dynamic library to load during runtime.
   --metric_plugin_config PATH
              The path to the configuration file of the plugin.
+  --tls_certificate_file CERTFILE
+             The path of a file containing the TLS certificate and CA
+             chain.
+  --tls_ca_file CERTAUTHFILE
+             The path of a file containing the CA certificates chain.
+  --tls_key_file KEYFILE
+             The path of a file containing the private key corresponding
+             to the TLS certificate.
+  --tls_password PASSCODE
+             The passphrase of encrypted private key
+  --tls_verify_peers CONSTRAINTS
+             The constraints by which to validate TLS peers. The contents
+             and format of CONSTRAINTS are plugin-specific.
+
   -V         Enable verbose logging.
   -h         Display this help message and exit.
   -v         Print version information and exit.
@@ -146,3 +160,12 @@ run one `fdbdoc` per CPU core. Parameters set in this section apply to
 only a single fdbdoc process, and overwrite the defaults set in the
 `[fdbdoc]` section. Note that by default, the ID specified in this
 section is also used as the network port.
+
+## Enable TLS
+
+Document Layer uses the same TLS library as the FoundationDB project. To enable TLS, simply do following:
+
+- Add `:tls` to the end of the local listen address. This is telling the program to only accept TLS connections
+- Configure necessary TLS options. They are parameters whose name starts with `tls_`.
+
+For more details regarding to the TLS library we used, including the details regarding to the parameters, please see the [TLS Docs](https://apple.github.io/foundationdb/tls.html). 

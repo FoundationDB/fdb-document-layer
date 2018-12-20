@@ -26,6 +26,10 @@
 #include "flow/flow.h"
 #include "flow/network.h"
 
+#ifndef TLS_DISABLED
+#include "fdbrpc/TLSConnection.h"
+#endif
+
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
 
@@ -111,8 +115,10 @@ CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_BUGGIFY_INTENSITY, "--buggify_intensity", SO_REQ_SEP},
                                      {OPT_METRIC_PLUGIN, "--metric_plugin", SO_OPT},
                                      {OPT_METRIC_CONFIG, "--metric_plugin_config", SO_OPT},
-
-                                     SO_END_OF_OPTIONS};
+#ifndef TLS_DISABLED
+                                     TLS_OPTION_FLAGS
+#endif
+                                         SO_END_OF_OPTIONS};
 
 using namespace FDB;
 
@@ -586,14 +592,19 @@ void printHelp(const char* name) {
              The path of the metric plugin dynamic library to load during runtime.
   --metric_plugin_config PATH
              The path to the configuration file of the plugin.
+)HELPTEXT",
+	        name);
+#ifndef TLS_DISABLED
+	fprintf(stderr, TLS_HELP);
+#endif
+	fprintf(stderr, R"HELPTEXT(
   -V         Enable verbose logging.
   -h         Display this help message and exit.
   -v         Print version information and exit.
 
 SIZE parameters may use one of the multiplicative suffixes B=1, KB=10^3,
 KiB=2^10, MB=10^6, MiB=2^20, GB=10^9, GiB=2^30, TB=10^12, or TiB=2^40.
-)HELPTEXT",
-	        name);
+)HELPTEXT");
 }
 
 void setThreadName(const char* name) {
@@ -627,6 +638,11 @@ int main(int argc, char** argv) {
 	NetworkOptionsT client_network_options;
 	std::string metricReporterConfig;
 	char* metricPluginPath = nullptr;
+#ifndef TLS_DISABLED
+	Reference<TLSOptions> tlsOptions = Reference<TLSOptions>(new TLSOptions);
+#endif
+	std::string tlsCertPath, tlsKeyPath, tlsCAPath, tlsPassword;
+	std::vector<std::string> tlsVerifyPeers;
 
 	while (args.Next()) {
 		if (args.LastError() == SO_ARG_INVALID_DATA) {
@@ -855,6 +871,26 @@ int main(int argc, char** argv) {
 			}
 			break;
 		}
+#ifndef TLS_DISABLED
+		case TLSOptions::OPT_TLS_PLUGIN:
+			args.OptionArg();
+			break;
+		case TLSOptions::OPT_TLS_CERTIFICATES:
+			tlsCertPath = args.OptionArg();
+			break;
+		case TLSOptions::OPT_TLS_PASSWORD:
+			tlsPassword = args.OptionArg();
+			break;
+		case TLSOptions::OPT_TLS_CA_FILE:
+			tlsCAPath = args.OptionArg();
+			break;
+		case TLSOptions::OPT_TLS_KEY:
+			tlsKeyPath = args.OptionArg();
+			break;
+		case TLSOptions::OPT_TLS_VERIFY_PEERS:
+			tlsVerifyPeers.push_back(args.OptionArg());
+			break;
+#endif
 		default:
 			fprintf(stderr, "ERROR: Unexpected option\n");
 			return FDB_EXIT_ERROR;
@@ -877,7 +913,27 @@ int main(int argc, char** argv) {
 	init_document_error();
 
 	g_network = newNet2(NetworkAddress(), false);
+#ifndef TLS_DISABLED
+	try {
+		if (tlsCertPath.size())
+			tlsOptions->set_cert_file(tlsCertPath);
+		if (tlsCAPath.size())
+			tlsOptions->set_ca_file(tlsCAPath);
+		if (tlsKeyPath.size()) {
+			if (tlsPassword.size())
+				tlsOptions->set_key_password(tlsPassword);
 
+			tlsOptions->set_key_file(tlsKeyPath);
+		}
+		if (tlsVerifyPeers.size())
+			tlsOptions->set_verify_peers(tlsVerifyPeers);
+
+		tlsOptions->register_network();
+	} catch (Error& e) {
+		fprintf(stderr, "Error: %s \n", e.what());
+		throw e;
+	}
+#endif
 	if (metricPluginPath && metricPluginPath[0]) {
 		DocumentLayer::metricReporter = IMetricReporter::init(metricPluginPath, metricReporterConfig.c_str());
 	} else {
@@ -931,9 +987,7 @@ int main(int argc, char** argv) {
 	setThreadName("fdbdoc-main");
 	TraceEvent::setNetworkThread();
 	openTraceFile(na, rollsize, maxLogsSize, logFolder, "fdbdoc-trace", logGroup);
-
 	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options);
-
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
 
