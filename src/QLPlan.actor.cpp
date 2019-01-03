@@ -1605,18 +1605,19 @@ FutureStream<Reference<ScanReturnedContext>> UpdateIndexStatusPlan::execute(Plan
 }
 
 ACTOR static Future<Void> buildIndexEntry(Reference<ScanReturnedContext> doc, IndexInfo index) {
-	state Standalone<StringRef> index_key = StringRef(
-	    index.indexKeys[0]
-	        .first); // This is sufficient even for compound indexes, because we have one index entry per document, so
-	                 // dirtying one of the indexed fields causes the plugin to rewrite the entry.
+	// This is sufficient even for compound indexes, because we have one index entry per document, so
+	// dirtying one of the indexed fields causes the plugin to rewrite the entry.
+	state Standalone<StringRef> index_key = StringRef(index.indexKeys[0].first);
 	Optional<DataValue> odv = wait(doc->get(index_key));
-	if (odv.present())
-		doc->set(index_key, odv.get().encode_value());
+
 	// Don't need to worry about objects or arrays, because even if
 	// we just set the header, the plugin stack is going to
 	// re-evaluate the expression and do everything it needs to do.
+	if (odv.present())
+		doc->set(index_key, odv.get().encode_value());
 	else
 		doc->clear(index_key);
+
 	return Void();
 }
 

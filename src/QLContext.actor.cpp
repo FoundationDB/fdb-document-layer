@@ -675,7 +675,7 @@ void UnboundCollectionContext::addIndex(IndexInfo info) {
 		auto encodedFirstFieldname = DataValue(info.indexKeys[0].first, DVTypeCode::STRING).encode_key_part();
 		auto sim_iterator = simpleIndexMap.find(encodedFirstFieldname);
 		if (sim_iterator == simpleIndexMap.end()) {
-			std::set<IndexInfo, index_compare> iSet;
+			std::set<IndexInfo, IndexComparator> iSet;
 			iSet.insert(info);
 			simpleIndexMap.insert(make_pair(encodedFirstFieldname, iSet));
 		} else {

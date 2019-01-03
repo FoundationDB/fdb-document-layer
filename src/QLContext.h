@@ -369,7 +369,7 @@ struct IndexInfo {
 	int size() const { return static_cast<int>(indexKeys.size()); }
 };
 
-struct index_compare {
+struct IndexComparator {
 	bool operator()(const IndexInfo& lhs, const IndexInfo& rhs) { return lhs.indexKeys.size() < rhs.indexKeys.size(); }
 };
 
@@ -409,10 +409,13 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	Reference<DirectorySubspace> metadataDirectory;
 
 	Reference<UnboundQueryContext> cx;
-	std::map<std::string, std::set<IndexInfo, index_compare>>
-	    simpleIndexMap; // This is used by the planner, and should only hold indexes that are ready to speed up queries
-	std::vector<IndexInfo> knownIndexes; // This holds all indexes that will be loaded as plugins (i.e. for sets and
-	                                     // clears), and should include indexes that are still building
+
+	// This is used by the planner, and should only hold indexes that are ready to speed up queries
+	std::map<std::string, std::set<IndexInfo, IndexComparator>> simpleIndexMap;
+
+	// This holds all indexes that will be loaded as plugins (i.e. for sets and clears), and should
+	// include indexes that are still building
+	std::vector<IndexInfo> knownIndexes;
 
 private:
 	Optional<std::set<std::string>> bannedFieldNames;
