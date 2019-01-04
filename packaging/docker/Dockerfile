@@ -22,11 +22,10 @@ FROM ubuntu:18.04
 # Install dependencies
 
 RUN apt-get update && \
-	apt-get install -y wget=1.19.4-1ubuntu2 \
-	dnsutils=1:9.11.3+dfsg-1ubuntu1.3 && \
+	apt-get install -y wget=1.19.4-1ubuntu2 && \
 	rm -r /var/lib/apt/lists/*
 
-# Install FoundationDB Binaries
+# Install FoundationDB Document Layer Binaries
 
 ARG FDB_DOC_VERSION
 ARG FDB_WEBSITE=https://www.foundationdb.org

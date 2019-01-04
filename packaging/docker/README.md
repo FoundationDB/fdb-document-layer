@@ -11,7 +11,6 @@ The image relies on the following dependencies:
 
 *	bash
 *	wget
-*	dig
 *	glibc
 
 # Build Configuration
