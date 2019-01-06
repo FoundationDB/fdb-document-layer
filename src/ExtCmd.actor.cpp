@@ -1115,7 +1115,7 @@ ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnecti
 		throw wire_protocol_mismatch();
 	}
 
-	bool ordered = msg->query.getField("ordered").Bool();
+	const bool ordered = !msg->query.hasField("ordered") || msg->query.getField("ordered").Bool();
 	state std::vector<bson::BSONObj> deleteQueries;
 	for (auto& bsonElement : msg->query.getField("deletes").Array()) {
 		auto cmd = bsonElement.Obj();
@@ -1170,7 +1170,7 @@ ACTOR static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnecti
 
 	// Bulk update command is not all or nothing. It is possible, some updates succeed and some don't. So, that
 	// makes it important to consider "ordered" flag.
-	bool ordered = msg->query.getField("ordered").Bool();
+	const bool ordered = !msg->query.hasField("ordered") || msg->query.getField("ordered").Bool();
 	std::vector<bson::BSONElement> bsonCmds = msg->query.getField("updates").Array();
 	state std::vector<ExtUpdateCmd> cmds;
 	for (const auto& bsonCmd : bsonCmds) {
