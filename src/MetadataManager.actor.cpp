@@ -121,7 +121,7 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 
 			for (const auto& indexObj : allIndexes) {
 				IndexInfo index = MetadataManager::indexInfoFromObj(indexObj, cx);
-				if (index.status <= IndexInfo::IndexStatus::BUILDING) {
+				if (index.status != IndexInfo::IndexStatus::INVALID) {
 					cx->addIndex(index);
 				}
 			}
@@ -232,11 +232,10 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
                                           Standalone<StringRef> encodedIndexId,
                                           Reference<ExtConnection> ec,
                                           UID build_id) {
+	state IndexInfo info;
 	try {
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
 		state Reference<UnboundCollectionContext> mcx = wait(ec->mm->getUnboundCollectionContext(tr, ns, false, false));
-		// do no include existing index
-		state IndexInfo info;
 		info = MetadataManager::indexInfoFromObj(indexObj, mcx);
 		info.status = IndexInfo::IndexStatus::BUILDING;
 		info.buildId = build_id;
