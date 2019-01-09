@@ -387,14 +387,14 @@ ACTOR static Future<bool> compoundWouldBeLast(Reference<ScanReturnedContext> doc
                                               std::vector<Reference<IExpression>> exprs,
                                               FDB::Key indexUpperBound) {
 	std::vector<Future<std::vector<DataValue>>> f_old_values;
-	for (const auto &expr : exprs) {
+	for (const auto& expr : exprs) {
 		f_old_values.push_back(consumeAll(mapAsync(
 		    expr->evaluate(doc), [](Reference<IReadContext> valcx) { return getMaybeRecursive(valcx, StringRef()); })));
 	}
 	state std::vector<std::vector<DataValue>> old_values = wait(getAll(f_old_values));
 
 	int old_values_size = 1;
-	for (const auto &v : old_values) {
+	for (const auto& v : old_values) {
 		old_values_size *= v.size();
 	}
 
@@ -947,7 +947,7 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 				tr->tr = self->newTransaction()->tr;
 
 				state Reference<ScanReturnedContext> r;
-				for (const Reference<ScanReturnedContext> &loopThing : ret) {
+				for (const Reference<ScanReturnedContext>& loopThing : ret) {
 					r = loopThing;
 					Void _ = wait(outerLock->take(1));
 					output.send(r);
@@ -1400,7 +1400,7 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 		state Reference<Plan> getIndexesPlan = getIndexesForCollectionPlan(unbound, ns);
 		try {
 			std::vector<bson::BSONObj> indexObjs = wait(getIndexesTransactionally(getIndexesPlan, tr));
-			for (const auto &existingindexObj : indexObjs) {
+			for (const auto& existingindexObj : indexObjs) {
 				if (indexObj.getObjectField("key").woCompare(existingindexObj.getObjectField("key")) == 0) {
 					throw index_already_exists();
 				}
@@ -1876,14 +1876,14 @@ Reference<PlanCheckpoint> PlanCheckpoint::stopAndCheckpoint() {
 	for (int i = 0; i < scans.size(); i++)
 		rest->scans[i].bounds = KeyRangeRef(scans[i].split, scans[i].bounds.end);
 	rest->states.reserve(states.size());
-	for (auto &s : states)
+	for (auto& s : states)
 		rest->states.emplace_back(s.split);
 
 	return rest;
 }
 
 void PlanCheckpoint::boundToStopPoint() {
-	for (auto &scan : scans)
+	for (auto& scan : scans)
 		scan.bounds = KeyRangeRef(scan.bounds.begin, scan.split);
 }
 
