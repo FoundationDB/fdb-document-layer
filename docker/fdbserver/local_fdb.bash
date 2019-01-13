@@ -8,4 +8,4 @@ FDB_PID=$!
 sleep 1
 fdbcli --exec "configure new single memory;"
 
-wait $!
+wait ${FDB_PID}
