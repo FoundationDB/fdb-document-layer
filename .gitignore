@@ -11,6 +11,7 @@ deploy/bin/
 .dist/
 .out/
 .extdep/
+upsert_test.csv
 
 packages/
 packaging/msi/FDBInstaller.wix*
