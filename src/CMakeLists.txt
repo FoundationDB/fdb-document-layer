@@ -127,4 +127,5 @@ target_compile_options(fdbdoc
             -fno-omit-frame-pointer
         )
 
-
+install(TARGETS fdbdoc RUNTIME DESTINATION bin)
+install(PROGRAMS ${FdbMonitor_EXECUTABLE_PATH} DESTINATION lib/foundationdb/document)
