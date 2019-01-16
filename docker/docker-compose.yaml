@@ -2,10 +2,19 @@ version: "3"
 
 services:
   common: &common
-    image: fdb-document-layer-build:0.0.2
+    image: fdb-document-layer-build:0.0.3
     build:
       context: .
       dockerfile: Dockerfile
+
+  fdbserver:
+    image: fdb-standalone:0.0.2
+    build:
+      context: fdbserver
+      args:
+        - FDB_VERSION=6.0.15
+    environment:
+      - FDB_PORT=4500
 
   build-setup: &build-setup
     <<: *common
@@ -25,7 +34,14 @@ services:
     <<: *build-setup
     environment:
       - MAKEPROCS=1
-    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && make package'
+      - FDB_HOST=fdbserver
+      - FDB_PORT=4500
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && cd .. && bash run-tests.bash'
+    links:
+      - fdbserver
+    depends_on:
+      - fdbserver
+
 
   build-prb:
     <<: *build-snapshot
@@ -35,3 +51,7 @@ services:
     volumes:
       - ..:/fdb-document-layer
     entrypoint: /bin/bash
+    links:
+      - fdbserver
+    depends_on:
+      - fdbserver
