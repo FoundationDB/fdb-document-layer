@@ -64,3 +64,6 @@ services:
       - fdbserver
     depends_on:
       - fdbserver
+
+networks:
+  test-net:
