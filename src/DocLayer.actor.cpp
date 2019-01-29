@@ -90,6 +90,7 @@ CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_VERSION, "-v", SO_NONE},
                                      {OPT_VERSION, "--version", SO_NONE},
                                      {OPT_PROXYPORTS, "-p", SO_MULTI},
+                                     {OPT_PROXYPORTS, "--proxy-ports", SO_MULTI},
                                      {OPT_LISTEN, "-l", SO_REQ_SEP},
                                      {OPT_LISTEN, "--listen_address", SO_REQ_SEP},
                                      {OPT_LOGFOLDER, "-L", SO_REQ_SEP},
@@ -592,6 +593,9 @@ void printHelp(const char* name) {
              The path of the metric plugin dynamic library to load during runtime.
   --metric_plugin_config PATH
              The path to the configuration file of the plugin.
+  --proxy-ports LISTEN_PORT MONGODB_PORT
+             Runs Document Layer in proxy mode on LISTEN_PORT proxying all commands
+             to MongoDB server running on MONGODB_PORT.
 )HELPTEXT",
 	        name);
 #ifndef TLS_DISABLED
@@ -632,7 +636,7 @@ int main(int argc, char** argv) {
 	uint64_t maxLogsSize = rollsize * 10;
 	bool pipelineCompatMode = false;
 	int retryLimit = 3;
-	int timeout = 7000;
+	int timeoutMillies = 7000;
 	const char* rootDirectory = "document";
 	std::vector<std::pair<std::string, std::string>> knobs, client_knobs;
 	NetworkOptionsT client_network_options;
@@ -797,7 +801,7 @@ int main(int argc, char** argv) {
 				return FDB_EXIT_ERROR;
 			}
 
-			timeout = ret;
+			timeoutMillies = ret;
 			break;
 		}
 
@@ -959,7 +963,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	ConnectionOptions options(pipelineCompatMode, retryLimit, timeout);
+	ConnectionOptions options(pipelineCompatMode, retryLimit, timeoutMillies);
 
 	delete FLOW_KNOBS;
 	delete DOCLAYER_KNOBS;

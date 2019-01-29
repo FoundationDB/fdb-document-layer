@@ -122,7 +122,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 			                                [this](Reference<DocTransaction> tr) {
 				                                return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
 			                                },
-			                                ec->options.retryLimit, ec->options.timeout));
+			                                ec->options.retryLimit, ec->options.timeoutMillies));
 		}
 
 		reply->addDocument(BSON("ok" << 1.0));
@@ -382,7 +382,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropCollection(Reference<ExtConnec
 			Void _ = wait(runRYWTransaction(
 			    ec->docLayer->database,
 			    [this](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
-			    ec->options.retryLimit, ec->options.timeout));
+			    ec->options.retryLimit, ec->options.timeoutMillies));
 		}
 
 		reply->addDocument(BSON("ok" << 1.0));
@@ -582,7 +582,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 						                           [this](Reference<DocTransaction> tr) {
 							                           return internal_doDropIndexesActor(tr, query->ns, ec->mm);
 						                           },
-						                           ec->options.retryLimit, ec->options.timeout));
+						                           ec->options.retryLimit, ec->options.timeoutMillies));
 						dropped = result;
 					}
 
@@ -602,7 +602,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 							    return dropIndexMatching(tr, query->ns, "name",
 							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
 						    },
-						    ec->options.retryLimit, ec->options.timeout));
+						    ec->options.retryLimit, ec->options.timeoutMillies));
 						dropped = result.first;
 					}
 
@@ -621,7 +621,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 						                           return dropIndexMatching(tr, query->ns, "key", DataValue(el.Obj()),
 						                                                    ec->mm);
 					                           },
-					                           ec->options.retryLimit, ec->options.timeout));
+					                           ec->options.retryLimit, ec->options.timeoutMillies));
 					dropped = result.first;
 				}
 
@@ -639,7 +639,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				int result = wait(runRYWTransaction(
 				    ec->docLayer->database,
 				    [this](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
-				    ec->options.retryLimit, ec->options.timeout));
+				    ec->options.retryLimit, ec->options.timeoutMillies));
 				dropped = result;
 			}
 
@@ -830,7 +830,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
 			Void _ = wait(runRYWTransaction(
 			    ec->docLayer->database,
 			    [this](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
-			    ec->options.retryLimit, ec->options.timeout));
+			    ec->options.retryLimit, ec->options.timeoutMillies));
 		}
 
 		reply->addDocument(BSON("ok" << 1.0));
@@ -881,7 +881,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doBeginActor(Reference<ExtConnection
 	if (!retry)
 		ec->tr = DocTransaction::create(Reference<Transaction>(new Transaction(ec->docLayer->database)));
 	ec->tr->tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
-	ec->tr->tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&(ec->options.timeout), sizeof(int64_t)));
+	ec->tr->tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&(ec->options.timeoutMillies), sizeof(int64_t)));
 	ec->tr->tr->setOption(FDB_TR_OPTION_RETRY_LIMIT, StringRef((uint8_t*)&(ec->options.retryLimit), sizeof(int64_t)));
 
 	reply->addDocument(BSON("ok" << 1.0));
