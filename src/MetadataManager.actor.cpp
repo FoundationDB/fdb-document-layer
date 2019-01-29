@@ -173,10 +173,12 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 	if (match == self->contexts.end()) {
 		std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
 		    wait(constructContext(ns, tr, self->docLayer, includeIndex));
-		if (unboundPair.second != -1) { // Here and below don't pollute the cache if we just created the directory,
-			                            // since this transaction might not commit.
+
+		// Here and below don't pollute the cache if we just created the directory, since this transaction might
+		// not commit.
+		if (unboundPair.second != -1) {
 			auto insert_result = self->contexts.insert(std::make_pair(ns, unboundPair));
-			// somebody else may have done the lookup and finished ahead of us. Either way, replace it with ours (can no
+			// Somebody else may have done the lookup and finished ahead of us. Either way, replace it with ours (can no
 			// longer optimize this by only replacing if ours is newer, because the directory may have moved or
 			// vanished.
 			if (!insert_result.second) {
@@ -192,7 +194,7 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 			std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
 			    wait(constructContext(ns, tr, self->docLayer, includeIndex));
 			if (unboundPair.second != -1) {
-				// create the iterator again instead of making the previous value state, because the map could have
+				// Create the iterator again instead of making the previous value state, because the map could have
 				// changed during the previous wait. Either way, replace it with ours (can no longer optimize this by
 				// only replacing if ours is newer, because the directory may have moved or vanished.
 				// std::map<std::pair<std::string, std::string>, std::pair<Reference<UnboundCollectionContext>,

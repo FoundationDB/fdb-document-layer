@@ -37,10 +37,10 @@
 struct ConnectionOptions {
 	bool pipelineCompatMode;
 	int64_t retryLimit;
-	int64_t timeout;
+	int64_t timeoutMillies;
 
-	ConnectionOptions(bool pipelineCompatMode, int64_t retryLimit, int64_t timeout)
-	    : pipelineCompatMode(pipelineCompatMode), retryLimit(retryLimit), timeout(timeout) {}
+	ConnectionOptions(bool pipelineCompatMode, int64_t retryLimit, int64_t timeoutMillies)
+	    : pipelineCompatMode(pipelineCompatMode), retryLimit(retryLimit), timeoutMillies(timeoutMillies) {}
 };
 
 struct DocumentLayer : ReferenceCounted<DocumentLayer>, NonCopyable {

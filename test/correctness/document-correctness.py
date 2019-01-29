@@ -415,7 +415,7 @@ def test_forever(ns):
 
         if not okay and e is not None:
             print "EXCEPTION :", str(e)
-            if [x for x in ignored_exceptions if x.strip() == str(e).strip().strip('.')]:
+            if [x for x in ignored_exceptions if x.strip() == str(e).strip().strip('\"').strip('.')]:
                 print "Ignoring EXCEPTION :", str(e)
                 okay = True
 

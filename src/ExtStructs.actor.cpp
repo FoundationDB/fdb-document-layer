@@ -35,7 +35,7 @@ Reference<Plan> ExtConnection::wrapOperationPlan(Reference<Plan> plan,
 }
 
 Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan) {
-	return isolatedWrapOperationPlan(plan, options.timeout, options.retryLimit);
+	return isolatedWrapOperationPlan(plan, options.timeoutMillies, options.retryLimit);
 }
 
 Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan, int64_t timeout, int64_t retryLimit) {
