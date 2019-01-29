@@ -28,9 +28,15 @@ services:
     environment:
       - MAKEPROCS=1
       - RELEASE=1
-    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && make package'
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
 
   build-snapshot: &build-snapshot
+    <<: *build-setup
+    environment:
+      - MAKEPROCS=1
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
+
+  test-snapshot: &test-snapshot
     <<: *build-setup
     environment:
       - MAKEPROCS=1
@@ -42,9 +48,11 @@ services:
     depends_on:
       - fdbserver
 
-
   build-prb:
     <<: *build-snapshot
+
+  test-prb:
+    <<: *test-snapshot
 
   shell:
     <<: *build-setup
