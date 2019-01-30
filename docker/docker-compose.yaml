@@ -54,6 +54,10 @@ services:
 
   test-prb:
     <<: *test-snapshot
+    environment:
+      - MAKEJOBS=1
+      - FDB_HOST=fdbserver
+      - FDB_PORT=4500
     links:
       - fdbserver
     depends_on:
