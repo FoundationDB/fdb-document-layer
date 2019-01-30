@@ -413,7 +413,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
 
-			if (self->flowControlLock.present()) {
+			if (self->isUniqueIndex && self->flowControlLock.present()) {
 				self->flowControlLock.get()->lock->release(1);
 			}
 
@@ -532,7 +532,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				new_key.append(v.encode_key_part()).append(documentPath[documentPath.size() - 1]);
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
-			if (self->flowControlLock.present()) {
+			if (self->isUniqueIndex && self->flowControlLock.present()) {
 				self->flowControlLock.get()->lock->release(1);
 			}
 		} catch (Error& e) {
@@ -549,6 +549,62 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 	    : IndexPlugin(collectionPath, indexInfo, next), expr(expr) {}
 
 	Reference<IExpression> expr;
+};
+
+// This is the index used to main count of documents in a collection, which is later used to construct `collStats`
+struct CountIndexPlugin : IndexPlugin, ReferenceCounted<CountIndexPlugin>, FastAllocated<CountIndexPlugin> {
+	void addref() override { ReferenceCounted<CountIndexPlugin>::addref(); }
+	void delref() override { ReferenceCounted<CountIndexPlugin>::delref(); }
+
+	// documentPath is ns + docId
+	Future<Void> doIndexUpdate(Reference<DocTransaction> tr,
+	                           Reference<DocumentDeferred> dd,
+	                           DataKey documentPath) override {
+		return doIndexUpdateActor(Reference<CountIndexPlugin>::addRef(this), tr, dd, documentPath);
+	}
+
+	ACTOR static Future<Void> doIndexUpdateActor(Reference<CountIndexPlugin> self,
+	                                             Reference<DocTransaction> tr,
+	                                             Reference<DocumentDeferred> dd,
+	                                             DataKey documentPath) {
+		state Reference<QueryContext> doc(new QueryContext(self->next, tr, documentPath));
+		state Future<Void> writes_finished = dd->writes_finished.getFuture();
+		try {
+			// TraceEvent("BD_doIndexUpdateStart");
+
+			dd->snapshotLock.use();
+
+			state Optional<DataValue> existingDoc = wait(getMaybeRecursiveIfPresent(doc));
+
+			dd->snapshotLock.unuse();
+
+			Void _ = wait(writes_finished);
+
+			state Optional<DataValue> newDoc = wait(getMaybeRecursiveIfPresent(doc));
+
+			if (existingDoc.present() && !newDoc.present()) {
+				// Doc got deleted. Decrease the count.
+				int64_t tmp = -1;
+				Standalone<StringRef> operand(StringRef((uint8_t*)&tmp, sizeof(tmp)));
+				tr->tr->atomicOp(getFDBKey(self->indexPath), operand, FDB_MUTATION_TYPE_ADD);
+			} else if (!existingDoc.present() && newDoc.present()) {
+				// Doc got inserted. Increase the count.
+				int64_t tmp = 1;
+				Standalone<StringRef> operand(StringRef((uint8_t*)&tmp, sizeof(tmp)));
+				tr->tr->atomicOp(getFDBKey(self->indexPath), operand, FDB_MUTATION_TYPE_ADD);
+			} // otherwise, it's an in-place update.
+		} catch (Error& e) {
+			TraceEvent(SevError, "BD_doIndexUpdate").detail("error", e.what());
+			throw;
+		}
+
+		return Void();
+	}
+
+	std::string toString() override { return "CountIndexPlugin"; }
+
+	CountIndexPlugin(DataKey collectionPath, IndexInfo indexInfo, Reference<ITDoc> next)
+	    : IndexPlugin(collectionPath, indexInfo, next) {}
 };
 
 struct QueryContextData {
@@ -590,20 +646,24 @@ QueryContext::QueryContext(class Reference<ITDoc> layers, Reference<DocTransacti
     : self(new QueryContextData(layers, tr, path)) {}
 
 void QueryContext::addIndex(IndexInfo index) {
-	if (index.indexKeys.size() == 1) {
-		self->layers = Reference<ITDoc>(new SimpleIndexPlugin(
-		    self->prefix, index,
-		    Reference<IExpression>(new ExtPathExpression(StringRef(index.indexKeys[0].first), true, true)),
-		    self->layers));
+	if (index.isCountIndex) {
+		self->layers = Reference<ITDoc>(new CountIndexPlugin(self->prefix, index, self->layers));
 	} else {
-		std::vector<std::pair<Reference<IExpression>, int>> exprs(index.indexKeys.size());
-		std::transform(index.indexKeys.begin(), index.indexKeys.end(), exprs.begin(),
-		               [](std::pair<std::string, int> index_pair) {
-			               return std::make_pair(
-			                   Reference<IExpression>(new ExtPathExpression(StringRef(index_pair.first), true, true)),
-			                   index_pair.second);
-		               });
-		self->layers = Reference<ITDoc>(new CompoundIndexPlugin(self->prefix, index, exprs, self->layers));
+		if (index.indexKeys.size() == 1) {
+			self->layers = Reference<ITDoc>(new SimpleIndexPlugin(
+			    self->prefix, index,
+			    Reference<IExpression>(new ExtPathExpression(StringRef(index.indexKeys[0].first), true, true)),
+			    self->layers));
+		} else {
+			std::vector<std::pair<Reference<IExpression>, int>> exprs(index.indexKeys.size());
+			std::transform(index.indexKeys.begin(), index.indexKeys.end(), exprs.begin(),
+			               [](std::pair<std::string, int> index_pair) {
+				               return std::make_pair(Reference<IExpression>(new ExtPathExpression(
+				                                         StringRef(index_pair.first), true, true)),
+				                                     index_pair.second);
+			               });
+			self->layers = Reference<ITDoc>(new CompoundIndexPlugin(self->prefix, index, exprs, self->layers));
+		}
 	}
 }
 
@@ -754,6 +814,21 @@ Future<uint64_t> CollectionContext::getMetadataVersion() {
 	return ret;
 }
 
+Future<uint64_t> CollectionContext::getDocumentCount() {
+	Key countIndexKey = Key(KeyRef(unbound->getIndexesSubspace().toString() +
+	                               DataValue("RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
+	                               		DVTypeCode::STRING).encode_key_part()));
+	Future<Optional<FDBStandalone<StringRef>>> fov =
+	    cx->getTransaction()->tr->get(countIndexKey); // FIXME: Wow how many abstractions does this violate at once?
+	Future<uint64_t> ret = map(fov, [](Optional<FDBStandalone<StringRef>> ov) -> uint64_t {
+		if (!ov.present())
+			return 0;
+		else
+			return *((uint64_t*)(ov.get().begin()));
+	});
+	return ret;
+}
+
 Future<Standalone<StringRef>> IReadWriteContext::getValueEncodedId() {
 	return map(getMaybeRecursiveIfPresent(getSubContext(DataValue("_id", DVTypeCode::STRING).encode_key_part())),
 	           [](Optional<DataValue> odv) -> Standalone<StringRef> {
@@ -790,6 +865,7 @@ IndexInfo::IndexInfo(std::string indexName,
 	encodedIndexName = DataValue(indexName, DVTypeCode::STRING).encode_key_part();
 	indexCx = collectionCx->getIndexesContext()->getSubContext(encodedIndexName);
 	multikey = true;
+	isCountIndex = false;
 }
 
 bool IndexInfo::hasPrefix(IndexInfo const& other) {

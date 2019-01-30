@@ -777,6 +777,19 @@ Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
 	});
 }
 
+Future<uint64_t> getDocumentCountForCollection(Namespace const& ns,
+                                               Reference<DocTransaction> tr,
+                                               Reference<MetadataManager> mm) {
+	std::string nsStr = ns.first + "." + ns.second;
+	Future<Reference<UnboundCollectionContext>> unbound = mm->getUnboundCollectionContext(tr, ns, true, true);
+	// Somehow the compiler needs a bit here to infer the lambda type.
+	auto lambda = [tr, nsStr](Reference<UnboundCollectionContext> unbound) {
+		return unbound->bindCollectionContext(tr)->getDocumentCount();
+	};
+	Future<uint64_t> ret = mapAsync<Reference<UnboundCollectionContext>, decltype(lambda), uint64_t>(unbound, lambda);
+	return ret;
+}
+
 Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection,
                                             Namespace const& ns) {
 	std::string nsStr = ns.first + "." + ns.second;

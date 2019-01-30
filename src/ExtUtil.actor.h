@@ -140,6 +140,9 @@ Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
 Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection, Namespace const& ns);
 Future<std::vector<bson::BSONObj>> getIndexesTransactionally(const Reference<Plan>& indexMetadataPlan,
                                                              const Reference<DocTransaction>& tr);
+Future<uint64_t> getDocumentCountForCollection(Namespace const& ns,
+                                               Reference<DocTransaction> tr,
+                                               Reference<MetadataManager> mm);
 
 /**
  * Utility overload of mapAsync that returns the mapped stream to you

@@ -797,8 +797,9 @@ ACTOR static Future<Reference<ExtMsgReply>> getCollectionStats(Reference<ExtConn
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
 	state Reference<Plan> plan = wait(getIndexesForCollectionPlan(query->ns, tr, ec->mm));
 	state int64_t indexesCount = wait(executeUntilCompletionTransactionally(plan, tr));
-	reply->addDocument(
-	    BSON("ns" << query->ns.first + "." + query->ns.second << "nindexes" << (int)indexesCount + 1 << "ok" << 1.0));
+	state uint64_t docCount = wait(getDocumentCountForCollection(query->ns, tr, ec->mm));
+	reply->addDocument(BSON("ns" << query->ns.first + "." + query->ns.second << "nindexes" << (int)indexesCount + 1
+	                             << "count" << (int)docCount << "ok" << 1.0));
 	return reply;
 }
 

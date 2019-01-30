@@ -300,7 +300,7 @@ struct ScanReturnedContext : IReadWriteContext,
 	std::string toDbgString() override {
 		std::ostringstream strStream;
 		strStream << "ScanReturnedContext: (scanId: " << scanId() << ", scanKey: " << scanKey().printable()
-		          << ", internalCtx: " << internal_context->toDbgString() << "(";
+		          << ", internalCtx: " << internal_context->toDbgString() << ")";
 		return strStream.str();
 	}
 
@@ -357,6 +357,7 @@ struct IndexInfo {
 	Optional<UID> buildId;
 	bool multikey;
 	bool isUniqueIndex;
+	bool isCountIndex;
 
 	IndexInfo(std::string indexName,
 	          std::vector<std::pair<std::string, int>> indexKeys,
@@ -433,6 +434,7 @@ struct CollectionContext : ReferenceCounted<CollectionContext>, FastAllocated<Co
 
 	void bumpMetadataVersion();
 	Future<uint64_t> getMetadataVersion();
+	Future<uint64_t> getDocumentCount();
 
 private:
 	Reference<UnboundCollectionContext> unbound;

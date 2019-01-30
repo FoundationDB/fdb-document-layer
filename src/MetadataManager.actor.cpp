@@ -111,7 +111,7 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(collectionDirectory, metadataDirectory));
 
 		// Only include existing indexes into the context when it's NOT building a new index.
-		// When it's building a new index, it's unnecessary and inefficient to pass each recorded returned by a
+		// When it's building a new index, it's unnecessary and inefficient to pass each record returned by a
 		// TableScan through the existing indexes.
 		if (includeIndex) {
 			state Reference<UnboundCollectionContext> indexCx = Reference<UnboundCollectionContext>(
@@ -125,6 +125,19 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 					cx->addIndex(index);
 				}
 			}
+
+			// Add a fake indexObj for the CountIndex per collection
+			std::vector<std::pair<std::string, int>> fakeIndexKeys;
+			fakeIndexKeys.emplace_back(g_random->randomUniqueID().toString(), -1);
+			IndexInfo countIndex(
+			    "RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
+			                          // name of this index needs to be unique enough to avoid potential collisions
+			                          // Problem is that this count index will NOT be returned when querying existing
+			                          // indexes, and thus there will NOT be a index_name_taken error returned in
+			                          // case there is a name collision.
+			    fakeIndexKeys, cx, IndexInfo::IndexStatus::READY, Optional<UID>(), false);
+			countIndex.isCountIndex = true;
+			cx->addIndex(countIndex);
 		}
 
 		// fprintf(stderr, "%s.%s Reading: Collection dir: %s Metadata dir:%s Caller:%s\n", dbName.c_str(),
@@ -156,6 +169,19 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 		// collectionName.c_str(), printable(tcollectionDirectory->key()).c_str(),
 		// printable(tmetadataDirectory->key()).c_str(), "");
 		tcx->bindCollectionContext(tr)->bumpMetadataVersion(); // We start at version 1.
+
+		// Add a fake indexObj for the CountIndex per collection
+		std::vector<std::pair<std::string, int>> fakeIndexKeys;
+		fakeIndexKeys.emplace_back(g_random->randomUniqueID().toString(), -1);
+		IndexInfo countIndex(
+		    "RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
+		    // name of this index needs to be unique enough to avoid potential collisions
+		    // Problem is that this count index will NOT be returned when querying existing
+		    // indexes, and thus there will NOT be a index_name_taken error returned in
+		    // case there is a name collision.
+		    fakeIndexKeys, tcx, IndexInfo::IndexStatus::READY, Optional<UID>(), false);
+		countIndex.isCountIndex = true;
+		tcx->addIndex(countIndex);
 
 		return std::make_pair(tcx, -1); // So we don't pollute the cache in case this transaction never commits
 	}
