@@ -16,6 +16,7 @@ services:
         - FDB_VERSION=6.0.15
     environment:
       - FDB_PORT=4500
+    networks: [test-net]
 
   build-setup: &build-setup
     <<: *common
@@ -43,7 +44,7 @@ services:
   test-snapshot: &test-snapshot
     <<: *build-setup
     environment:
-      - MAKEJOBS=1
+      - MAKEPROCS=1
       - FDB_HOST=fdbserver
       - FDB_PORT=4500
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && cd .. && bash run-tests.bash'
@@ -54,14 +55,6 @@ services:
 
   test-prb:
     <<: *test-snapshot
-    environment:
-      - MAKEJOBS=1
-      - FDB_HOST=fdbserver
-      - FDB_PORT=4500
-    links:
-      - fdbserver
-    depends_on:
-      - fdbserver
 
   shell:
     <<: *build-setup
