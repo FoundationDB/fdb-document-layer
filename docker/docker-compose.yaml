@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    networks: [test-net]
 
   fdbserver:
     image: fdb-standalone:0.0.2
@@ -15,6 +16,7 @@ services:
         - FDB_VERSION=6.0.15
     environment:
       - FDB_PORT=4500
+    networks: [test-net]
 
   build-setup: &build-setup
     <<: *common
@@ -26,14 +28,23 @@ services:
   build-release: &build-release
     <<: *build-setup
     environment:
-      - MAKEPROCS=1
+      - MAKEJOBS=1
       - RELEASE=1
-    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && make package'
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
 
   build-snapshot: &build-snapshot
     <<: *build-setup
     environment:
-      - MAKEPROCS=1
+      - MAKEJOBS=1
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
+
+  build-prb:
+    <<: *build-snapshot
+
+  test-snapshot: &test-snapshot
+    <<: *build-setup
+    environment:
+      - MAKEJOBS=1
       - FDB_HOST=fdbserver
       - FDB_PORT=4500
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && cd .. && bash run-tests.bash'
@@ -42,9 +53,8 @@ services:
     depends_on:
       - fdbserver
 
-
-  build-prb:
-    <<: *build-snapshot
+  test-prb:
+    <<: *test-snapshot
 
   shell:
     <<: *build-setup
@@ -55,3 +65,6 @@ services:
       - fdbserver
     depends_on:
       - fdbserver
+
+networks:
+  test-net:
