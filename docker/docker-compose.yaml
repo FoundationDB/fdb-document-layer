@@ -27,20 +27,23 @@ services:
   build-release: &build-release
     <<: *build-setup
     environment:
-      - MAKEPROCS=1
+      - MAKEJOBS=1
       - RELEASE=1
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
 
   build-snapshot: &build-snapshot
     <<: *build-setup
     environment:
-      - MAKEPROCS=1
+      - MAKEJOBS=1
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
+
+  build-prb:
+    <<: *build-snapshot
 
   test-snapshot: &test-snapshot
     <<: *build-setup
     environment:
-      - MAKEPROCS=1
+      - MAKEJOBS=1
       - FDB_HOST=fdbserver
       - FDB_PORT=4500
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && cd .. && bash run-tests.bash'
@@ -48,9 +51,6 @@ services:
       - fdbserver
     depends_on:
       - fdbserver
-
-  build-prb:
-    <<: *build-snapshot
 
   test-prb:
     <<: *test-snapshot
