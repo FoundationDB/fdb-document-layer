@@ -1,5 +1,8 @@
 ## Release notes
 
+### 1.6.2
+
+
 ### 1.6.1
 
 * [#2](https://github.com/FoundationDB/fdb-document-layer/issues/2) Support mutual TLS authentication
