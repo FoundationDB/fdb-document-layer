@@ -23,7 +23,7 @@ if [ "$1" = configure ]; then
 
     chown -R foundationdb:foundationdb /etc/foundationdb/document
 
-    invoke-rc.d fdb-document-layer start
+    /etc/init.d/fdb-document-layer start
 
     if [ "$2" = "" ]; then
 	update-rc.d fdb-document-layer defaults

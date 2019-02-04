@@ -12,5 +12,5 @@
 # the debian-policy package
 
 if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
-    invoke-rc.d fdb-document-layer stop || :
+    /etc/init.d/fdb-document-layer stop || :
 fi
