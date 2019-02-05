@@ -361,7 +361,6 @@ ACTOR static Future<int> internal_doDropIndexesActor(Reference<DocTransaction> t
 ACTOR static Future<Void> Internal_doDropCollection(Reference<DocTransaction> tr,
                                                     Reference<ExtMsgQuery> query,
                                                     Reference<MetadataManager> mm) {
-	query->ns.second = query->query.getField("drop").String();
 	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
 	int _ = wait(internal_doDropIndexesActor(tr, query->ns, mm));
 	Void _ = wait(unbound->collectionDirectory->remove(tr->tr));
@@ -436,7 +435,6 @@ struct GetCountCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("count").String();
 		return getStreamCount(ec, query, reply);
 	}
 };
@@ -552,7 +550,6 @@ struct FindAndModifyCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("findandmodify").String();
 		return doFindAndModify(ec, query, reply);
 	}
 };
@@ -659,7 +656,6 @@ struct DropIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("dropIndexes").String();
 		return doDropIndexesActor(nmc, query, reply);
 	}
 };
@@ -671,7 +667,6 @@ struct DeleteIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("deleteIndexes").String();
 		return doDropIndexesActor(nmc, query, reply);
 	}
 };
@@ -700,7 +695,6 @@ struct CreateIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getStringField("createIndexes");
 		return doCreateIndexes(ec, query, reply);
 	}
 };
@@ -807,7 +801,6 @@ struct CollectionStatsCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("collstats").String();
 		return getCollectionStats(ec, query, reply);
 	}
 };
@@ -846,7 +839,6 @@ struct CreateCollectionCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("create").String();
 		return doCreateCollection(ec, query, reply);
 	}
 };
@@ -1058,7 +1050,6 @@ struct InsertCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("insert").String();
 		return insertAndReply(nmc, query, reply);
 	}
 };
@@ -1101,7 +1092,6 @@ struct DeleteCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("delete").String();
 		return deleteAndReply(nmc, query, reply);
 	}
 };
@@ -1154,7 +1144,6 @@ struct UpdateCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("update").String();
 		return updateAndReply(nmc, query, reply);
 	}
 };
@@ -1287,8 +1276,6 @@ struct ListIndexesCmd {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 		loop {
 			try {
-				msg->ns.second = msg->query.getStringField("listIndexes");
-
 				Reference<UnboundCollectionContext> unbound = wait(ec->mm->indexesCollection(dtr, msg->ns.first));
 
 				auto getIndexesPlan = getIndexesForCollectionPlan(unbound, msg->ns);
@@ -1390,7 +1377,6 @@ struct GetDistinctCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("distinct").String();
 		return getStreamDistinct(ec, query, reply);
 	}
 };
