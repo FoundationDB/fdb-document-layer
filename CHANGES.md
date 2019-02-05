@@ -2,6 +2,8 @@
 
 ### 1.6.2
 
+* [#32](https://github.com/FoundationDB/fdb-document-layer/issues/32) Fix for Ubuntu deb packages
+* [#62](https://github.com/FoundationDB/fdb-document-layer/issues/62) Fix for broken handling of `OP_QUERY` commands with mixed case
 
 ### 1.6.1
 
