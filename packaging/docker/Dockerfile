@@ -39,9 +39,9 @@ RUN wget $FDB_WEBSITE/downloads/$FDB_DOC_VERSION/ubuntu/installers/fdb-document-
 
 WORKDIR /var/fdb
 
-# Document Layer is built with 6.0 FDB bindings. Hence, it doesn't work with old
-# versions of FDB. Until 6.1 is released, we don't need the multiversion client.
-# But, in the future we should support the multiversion client.
+# This Docker image is just packing 6.0 client libraries. Document Layer works with
+# any FoundationDB server >= 5.1.0. If your server version is not 6.0, then you might
+# have to add the correct version client library here.
 ARG FDB_CLIENT_VERSION=6.0.15
 RUN wget $FDB_WEBSITE/downloads/$FDB_CLIENT_VERSION/linux/libfdb_c_$FDB_CLIENT_VERSION.so -O /usr/lib/libfdb_c.so
 

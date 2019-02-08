@@ -20,7 +20,7 @@ its data, so you'll first need to [set up the FoundationDB Key-Value
 Store](https://apple.github.io/foundationdb/getting-started-mac.html).
 For both development and production use, the Document Layer must be
 installed on a system running the FoundationDB client library (version
-6.0 or greater) and containing [the cluster
+5.1 or greater) and containing [the cluster
 file](https://apple.github.io/foundationdb/administration.html#cluster-files)
 of a running FoundationDB system.
 
