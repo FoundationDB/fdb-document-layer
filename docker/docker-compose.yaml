@@ -24,25 +24,45 @@ services:
     volumes:
       - ..:/fdb-document-layer
     working_dir: /fdb-document-layer
+    environment:
+      - MAKEJOBS=1
 
-  build-release: &build-release
+  release-setup: &release-setup
     <<: *build-setup
     environment:
       - MAKEJOBS=1
       - RELEASE=1
+
+  snapshot-setup: &snapshot-setup
+    <<: *build-setup
+
+  build-release: &build-release
+    <<: *release-setup
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
 
   build-snapshot: &build-snapshot
-    <<: *build-setup
-    environment:
-      - MAKEJOBS=1
+    <<: *snapshot-setup
     command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" package'
 
   build-prb:
     <<: *build-snapshot
 
+  test-release:
+    <<: *release-setup
+    environment:
+      - MAKEJOBS=1
+      - RELEASE=1
+      - FDB_HOST=fdbserver
+      - FDB_PORT=4500
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make -j "$${MAKEJOBS}" && cd .. && bash run-tests.bash'
+    links:
+      - fdbserver
+    depends_on:
+      - fdbserver
+    networks: [test-net]
+
   test-snapshot: &test-snapshot
-    <<: *build-setup
+    <<: *snapshot-setup
     environment:
       - MAKEJOBS=1
       - FDB_HOST=fdbserver
@@ -52,6 +72,7 @@ services:
       - fdbserver
     depends_on:
       - fdbserver
+    networks: [test-net]
 
   test-prb:
     <<: *test-snapshot
