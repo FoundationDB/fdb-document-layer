@@ -1,5 +1,7 @@
 ## Release notes
 
+### 1.6.3
+
 ### 1.6.2
 
 * [#32](https://github.com/FoundationDB/fdb-document-layer/issues/32) Fix for Ubuntu deb packages
