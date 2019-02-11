@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
-project(fdb_doc_layer VERSION 1.6.2 LANGUAGES C CXX)
+project(fdb_doc_layer VERSION 1.6.3 LANGUAGES C CXX)
 
 set(default_build_type "RelWithDbgInfo")
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
