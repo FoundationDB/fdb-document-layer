@@ -470,7 +470,7 @@ bool is_literal_match(bson::BSONObj const& obj) {
 Reference<IPredicate> any_predicate(std::string unencoded_path, Reference<IPredicate> pred, bool inElemMatch) {
 	if (unencoded_path.empty())
 		return pred;
-	return ref(new AnyPredicate(ref(new ExtPathExpression(StringRef(encodeMaybeDotted(unencoded_path)), true,
+	return ref(new AnyPredicate(ref(new ExtPathExpression(unencoded_path, true,
 	                                                      !inElemMatch && pred->wantsNulls())),
 	                            pred));
 }

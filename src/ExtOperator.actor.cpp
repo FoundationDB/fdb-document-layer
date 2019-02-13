@@ -145,7 +145,7 @@ struct ExtValueOperatorSize {
 	static const char* name;
 	static Reference<IPredicate> toPredicate(std::string const& unencoded_path, bson::BSONElement const& element) {
 		return ref(
-		    new AnyPredicate(ref(new ExtPathExpression(StringRef(encodeMaybeDotted(unencoded_path)), false, false)),
+		    new AnyPredicate(ref(new ExtPathExpression(unencoded_path, false, false)),
 		                     ref(new ArraySizePredicate(element.Number()))));
 	}
 };
