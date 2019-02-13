@@ -773,12 +773,12 @@ Future<Standalone<StringRef>> BsonContext::getKeyEncodedId() {
 }
 
 IndexInfo::IndexInfo(std::string indexName,
-                     std::vector<std::pair<std::string, int>> newIndexKeys,
+                     std::vector<std::pair<std::string, int>> indexKeys,
                      Reference<UnboundCollectionContext> collectionCx,
                      IndexStatus status,
                      Optional<UID> buildId,
                      bool isUniqueIndex)
-    : indexName(indexName), indexKeys(newIndexKeys), status(status), buildId(buildId), isUniqueIndex(isUniqueIndex) {
+    : indexName(indexName), indexKeys(indexKeys), status(status), buildId(buildId), isUniqueIndex(isUniqueIndex) {
 	encodedIndexName = DataValue(indexName, DVTypeCode::STRING).encode_key_part();
 	indexCx = collectionCx->getIndexesContext()->getSubContext(encodedIndexName);
 	multikey = true;

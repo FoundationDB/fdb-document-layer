@@ -359,7 +359,7 @@ struct IndexInfo {
 	bool isUniqueIndex;
 
 	IndexInfo(std::string indexName,
-	          std::vector<std::pair<std::string, int>> newIndexKeys,
+	          std::vector<std::pair<std::string, int>> indexKeys,
 	          Reference<struct UnboundCollectionContext> collectionCx,
 	          IndexStatus status,
 	          Optional<UID> buildId = Optional<UID>(),
