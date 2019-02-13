@@ -40,15 +40,8 @@ Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<Dire
 
 std::string describeIndex(std::vector<std::pair<std::string, int>> indexKeys) {
 	std::string ret = "index: ";
-	for (auto p : indexKeys) {
-		std::string keyStr;
-		DataKey key = DataKey::decode_bytes(StringRef(p.first));
-		for (int i = 0; i < key.size(); i++) {
-			keyStr.append(DataValue::decode_key_part(key[i]).getString());
-			if (i < key.size() - 1)
-				keyStr.append(".");
-		}
-		ret += format("{%s:%d}, ", keyStr.c_str(), p.second);
+	for (const auto& indexKey : indexKeys) {
+		ret += format("{%s:%d}, ", indexKey.first.c_str(), indexKey.second);
 	}
 	ret.resize(ret.length() - 2);
 	return ret;
@@ -72,7 +65,7 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	bool isUniqueIndex = indexObj.hasField("unique") ? indexObj.getBoolField("unique") : false;
 	for (auto i = keyObj.begin(); i.more();) {
 		auto e = i.next();
-		indexKeys.emplace_back(encodeMaybeDotted(e.fieldName()), (int)e.Number());
+		indexKeys.emplace_back(e.fieldName(), (int)e.Number());
 	}
 	if (verboseLogging) {
 		TraceEvent("BD_getAndAddIndexes").detail("AddingIndex", describeIndex(indexKeys));

@@ -50,9 +50,10 @@ struct IExpression {
 	/**
 	 * Return the name of the index which, if it exists, indexes by the values of this expression
 	 */
-	virtual Standalone<StringRef> get_index_key() const { return StringRef(); }
+	virtual std::string get_index_key() const { return {}; }
 };
 
+std::string encodeMaybeDotted(std::string fieldname);
 /**
  * This expression implements a MongoDB dot-separated path expansion (it returns all subdocuments
  * patching the given path, expanding arrays as necessary).
@@ -60,21 +61,24 @@ struct IExpression {
 struct ExtPathExpression : IExpression, ReferenceCounted<ExtPathExpression>, FastAllocated<ExtPathExpression> {
 
 	Standalone<StringRef> path;
+	std::string strPath;
 	bool expandLastArray;
 	bool imputeNulls;
 
 	void addref() { ReferenceCounted<ExtPathExpression>::addref(); }
 	void delref() { ReferenceCounted<ExtPathExpression>::delref(); }
 
-	std::string toString() const override { return "ExtPath(" + FDB::printable(path) + ")"; }
+	std::string toString() const override { return "ExtPath(" + strPath + ")"; }
 
-	ExtPathExpression(Standalone<StringRef> const& path, bool const& expandLastArray, bool const& imputeNulls)
-	    : path(path), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {}
+	ExtPathExpression(std::string const& strPath, bool const& expandLastArray, bool const& imputeNulls)
+	    : strPath(strPath), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {
+		path = StringRef(encodeMaybeDotted(strPath));
+	}
 
 	GenFutureStream<Reference<IReadContext>> evaluate(Reference<IReadContext> const& document) override;
 
-	Standalone<StringRef> get_index_key() const override {
-		return expandLastArray ? path : Standalone<StringRef>();
+	std::string get_index_key() const override {
+		return expandLastArray ? strPath : std::string();
 	} // FIXME: a.$n?.b.$n
 };
 

@@ -949,9 +949,9 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 	std::vector<std::string> bannedIndexFields;
 	bannedIndexFields.reserve(affectedFields.size() + prefixesOfAffectedFields.size());
 	for (const auto& s : affectedFields)
-		bannedIndexFields.push_back(encodeMaybeDotted(s));
+		bannedIndexFields.push_back(s);
 	for (const auto& s : prefixesOfAffectedFields)
-		bannedIndexFields.push_back(encodeMaybeDotted(s));
+		bannedIndexFields.push_back(s);
 	return bannedIndexFields;
 }
 
