@@ -430,7 +430,7 @@ ACTOR static Future<Void> deduplicateIndexStream(PlanCheckpoint* checkpoint,
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<bool>>> futures;
 	state std::pair<Reference<ScanReturnedContext>, Future<bool>> p;
 	state std::vector<Reference<IExpression>> exprs;
-	for (const auto &indexKey : self.indexKeys)
+	for (const auto& indexKey : self.indexKeys)
 		exprs.push_back(Reference<IExpression>(new ExtPathExpression(indexKey.first, true, true)));
 	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {

@@ -592,17 +592,15 @@ QueryContext::QueryContext(class Reference<ITDoc> layers, Reference<DocTransacti
 void QueryContext::addIndex(IndexInfo index) {
 	if (index.size() == 1) {
 		self->layers = Reference<ITDoc>(new SimpleIndexPlugin(
-		    self->prefix, index,
-		    Reference<IExpression>(new ExtPathExpression(index.indexKeys[0].first, true, true)),
+		    self->prefix, index, Reference<IExpression>(new ExtPathExpression(index.indexKeys[0].first, true, true)),
 		    self->layers));
 	} else {
 		std::vector<std::pair<Reference<IExpression>, int>> exprs(index.size());
-		std::transform(index.indexKeys.begin(), index.indexKeys.end(), exprs.begin(),
-		               [](std::pair<std::string, int> index_pair) {
-			               return std::make_pair(
-			                   Reference<IExpression>(new ExtPathExpression(index_pair.first, true, true)),
-			                   index_pair.second);
-		               });
+		std::transform(
+		    index.indexKeys.begin(), index.indexKeys.end(), exprs.begin(), [](std::pair<std::string, int> index_pair) {
+			    return std::make_pair(Reference<IExpression>(new ExtPathExpression(index_pair.first, true, true)),
+			                          index_pair.second);
+		    });
 		self->layers = Reference<ITDoc>(new CompoundIndexPlugin(self->prefix, index, exprs, self->layers));
 	}
 }

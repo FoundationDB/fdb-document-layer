@@ -376,8 +376,7 @@ struct IndexComparator {
 struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, FastAllocated<UnboundCollectionContext> {
 	UnboundCollectionContext(Reference<DirectorySubspace> collectionDirectory,
 	                         Reference<DirectorySubspace> metadataDirectory)
-	    : collectionDirectory(collectionDirectory),
-	      metadataDirectory(metadataDirectory) {
+	    : collectionDirectory(collectionDirectory), metadataDirectory(metadataDirectory) {
 		cx = Reference<UnboundQueryContext>(new UnboundQueryContext())->getSubContext(collectionDirectory->key());
 	}
 

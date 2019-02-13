@@ -71,7 +71,7 @@ struct ExtPathExpression : IExpression, ReferenceCounted<ExtPathExpression>, Fas
 	std::string toString() const override { return "ExtPath(" + strPath + ")"; }
 
 	ExtPathExpression(std::string const& strPath, bool const& expandLastArray, bool const& imputeNulls)
-		: strPath(strPath), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {
+	    : strPath(strPath), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {
 		path = StringRef(encodeMaybeDotted(strPath));
 	}
 

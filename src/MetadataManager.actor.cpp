@@ -40,7 +40,7 @@ Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<Dire
 
 std::string describeIndex(std::vector<std::pair<std::string, int>> indexKeys) {
 	std::string ret = "index: ";
-	for (const auto &indexKey : indexKeys) {
+	for (const auto& indexKey : indexKeys) {
 		ret += format("{%s:%d}, ", indexKey.first.c_str(), indexKey.second);
 	}
 	ret.resize(ret.length() - 2);
