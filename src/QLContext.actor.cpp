@@ -814,19 +814,22 @@ Future<uint64_t> CollectionContext::getMetadataVersion() {
 	return ret;
 }
 
-Future<uint64_t> CollectionContext::getDocumentCount() {
+ACTOR Future<uint64_t> doGetDocumentCount(Reference<UnboundCollectionContext> unbound, Reference<QueryContext> cx) {
 	Key countIndexKey = Key(KeyRef(unbound->getIndexesSubspace().toString() +
 	                               DataValue("RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
-	                               		DVTypeCode::STRING).encode_key_part()));
-	Future<Optional<FDBStandalone<StringRef>>> fov =
-	    cx->getTransaction()->tr->get(countIndexKey); // FIXME: Wow how many abstractions does this violate at once?
-	Future<uint64_t> ret = map(fov, [](Optional<FDBStandalone<StringRef>> ov) -> uint64_t {
-		if (!ov.present())
-			return 0;
-		else
-			return *((uint64_t*)(ov.get().begin()));
-	});
-	return ret;
+	                                         DVTypeCode::STRING)
+	                                   .encode_key_part()));
+	Optional<FDBStandalone<StringRef>> ov = wait(
+	    cx->getTransaction()->tr->get(countIndexKey)); // FIXME: Wow how many abstractions does this violate at once?
+
+	if (!ov.present())
+		return 0;
+	else
+		return *((uint64_t*)(ov.get().begin()));
+}
+
+Future<uint64_t> CollectionContext::getDocumentCount() {
+	return doGetDocumentCount(unbound, cx);
 }
 
 Future<Standalone<StringRef>> IReadWriteContext::getValueEncodedId() {
