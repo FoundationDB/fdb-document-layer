@@ -106,7 +106,8 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 				}
 			}
 		} else {
-			Optional<IndexInfo> oIndex = cx->getSimpleIndex(anyPred->expr->get_index_key());
+			std::string indexKey = anyPred->expr->get_index_key();
+			Optional<IndexInfo> oIndex = cx->getSimpleIndex(indexKey);
 			if (oIndex.present()) {
 				Optional<DataValue> begin, end;
 				anyPred->pred->get_range(begin, end);
@@ -116,10 +117,10 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 					Optional<std::string> endKey =
 					    end.present() ? end.get().encode_key_part() : Optional<std::string>();
 					if (anyPred->pred->range_is_tight()) {
-						return ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey));
+						return ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey, {indexKey}));
 					} else {
 						return FilterPlan::construct_filter_plan(
-						    cx, ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey)), query);
+						    cx, ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey, {indexKey})), query);
 					}
 				}
 			}
@@ -199,7 +200,7 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 		switch (query->getTypeCode()) {
 		case IPredicate::ANY: {
 			auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());
-			Optional<IndexInfo> oIndex = cx->getCompoundIndex(index, anyPred->expr->get_index_key());
+			Optional<IndexInfo> oIndex = cx->getCompoundIndex(matchedPrefix, anyPred->expr->get_index_key());
 			if (oIndex.present()) {
 				Optional<DataValue> beginSuffix, endSuffix;
 				anyPred->pred->get_range(beginSuffix, endSuffix);
@@ -208,16 +209,18 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 					    beginSuffix.present() ? beginSuffix.get().encode_key_part() : LiteralStringRef("\x00");
 					Standalone<StringRef> endKeySuffix =
 					    endSuffix.present() ? endSuffix.get().encode_key_part() : LiteralStringRef("\xff");
+					std::vector<std::string> newPrefix(matchedPrefix);
+					newPrefix.push_back(anyPred->expr->get_index_key());
 					if (anyPred->pred->range_is_tight()) {
-						return ref(new IndexScanPlan(cx, oIndex.get(),
-						                             begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						                             end.present() ? strAppend(end.get(), endKeySuffix) : end));
+						return ref(new IndexScanPlan(
+						    cx, oIndex.get(), begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
+						    end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix));
 					} else {
 						return FilterPlan::construct_filter_plan(
 						    cx,
 						    ref(new IndexScanPlan(cx, oIndex.get(),
 						                          begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						                          end.present() ? strAppend(end.get(), endKeySuffix) : end)),
+						                          end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix)),
 						    query);
 					}
 				}

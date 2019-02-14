@@ -701,14 +701,15 @@ Optional<IndexInfo> UnboundCollectionContext::getSimpleIndex(std::string simpleI
 	}
 }
 
-Optional<IndexInfo> UnboundCollectionContext::getCompoundIndex(IndexInfo prefix, std::string nextIndexKey) {
+Optional<IndexInfo> UnboundCollectionContext::getCompoundIndex(std::vector<std::string> const& prefix,
+                                                               std::string nextIndexKey) {
 	if (bannedFieldNames.find(nextIndexKey) != bannedFieldNames.end())
 		return Optional<IndexInfo>();
-	auto indexV = simpleIndexMap.find(prefix.indexKeys[0].first);
+	auto indexV = simpleIndexMap.find(prefix[0]);
 	ASSERT(indexV != simpleIndexMap.end());
 	for (IndexInfo index : indexV->second) {
 		if (index.size() > prefix.size() && index.hasPrefix(prefix)) {
-			if (index.indexKeys[prefix.indexKeys.size()].first == nextIndexKey) {
+			if (index.indexKeys[prefix.size()].first == nextIndexKey) {
 				return index;
 			}
 		}
@@ -785,9 +786,12 @@ IndexInfo::IndexInfo(std::string indexName,
 }
 
 // SOMEDAY: If we store the index name as Tuple encoded bytes, prefix comparision would be faster
-bool IndexInfo::hasPrefix(IndexInfo const& other) {
-	for (int i = 0; i < other.size(); i++) {
-		if (indexKeys[i] != other.indexKeys[i]) {
+bool IndexInfo::hasPrefix(std::vector<std::string> const& prefix) {
+	if (prefix.size() > indexKeys.size())
+		return false;
+
+	for (int i = 0; i < prefix.size(); i++) {
+		if (indexKeys[i].first != prefix[i]) {
 			return false;
 		}
 	}
