@@ -708,7 +708,7 @@ Optional<IndexInfo> UnboundCollectionContext::getCompoundIndex(std::vector<std::
 	auto indexV = simpleIndexMap.find(prefix[0]);
 	ASSERT(indexV != simpleIndexMap.end());
 	for (IndexInfo index : indexV->second) {
-		if (index.hasPrefix(prefix)) {
+		if (index.size() > prefix.size() && index.hasPrefix(prefix)) {
 			if (index.indexKeys[prefix.size()].first == nextIndexKey) {
 				return index;
 			}
