@@ -176,6 +176,16 @@ def test_simple_9():
 def test_compound_1():
     return ("Basic Compound Index", [Index("compound", [("a", 1), ("b", 1)])], {
         '$and': [{
+            'a': 1
+        }, {
+            'b': 1
+        }]
+    }, Predicates.no_table_scan_no_filter)
+
+
+def test_compound_11():
+    return ("Basic Compound Index", [Index("compound", [("a", 1), ("b", 1)])], {
+        '$and': [{
             'b': 1
         }, {
             'a': 1
@@ -285,7 +295,60 @@ def test_compound_7():
              }, lambda e: Predicates.only_index_named("short", e))
 
 
+def test_compound_8():
+    return ("Compound index matching exact index",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abc", e) and Predicates.no_table_scan_no_filter(e))
+
+
+def test_compound_9():
+    return ("Compound index matching longest prefix",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }, {
+                    'd': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abcde", e) and Predicates.no_table_scan_no_filter(e))
+
+
+def test_compound_10():
+    return ("Compound index matching dscontinuous index prefix",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }, {
+                    'e': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abc", e) and Predicates.no_table_scan(e))
+
+
 tests = [globals()[f] for f in dir() if f.startswith("test_")]
+
 
 def test(collection, t):
     (name, indexes, query, condition) = t

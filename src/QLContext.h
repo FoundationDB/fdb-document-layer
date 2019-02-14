@@ -365,7 +365,7 @@ struct IndexInfo {
 	          Optional<UID> buildId = Optional<UID>(),
 	          bool isUniqueIndex = false);
 	IndexInfo() : status(IndexStatus::INVALID) {}
-	bool hasPrefix(IndexInfo const& other);
+	bool hasPrefix(std::vector<std::string> const& prefix);
 	int size() const { return static_cast<int>(indexKeys.size()); }
 };
 
@@ -389,7 +389,7 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	      bannedFieldNames(other.bannedFieldNames) {}
 
 	Optional<IndexInfo> getSimpleIndex(std::string simple_index_map_key);
-	Optional<IndexInfo> getCompoundIndex(IndexInfo prefix, std::string encoded_next_index_key);
+	Optional<IndexInfo> getCompoundIndex(std::vector<std::string> const& prefix, std::string nextIndexKey);
 	void setBannedFieldNames(std::vector<std::string> bannedFns) {
 		bannedFieldNames = std::set<std::string>(bannedFns.begin(), bannedFns.end());
 	}
