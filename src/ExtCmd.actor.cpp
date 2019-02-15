@@ -706,7 +706,7 @@ struct BuildInfoCmd {
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
 		reply->addDocument(BSON("version"
-		                        << "2.4.10"
+		                        << EXT_SERVER_VERSION
 		                        << "gitVersion"
 		                        << "<string>"
 		                        << "OpenSSLVersion"
