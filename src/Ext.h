@@ -26,6 +26,7 @@
 #include "bson.h"
 #include "flow/flow.h"
 
+#define EXT_SERVER_VERSION "3.0.0"
 #define EXT_MIN_WIRE_VERSION 0
 #define EXT_MAX_WIRE_VERSION 3
 
