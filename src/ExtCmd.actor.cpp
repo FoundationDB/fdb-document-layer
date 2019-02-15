@@ -90,9 +90,10 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 
 	matchingIndex->clearDescendants();
 	matchingIndex->clearRoot();
+
 	Void _ = wait(matchingIndex->commitChanges());
 
-	KeyRef indexKey = targetedCollection->getIndexesSubspace().toString() + encodeMaybeDotted(matchingName);
+	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(StringRef(encodeMaybeDotted(matchingName)));
 	tr->tr->clear(FDB::KeyRangeRef(indexKey, strinc(indexKey)));
 
 	targetedCollection->bindCollectionContext(tr)->bumpMetadataVersion();
@@ -564,7 +565,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 		if (query->query.hasField("index")) {
 			bson::BSONElement el = query->query.getField("index");
 			if (el.type() == bson::BSONType::String) {
-				if (strcmp(el.String().c_str(), "*") == 0) {
+				if (el.String() == "*") {
 					// No need to wait on lastWrite in either case. If it's an explicit transaction, the transaction
 					// object is per connection, and all operations in such a transaction block the connection until
 					// they complete, so we can't have concurrent modification of a document. If it isn't an explicit
