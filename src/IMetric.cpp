@@ -29,7 +29,7 @@
 static boost::dll::shared_library _loadedLib;
 
 IMetricReporter* IMetricReporter::init(const char* libPath, const char* libConfig) {
-	typedef IMetricReporter*(creator_t)(const std::string&);
+	typedef IMetricReporter*(creator_t)(const char*);
 
 	// Code from Boost::DLL::import_alias begin
 	typedef typename boost::dll::detail::import_type<creator_t>::base_type type;
