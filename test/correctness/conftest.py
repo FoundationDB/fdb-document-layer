@@ -7,9 +7,14 @@ import log
 logger = log.setup_logger(__name__)
 
 
+def pytest_addoption(parser):
+    parser.addoption('--doclayer-port', action='store', default=27018, help="Port that Doc Layer is listening on")
+
+
 @pytest.yield_fixture(scope='session')
-def fixture_client():
-    client = pymongo.MongoClient('127.0.0.1:27018')
+def fixture_client(request):
+    port = request.config.getoption('--doclayer-port')
+    client = pymongo.MongoClient('127.0.0.1:{}'.format(port))
     yield client
 
 
