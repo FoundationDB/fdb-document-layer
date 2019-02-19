@@ -31,7 +31,6 @@ import pymongo
 
 import gen
 import transactional_shim
-from unit import unit_tests
 import util
 from mongo_model import MongoCollection
 from mongo_model import MongoModel
@@ -435,11 +434,6 @@ def test_forever(ns):
     return okay
 
 
-def start_unit_tests(ns):
-    (collection1, collection2) = get_collections(ns)
-    return unit_tests.test_all(collection1, collection2, sub_test=ns['sub_test'])
-
-
 def start_forever_test(ns):
     gen.generator_options.test_nulls = ns['no_nulls']
     gen.generator_options.upserts_enabled = ns['no_upserts']
@@ -527,16 +521,6 @@ if __name__ == '__main__':
     parser.add_argument('--max-pool-size', type=int, default=None, help='maximum number of threads in the thread pool')
     subparsers = parser.add_subparsers(help='type of test to run')
 
-    parser_unit = subparsers.add_parser('unit', help='run unit tests')
-    parser_unit.add_argument('1', choices=['mongo', 'mm', 'doclayer'], help='first tester')
-    parser_unit.add_argument('2', choices=['mongo', 'mm', 'doclayer'], help='second tester')
-    parser_unit.add_argument('--sub_test', default=False, help='Select a particular unit test file to run')
-    parser_unit.add_argument(
-        '--instance-id',
-        type=int,
-        default=0,
-        help='the instance that we would like to test with, default is 0 which means autogenerate '
-        'it randomly')
     parser_forever = subparsers.add_parser('forever', help='run comparison test until failure')
     parser_forever.add_argument('1', choices=['mongo', 'mm', 'doclayer'], help='first tester')
     parser_forever.add_argument('2', choices=['mongo', 'mm', 'doclayer'], help='second tester')
@@ -570,7 +554,6 @@ if __name__ == '__main__':
 
     parser_self_test = subparsers.add_parser('self_test', help='test the test harness')
 
-    parser_unit.set_defaults(func=start_unit_tests)
     parser_forever.set_defaults(func=start_forever_test)
     parser_self_test.set_defaults(func=start_self_test)
 
