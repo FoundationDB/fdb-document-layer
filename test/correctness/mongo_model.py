@@ -1049,3 +1049,9 @@ class MongoCollection(object):
                 raise MongoModelException(
                     "'$setOnInsert' is empty. You must specify a field like so: {$mod: {<field>: ...}}")
         return {'n': n}
+
+    def update_one(self, query, update, upsert):
+        self.update(query, update, upsert, multi=False)
+
+    def update_many(self, query, update, upsert):
+        self.update(query, update, upsert, multi=True)
