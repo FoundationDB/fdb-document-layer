@@ -30,4 +30,4 @@ echo "docker:docker@${FDB_HOST_IP}:${FDB_PORT}" > fdb.cluster
 FDB_NETWORK_OPTION_TRACE_ENABLE="" ./build/bin/fdbdoc -l 127.0.0.1:27000 -d test -VV > test.out 2> test.err &
 
 cd test/correctness/
-python document-correctness.py --doclayer-port 27000 unit doclayer mm
+pytest --doclayer-port 27000 smoke/
