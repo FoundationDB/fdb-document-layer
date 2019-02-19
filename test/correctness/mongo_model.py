@@ -451,6 +451,9 @@ class MongoCollection(object):
     def remove(self):
         self.data = dict()
 
+    def delete_many(self):
+        self.data = dict()
+
     def _insert(self, doc):
         if '_id' not in doc:
             doc['_id'] = gen.random_object_id()
@@ -474,6 +477,12 @@ class MongoCollection(object):
                 self._insert(i)
         else:
             raise MongoModelException("Tried to insert an unordered document.")
+
+    def insert_one(self, dict):
+        self.insert(dict)
+
+    def insert_many(self, list):
+        self.insert(list)
 
     def find(self, query, fields=None):
         if len(query) == 0:

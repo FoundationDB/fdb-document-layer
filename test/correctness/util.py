@@ -36,7 +36,7 @@ import bson.timestamp
 from bson import ObjectId, binary
 
 from gen import HashableOrderedDict
-from . import gen
+import gen
 
 
 class ModelOptions(object):
