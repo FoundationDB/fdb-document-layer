@@ -18,8 +18,6 @@
 # limitations under the License.
 #
 
-#!/usr/bin/python2
-
 import gen
 import json
 import random

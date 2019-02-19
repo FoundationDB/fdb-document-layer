@@ -28,9 +28,16 @@ from random import Random
 from bson import binary
 from bson.objectid import ObjectId
 
-from util import HashableOrderedDict
-
 global_prng = Random()
+
+
+# this is outlandishly unsafe and terrible
+# however it should not crash anything, because we only use these for id fields which under mongo semantics are not allowed to change
+# so this class causing some bizarre crash in python should be interpreted as a correctness failure in the model, and not just evidence that it's
+# time to fix this horribleness
+class HashableOrderedDict(OrderedDict):
+    def __hash__(self):
+        return self.__str__().__hash__()
 
 
 class generator_options:
