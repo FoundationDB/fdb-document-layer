@@ -240,8 +240,15 @@ ACTOR Future<Void> runCommand(Reference<ExtConnection> nmc,
                               Reference<ExtMsgQuery> query,
                               PromiseStream<Reference<ExtMsgReply>> replyStream) {
 	state Reference<ExtMsgReply> errReply(new ExtMsgReply(query->header));
-	state std::string cmd = getFirstKey(query->query);
+
+	// For OP_QUERY commands, first elements field name is the command name. And the value contains
+	// the collection name if the command is at collection level.
+	auto firstElement = query->query.begin().next();
+	state std::string cmd = firstElement.fieldName();
 	std::transform(cmd.begin(), cmd.end(), cmd.begin(), ::tolower);
+	if (firstElement.isString()) {
+		query->ns.second = firstElement.String();
+	}
 
 	try {
 		Reference<ExtMsgReply> reply = wait(ExtCmd::call(cmd, nmc, query, errReply));
@@ -942,9 +949,9 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 	std::vector<std::string> bannedIndexFields;
 	bannedIndexFields.reserve(affectedFields.size() + prefixesOfAffectedFields.size());
 	for (const auto& s : affectedFields)
-		bannedIndexFields.push_back(encodeMaybeDotted(s));
+		bannedIndexFields.push_back(s);
 	for (const auto& s : prefixesOfAffectedFields)
-		bannedIndexFields.push_back(encodeMaybeDotted(s));
+		bannedIndexFields.push_back(s);
 	return bannedIndexFields;
 }
 

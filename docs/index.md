@@ -10,6 +10,8 @@ FoundationDB Document Layer is a stateless microserver that exposes a document-o
 
 The Document Layer implements a subset of the MongoDB® API (v 3.0.0) with some [differences](known-differences.md). This subset is mainly focused on CRUD operations, indexes and transactions. The Document Layer works with all the latest official MongoDB® drivers.
 
+NOTE: [mongo-go-driver](https://github.com/mongodb/mongo-go-driver) assumes server is atleast 3.2. If you use it against Document Layer it fails on `find` commands. This should be fixed with [#11](https://github.com/FoundationDB/fdb-document-layer/issues/11).
+
 As the Document Layer is built on top of FoundationDB, it inherits the strong guarantees of FoundationDB. Causal
 consistency and strong consistency are the default mode of operation.
 Indexes are always consistent with the inserts. Shard keys are not

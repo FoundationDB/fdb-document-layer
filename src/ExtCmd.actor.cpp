@@ -90,9 +90,10 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 
 	matchingIndex->clearDescendants();
 	matchingIndex->clearRoot();
+
 	Void _ = wait(matchingIndex->commitChanges());
 
-	KeyRef indexKey = targetedCollection->getIndexesSubspace().toString() + encodeMaybeDotted(matchingName);
+	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(StringRef(encodeMaybeDotted(matchingName)));
 	tr->tr->clear(FDB::KeyRangeRef(indexKey, strinc(indexKey)));
 
 	targetedCollection->bindCollectionContext(tr)->bumpMetadataVersion();
@@ -361,7 +362,6 @@ ACTOR static Future<int> internal_doDropIndexesActor(Reference<DocTransaction> t
 ACTOR static Future<Void> Internal_doDropCollection(Reference<DocTransaction> tr,
                                                     Reference<ExtMsgQuery> query,
                                                     Reference<MetadataManager> mm) {
-	query->ns.second = query->query.getField("drop").String();
 	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
 	int _ = wait(internal_doDropIndexesActor(tr, query->ns, mm));
 	Void _ = wait(unbound->collectionDirectory->remove(tr->tr));
@@ -436,7 +436,6 @@ struct GetCountCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("count").String();
 		return getStreamCount(ec, query, reply);
 	}
 };
@@ -552,7 +551,6 @@ struct FindAndModifyCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("findandmodify").String();
 		return doFindAndModify(ec, query, reply);
 	}
 };
@@ -567,7 +565,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 		if (query->query.hasField("index")) {
 			bson::BSONElement el = query->query.getField("index");
 			if (el.type() == bson::BSONType::String) {
-				if (strcmp(el.String().c_str(), "*") == 0) {
+				if (el.String() == "*") {
 					// No need to wait on lastWrite in either case. If it's an explicit transaction, the transaction
 					// object is per connection, and all operations in such a transaction block the connection until
 					// they complete, so we can't have concurrent modification of a document. If it isn't an explicit
@@ -659,7 +657,6 @@ struct DropIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("dropIndexes").String();
 		return doDropIndexesActor(nmc, query, reply);
 	}
 };
@@ -671,7 +668,6 @@ struct DeleteIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("deleteIndexes").String();
 		return doDropIndexesActor(nmc, query, reply);
 	}
 };
@@ -700,7 +696,6 @@ struct CreateIndexesCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getStringField("createIndexes");
 		return doCreateIndexes(ec, query, reply);
 	}
 };
@@ -711,23 +706,22 @@ struct BuildInfoCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("version"
-		                        << "2.4.10"
-		                        << "gitVersion"
-		                        << "<string>"
-		                        << "OpenSSLVersion"
-		                        << ""
-		                        << "sysInfo"
-		                        << "<string>"
-		                        << "loaderFlags"
-		                        << "<string>"
-		                        << "compilerFlags"
-		                        << "<string>"
-		                        << "allocator"
-		                        << "<string>"
-		                        << "versionArray" << BSON_ARRAY(2 << 4 << 10) << "javascriptEngine"
-		                        << "<string>"
-		                        << "bits" << 64 << "debug" << false << "maxBsonObjectSize" << 16777216 << "ok" << 1.0));
+		reply->addDocument(BSON("version" << EXT_SERVER_VERSION << "gitVersion"
+		                                  << "<string>"
+		                                  << "OpenSSLVersion"
+		                                  << ""
+		                                  << "sysInfo"
+		                                  << "<string>"
+		                                  << "loaderFlags"
+		                                  << "<string>"
+		                                  << "compilerFlags"
+		                                  << "<string>"
+		                                  << "allocator"
+		                                  << "<string>"
+		                                  << "versionArray" << BSON_ARRAY(2 << 4 << 10) << "javascriptEngine"
+		                                  << "<string>"
+		                                  << "bits" << 64 << "debug" << false << "maxBsonObjectSize" << 16777216 << "ok"
+		                                  << 1.0));
 		return reply;
 	}
 };
@@ -808,7 +802,6 @@ struct CollectionStatsCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("collstats").String();
 		return getCollectionStats(ec, query, reply);
 	}
 };
@@ -847,7 +840,6 @@ struct CreateCollectionCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("create").String();
 		return doCreateCollection(ec, query, reply);
 	}
 };
@@ -1059,7 +1051,6 @@ struct InsertCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("insert").String();
 		return insertAndReply(nmc, query, reply);
 	}
 };
@@ -1102,7 +1093,6 @@ struct DeleteCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("delete").String();
 		return deleteAndReply(nmc, query, reply);
 	}
 };
@@ -1155,7 +1145,6 @@ struct UpdateCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("update").String();
 		return updateAndReply(nmc, query, reply);
 	}
 };
@@ -1288,8 +1277,6 @@ struct ListIndexesCmd {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 		loop {
 			try {
-				msg->ns.second = msg->query.getStringField("listIndexes");
-
 				Reference<UnboundCollectionContext> unbound = wait(ec->mm->indexesCollection(dtr, msg->ns.first));
 
 				auto getIndexesPlan = getIndexesForCollectionPlan(unbound, msg->ns);
@@ -1391,7 +1378,6 @@ struct GetDistinctCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		query->ns.second = query->query.getField("distinct").String();
 		return getStreamDistinct(ec, query, reply);
 	}
 };

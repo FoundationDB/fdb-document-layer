@@ -518,6 +518,9 @@ class MongoCollection(object):
     def ensure_index(self, fake_variable):
         pass
 
+    def create_index(self, _):
+        pass
+
     @staticmethod
     def check_fields(update):
         affected_fields = set()

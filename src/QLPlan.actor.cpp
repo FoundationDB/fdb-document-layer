@@ -95,7 +95,7 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 	switch (query->getTypeCode()) {
 	case IPredicate::ANY: {
 		auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());
-		if (anyPred->expr->get_index_key() == DataValue("_id", DVTypeCode::STRING).encode_key_part()) {
+		if (anyPred->expr->get_index_key() == "_id") {
 			Optional<DataValue> begin, end;
 			anyPred->pred->get_range(begin, end);
 			if (begin.present() || end.present()) {
@@ -106,8 +106,7 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 				}
 			}
 		} else {
-			Standalone<StringRef> indexKey =
-			    Standalone<StringRef>(DataValue(anyPred->expr->get_index_key(), DVTypeCode::STRING).encode_key_part());
+			std::string indexKey = anyPred->expr->get_index_key();
 			Optional<IndexInfo> oIndex = cx->getSimpleIndex(indexKey);
 			if (oIndex.present()) {
 				Optional<DataValue> begin, end;
@@ -118,10 +117,10 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 					Optional<std::string> endKey =
 					    end.present() ? end.get().encode_key_part() : Optional<std::string>();
 					if (anyPred->pred->range_is_tight()) {
-						return ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey));
+						return ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey, {indexKey}));
 					} else {
 						return FilterPlan::construct_filter_plan(
-						    cx, ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey)), query);
+						    cx, ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey, {indexKey})), query);
 					}
 				}
 			}
@@ -201,9 +200,7 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 		switch (query->getTypeCode()) {
 		case IPredicate::ANY: {
 			auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());
-			Standalone<StringRef> indexKey =
-			    Standalone<StringRef>(DataValue(anyPred->expr->get_index_key(), DVTypeCode::STRING).encode_key_part());
-			Optional<IndexInfo> oIndex = cx->getCompoundIndex(index, indexKey);
+			Optional<IndexInfo> oIndex = cx->getCompoundIndex(matchedPrefix, anyPred->expr->get_index_key());
 			if (oIndex.present()) {
 				Optional<DataValue> beginSuffix, endSuffix;
 				anyPred->pred->get_range(beginSuffix, endSuffix);
@@ -212,16 +209,18 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 					    beginSuffix.present() ? beginSuffix.get().encode_key_part() : LiteralStringRef("\x00");
 					Standalone<StringRef> endKeySuffix =
 					    endSuffix.present() ? endSuffix.get().encode_key_part() : LiteralStringRef("\xff");
+					std::vector<std::string> newPrefix(matchedPrefix);
+					newPrefix.push_back(anyPred->expr->get_index_key());
 					if (anyPred->pred->range_is_tight()) {
-						return ref(new IndexScanPlan(cx, oIndex.get(),
-						                             begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						                             end.present() ? strAppend(end.get(), endKeySuffix) : end));
+						return ref(new IndexScanPlan(
+						    cx, oIndex.get(), begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
+						    end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix));
 					} else {
 						return FilterPlan::construct_filter_plan(
 						    cx,
 						    ref(new IndexScanPlan(cx, oIndex.get(),
 						                          begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						                          end.present() ? strAppend(end.get(), endKeySuffix) : end)),
+						                          end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix)),
 						    query);
 					}
 				}
@@ -434,8 +433,8 @@ ACTOR static Future<Void> deduplicateIndexStream(PlanCheckpoint* checkpoint,
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<bool>>> futures;
 	state std::pair<Reference<ScanReturnedContext>, Future<bool>> p;
 	state std::vector<Reference<IExpression>> exprs;
-	for (auto k : self.indexKeys)
-		exprs.push_back(Reference<IExpression>(new ExtPathExpression(StringRef(k.first), true, true)));
+	for (const auto& indexKey : self.indexKeys)
+		exprs.push_back(Reference<IExpression>(new ExtPathExpression(indexKey.first, true, true)));
 	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		loop {
@@ -1607,7 +1606,7 @@ FutureStream<Reference<ScanReturnedContext>> UpdateIndexStatusPlan::execute(Plan
 ACTOR static Future<Void> buildIndexEntry(Reference<ScanReturnedContext> doc, IndexInfo index) {
 	// This is sufficient even for compound indexes, because we have one index entry per document, so
 	// dirtying one of the indexed fields causes the plugin to rewrite the entry.
-	state Standalone<StringRef> index_key = StringRef(index.indexKeys[0].first);
+	state Standalone<StringRef> index_key = StringRef(encodeMaybeDotted(index.indexKeys[0].first));
 	Optional<DataValue> odv = wait(doc->get(index_key));
 
 	// Don't need to worry about objects or arrays, because even if

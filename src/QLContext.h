@@ -366,7 +366,7 @@ struct IndexInfo {
 	          Optional<UID> buildId = Optional<UID>(),
 	          bool isUniqueIndex = false);
 	IndexInfo() : status(IndexStatus::INVALID) {}
-	bool hasPrefix(IndexInfo const& other);
+	bool hasPrefix(std::vector<std::string> const& prefix);
 	int size() const { return static_cast<int>(indexKeys.size()); }
 };
 
@@ -377,9 +377,7 @@ struct IndexComparator {
 struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, FastAllocated<UnboundCollectionContext> {
 	UnboundCollectionContext(Reference<DirectorySubspace> collectionDirectory,
 	                         Reference<DirectorySubspace> metadataDirectory)
-	    : collectionDirectory(collectionDirectory),
-	      metadataDirectory(metadataDirectory),
-	      bannedFieldNames(Optional<std::set<std::string>>()) {
+	    : collectionDirectory(collectionDirectory), metadataDirectory(metadataDirectory) {
 		cx = Reference<UnboundQueryContext>(new UnboundQueryContext())->getSubContext(collectionDirectory->key());
 	}
 
@@ -391,18 +389,16 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	      cx(Reference<UnboundQueryContext>::addRef(other.cx.getPtr())),
 	      bannedFieldNames(other.bannedFieldNames) {}
 
-	Optional<IndexInfo> getSimpleIndex(StringRef simple_index_map_key);
-	Optional<IndexInfo> getCompoundIndex(IndexInfo prefix, StringRef encoded_next_index_key);
-	void setBannedFieldNames(Optional<std::vector<std::string>> bannedFns) {
-		bannedFieldNames = bannedFns.present() ? std::set<std::string>(bannedFns.get().begin(), bannedFns.get().end())
-		                                       : Optional<std::set<std::string>>();
+	Optional<IndexInfo> getSimpleIndex(std::string simple_index_map_key);
+	Optional<IndexInfo> getCompoundIndex(std::vector<std::string> const& prefix, std::string nextIndexKey);
+	void setBannedFieldNames(std::vector<std::string> bannedFns) {
+		bannedFieldNames = std::set<std::string>(bannedFns.begin(), bannedFns.end());
 	}
 	FDB::Key getVersionKey();
 	Reference<struct CollectionContext> bindCollectionContext(Reference<DocTransaction> tr);
 	void addIndex(IndexInfo index);
 	Key getIndexesSubspace();
 	Reference<UnboundQueryContext> getIndexesContext(); // FIXME: Remove this method
-	void filterIndexesWithBannedFieldnames(std::vector<std::string> const& bannedFieldNames);
 	std::string databaseName();
 	std::string collectionName();
 
@@ -419,7 +415,7 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	std::vector<IndexInfo> knownIndexes;
 
 private:
-	Optional<std::set<std::string>> bannedFieldNames;
+	std::set<std::string> bannedFieldNames;
 };
 
 struct CollectionContext : ReferenceCounted<CollectionContext>, FastAllocated<CollectionContext> {

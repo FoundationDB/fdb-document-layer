@@ -246,8 +246,9 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 	IndexScanPlan(Reference<UnboundCollectionContext> cx,
 	              IndexInfo index,
 	              Optional<std::string> begin,
-	              Optional<std::string> end)
-	    : cx(cx), index(index), begin(begin), end(end) {}
+	              Optional<std::string> end,
+	              std::vector<std::string> matchedPrefix)
+	    : cx(cx), index(index), begin(begin), end(end), matchedPrefix(matchedPrefix) {}
 	bson::BSONObj describe() override {
 		std::string bound_begin = begin.present() ? FDB::printable(begin.get()) : "-inf";
 		std::string bound_end = end.present() ? FDB::printable(end.get()) : "+inf";
@@ -270,10 +271,13 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 
 private:
 	Reference<UnboundCollectionContext> cx;
-	Standalone<StringRef> index_name;
 	IndexInfo index;
 	Optional<std::string> begin;
 	Optional<std::string> end;
+
+	// Matched index not necessarily the exact match. This plan could simply use prefix of index.
+	// For now, index direction is not honored by Doc Layer, probably SOMEDAY
+	std::vector<std::string> matchedPrefix;
 };
 
 struct PrimaryKeyLookupPlan : ConcretePlan<PrimaryKeyLookupPlan> {

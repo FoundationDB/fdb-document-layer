@@ -40,15 +40,8 @@ Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<Dire
 
 std::string describeIndex(std::vector<std::pair<std::string, int>> indexKeys) {
 	std::string ret = "index: ";
-	for (auto p : indexKeys) {
-		std::string keyStr;
-		DataKey key = DataKey::decode_bytes(StringRef(p.first));
-		for (int i = 0; i < key.size(); i++) {
-			keyStr.append(DataValue::decode_key_part(key[i]).getString());
-			if (i < key.size() - 1)
-				keyStr.append(".");
-		}
-		ret += format("{%s:%d}, ", keyStr.c_str(), p.second);
+	for (const auto& indexKey : indexKeys) {
+		ret += format("{%s:%d}, ", indexKey.first.c_str(), indexKey.second);
 	}
 	ret.resize(ret.length() - 2);
 	return ret;
@@ -72,7 +65,7 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	bool isUniqueIndex = indexObj.hasField("unique") ? indexObj.getBoolField("unique") : false;
 	for (auto i = keyObj.begin(); i.more();) {
 		auto e = i.next();
-		indexKeys.emplace_back(encodeMaybeDotted(e.fieldName()), (int)e.Number());
+		indexKeys.emplace_back(e.fieldName(), (int)e.Number());
 	}
 	if (verboseLogging) {
 		TraceEvent("BD_getAndAddIndexes").detail("AddingIndex", describeIndex(indexKeys));
@@ -131,10 +124,10 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 			fakeIndexKeys.emplace_back(g_random->randomUniqueID().toString(), -1);
 			IndexInfo countIndex(
 			    "RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
-			                          // name of this index needs to be unique enough to avoid potential collisions
-			                          // Problem is that this count index will NOT be returned when querying existing
-			                          // indexes, and thus there will NOT be a index_name_taken error returned in
-			                          // case there is a name collision.
+			                                // name of this index needs to be unique enough to avoid potential
+			                                // collisions Problem is that this count index will NOT be returned when
+			                                // querying existing indexes, and thus there will NOT be a index_name_taken
+			                                // error returned in case there is a name collision.
 			    fakeIndexKeys, cx, IndexInfo::IndexStatus::READY, Optional<UID>(), false);
 			countIndex.isCountIndex = true;
 			cx->addIndex(countIndex);
@@ -175,10 +168,10 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 		fakeIndexKeys.emplace_back(g_random->randomUniqueID().toString(), -1);
 		IndexInfo countIndex(
 		    "RG9jdW1lbnRDb3VudEluZGV4", // Base64 encoded string "DocumentCountIndex"
-		    // name of this index needs to be unique enough to avoid potential collisions
-		    // Problem is that this count index will NOT be returned when querying existing
-		    // indexes, and thus there will NOT be a index_name_taken error returned in
-		    // case there is a name collision.
+		                                // name of this index needs to be unique enough to avoid potential collisions
+		                                // Problem is that this count index will NOT be returned when querying existing
+		                                // indexes, and thus there will NOT be a index_name_taken error returned in
+		                                // case there is a name collision.
 		    fakeIndexKeys, tcx, IndexInfo::IndexStatus::READY, Optional<UID>(), false);
 		countIndex.isCountIndex = true;
 		tcx->addIndex(countIndex);

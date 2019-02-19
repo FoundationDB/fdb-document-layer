@@ -65,7 +65,7 @@ class Predicates(object):
         if this_type == 'filter':
             return False
         elif this_type == 'union':
-            return all([Predicates.pk_lookup(p) for p in explanation['plans']])
+            return all([Predicates.no_filter(p) for p in explanation['plans']])
         elif 'source_plan' in explanation:
             return Predicates.no_filter(explanation['source_plan'])
         else:
@@ -86,9 +86,7 @@ class Index(object):
         self.keys = keys
 
 
-### PK Lookup Tests ###
-
-
+# PK Lookup Tests
 def test_pk_1():
     return ("PK Lookup", [], {"_id": 1}, Predicates.pk_lookup_no_filter)
 
@@ -97,9 +95,7 @@ def test_pk_2():
     return ("PK Scan", [], {"_id": {'$gt': 1}}, Predicates.pk_lookup)
 
 
-### Simple Index Tests ###
-
-
+# Simple Index Tests
 def test_simple_1():
     return ("Simple Index", [Index("index", [("a", 1)])], {"a": 1}, Predicates.no_table_scan_no_filter)
 
@@ -172,10 +168,22 @@ def test_simple_8():
     }, Predicates.no_table_scan)
 
 
-### Compound Index Tests ###
+def test_simple_9():
+    return ("Simple Index on Dotted Path", [Index("index", [('a.b', 1)])], {'a.b': 'hello'}, Predicates.no_table_scan)
 
 
+# Compound Index Tests
 def test_compound_1():
+    return ("Basic Compound Index", [Index("compound", [("a", 1), ("b", 1)])], {
+        '$and': [{
+            'a': 1
+        }, {
+            'b': 1
+        }]
+    }, Predicates.no_table_scan_no_filter)
+
+
+def test_compound_11():
     return ("Basic Compound Index", [Index("compound", [("a", 1), ("b", 1)])], {
         '$and': [{
             'b': 1
@@ -287,6 +295,58 @@ def test_compound_7():
              }, lambda e: Predicates.only_index_named("short", e))
 
 
+def test_compound_8():
+    return ("Compound index matching exact index",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abc", e) and Predicates.no_table_scan_no_filter(e))
+
+
+def test_compound_9():
+    return ("Compound index matching longest prefix",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }, {
+                    'd': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abcde", e) and Predicates.no_table_scan_no_filter(e))
+
+
+def test_compound_10():
+    return ("Compound index matching dscontinuous index prefix",
+            [Index("a", [("a", 1)]),
+             Index("ab", [("a", 1), ("b", 1)]),
+             Index("abc", [("a", 1), ("b", 1), ("c", 1)]),
+             Index("abcde", [("a", 1), ("b", 1), ("c", 1), ("d", 1), ("e", 1)])], {
+                '$and': [{
+                    'a': 1
+                }, {
+                    'b': 1
+                }, {
+                    'c': 1
+                }, {
+                    'e': 1
+                }]
+            }, lambda e: Predicates.only_index_named("abc", e) and Predicates.no_table_scan(e))
+
+
 tests = [globals()[f] for f in dir() if f.startswith("test_")]
 
 
@@ -295,7 +355,7 @@ def test(collection, t):
     sys.stdout.write("Testing %s..." % name)
     collection.drop_indexes()
     for index in indexes:
-        collection.ensure_index(index.keys, name=index.name)
+        collection.create_index(index.keys, name=index.name)
     explanation = collection.find(query).explain()
     # print explanation
     okay = condition(explanation['explanation'])
