@@ -2,7 +2,7 @@ version: "3"
 
 services:
   common: &common
-    image: fdb-document-layer-build:0.0.3
+    image: fdb-document-layer-build:0.0.6
     build:
       context: .
       dockerfile: Dockerfile
