@@ -84,6 +84,7 @@ DOCLAYER_ERROR(wire_protocol_mismatch, 29966, "Wire protocol mismatch. Bad messa
 DOCLAYER_ERROR(no_index_name, 29967, "No index name specified");
 DOCLAYER_ERROR(unsupported_index_type, 29969, "Document Layer does not support this index type, yet.");
 
+DOCLAYER_ERROR(collection_not_found, 29979, "Collection not found.");
 DOCLAYER_ERROR(no_transaction_in_progress, 29980, "No transaction in progress.");
 DOCLAYER_ERROR(no_symbol_type, 29981, "The Document Layer does not support the deprecated BSON `symbol` type.");
 DOCLAYER_ERROR(compound_id_index, 29982, "You may not build a compound index including _id.");

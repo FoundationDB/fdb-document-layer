@@ -39,15 +39,6 @@ using namespace FDB;
 extern const char* getHGVersion();
 extern const char* getFlowHGVersion();
 
-extern const char* getFirstKey(bson::BSONObj const& doc);
-
-Future<Reference<UnboundCollectionContext>> getCollectionContextForCommand(Reference<ExtConnection> ec,
-                                                                           Reference<ExtMsgQuery> query,
-                                                                           Reference<DocTransaction> dtr,
-                                                                           bool allowSystemNamespace = false) {
-	return ec->mm->getUnboundCollectionContext(dtr, query->ns, allowSystemNamespace);
-}
-
 ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransaction> tr,
                                                            Namespace ns,
                                                            std::string field,
@@ -408,7 +399,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnecti
                                                            Reference<ExtMsgReply> reply) {
 	try {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
-		Reference<UnboundCollectionContext> cx = wait(getCollectionContextForCommand(ec, query, dtr, true));
+		Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, query->ns, true));
 		Reference<Plan> plan = planQuery(cx, query->query.getObjectField("query"));
 		plan = ec->wrapOperationPlan(plan, true, cx);
 
@@ -479,7 +470,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		}
 
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
-		state Reference<UnboundCollectionContext> ucx = wait(getCollectionContextForCommand(ec, query, tr));
+		state Reference<UnboundCollectionContext> ucx = wait(ec->mm->getUnboundCollectionContext(tr, query->ns));
 
 		state Reference<IUpdateOp> updater;
 		state Reference<IInsertOp> upserter;
@@ -1318,7 +1309,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 
 	try {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
-		Reference<UnboundCollectionContext> cx = wait(getCollectionContextForCommand(ec, query, dtr, true));
+		Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, query->ns, true));
 
 		if (!query->query.hasField("key")) {
 			throw wire_protocol_mismatch();

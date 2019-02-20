@@ -1784,10 +1784,6 @@ ACTOR Future<int64_t> executeUntilCompletionTransactionally(Reference<Plan> plan
 	return count;
 }
 
-Future<int64_t> executeUntilCompletion(Reference<Plan> plan) {
-	return executeUntilCompletionTransactionally(plan, Reference<DocTransaction>());
-}
-
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit) {
 	return Reference<Plan>(
 	    new UpdatePlan(subPlan, Reference<IUpdateOp>(new DeleteDocument()), Reference<IInsertOp>(), limit, cx));

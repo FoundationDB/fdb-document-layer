@@ -188,12 +188,6 @@ Reference<Plan> planProjection(Reference<Plan> plan,
 	return Reference<Plan>(new ProjectionPlan(parseProjection(selector), plan, ordering));
 }
 
-const char* getFirstKey(bson::BSONObj const& doc) {
-	auto i = doc.begin();
-	auto e = i.next();
-	return e.fieldName();
-}
-
 ExtMsgQuery::ExtMsgQuery(ExtMsgHeader* header, const uint8_t* body) : header(header) {
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (uint8_t*)header + header->messageLength;
@@ -1181,10 +1175,20 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
                                          Reference<ExtConnection> ec) {
 	try {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
-		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true));
+		state Reference<UnboundCollectionContext> cx;
 		state int64_t nrDeletedRecords = 0;
-
 		state std::vector<bson::BSONObj> writeErrors;
+
+		// If collection not found then just return success from here.
+		try {
+			Reference<UnboundCollectionContext> _cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
+			cx = _cx;
+		} catch (Error& e) {
+			if (e.code() == error_code_collection_not_found)
+				return WriteCmdResult(nrDeletedRecords, writeErrors);
+			throw e;
+		}
+
 		state std::vector<bson::BSONObj>::iterator it;
 		state int idx;
 		for (it = selectors->begin(), idx = 0; it != selectors->end(); it++, idx++) {
