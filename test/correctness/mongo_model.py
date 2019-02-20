@@ -451,9 +451,6 @@ class MongoCollection(object):
     def remove(self):
         self.data = dict()
 
-    def delete_many(self):
-        self.data = dict()
-
     def _insert(self, doc):
         if '_id' not in doc:
             doc['_id'] = gen.random_object_id()
