@@ -50,9 +50,4 @@ struct ExtCmd : IDispatched<ExtCmd,
 	const char* Cmd::name = Key;                                                                                       \
 	REGISTER_COMMAND(ExtCmd, Cmd, name, call);
 
-Future<Reference<UnboundCollectionContext>> getCollectionContextForCommand(Reference<ExtConnection> ec,
-                                                                           Reference<ExtMsgQuery> query,
-                                                                           Reference<DocTransaction> dtr,
-                                                                           bool allowSystemNamespace);
-
 #endif /* _EXT_CMD_H_ */

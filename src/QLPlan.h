@@ -707,13 +707,6 @@ struct FlushChangesPlan : ConcretePlan<FlushChangesPlan> {
 	                                                     Reference<DocTransaction> tr) override;
 };
 
-/**
- * Executes a plan with a new checkpoint and null transaction (so only safe to call with NonIsolatedPlan
- * or RetryPlan), throwing away all of the output and returning when it hits end of stream. Returns the
- * number of things consumed.
- */
-Future<int64_t> executeUntilCompletion(Reference<Plan> plan);
-
 // Like executeUntilCompletion(), but uses the transaction you gave it.
 Future<int64_t> executeUntilCompletionTransactionally(const Reference<Plan>& plan, const Reference<DocTransaction>& tr);
 // Like executeUntilCompletionTransactionally(), but also returns the last thing returned by the plan (if any).
