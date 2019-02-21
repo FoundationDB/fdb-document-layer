@@ -37,7 +37,7 @@ struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	                                                                        Namespace const& ns,
 	                                                                        bool allowSystemNamespace = false,
 	                                                                        bool includeIndex = true,
-	                                                                        bool createIfAbsent = true);
+	                                                                        bool createCollectionIfAbsent = true);
 	Future<Reference<UnboundCollectionContext>> refreshUnboundCollectionContext(Reference<UnboundCollectionContext> cx,
 	                                                                            Reference<DocTransaction> tr);
 
