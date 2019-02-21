@@ -1,9 +1,9 @@
 #
-# upsert_tests.py
+# test_upsert.py
 #
 # This source file is part of the FoundationDB open source project
 #
-# Copyright 2013-2018 Apple Inc. and the FoundationDB project authors
+# Copyright 2013-2019 Apple Inc. and the FoundationDB project authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,15 +20,17 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-from pymongo.errors import OperationFailure
-
 import itertools
 import pprint
-import sys
+
+from pymongo.errors import OperationFailure
+
 import util
+from mongo_model import MongoModel
 from util import MongoModelException
 
 pprint = pprint.PrettyPrinter().pformat
+
 
 # test_1 = ("Plain upsert", { 'a': 1 }, { 'b': 1 }, "")
 # test_2 = (
@@ -44,27 +46,70 @@ pprint = pprint.PrettyPrinter().pformat
 #    ""
 # )
 
-test_multiple_disparate_operators_1 = ("Multiple disparate operators 1", {
-    '$and': [{
-        '$and': [{
-            'a': 1
-        }]
-    }],
-    'b': {
-        '$gt': 1
-    }
-}, {
-    '$set': {
-        'c': 35
-    }
-}, 'mixed')
 
-test_logical_1 = ("X", {'$and': [{'a.b.c.d': 1}, {'f': 17}]}, {'$set': {'yf': 17}}, 'mixed')
+def run_and_compare(dl_collection, test):
+    mm = MongoModel('DocLayer')
+    mm_collection = mm['test']['test']
+
+    (selector, update) = test
+
+    update = util.deep_convert_to_ordered(update)
+
+    dl_collection.delete_many({})
+
+    def up(c, s, u):
+        c.update_one(s, u, upsert=True)
+
+    mm_err = dl_err = False
+    try:
+        up(mm_collection, selector, update)
+    except MongoModelException:
+        mm_err = True
+    try:
+        up(dl_collection, selector, update)
+    except OperationFailure:
+        dl_err = True
+    assert mm_err == dl_err, "Expected both to fail or succeed but, mm: {}, dl: {}".format(mm_err, dl_err)
+
+    mm_ret = [util.deep_convert_to_unordered(i) for i in mm_collection.find({})]
+    mm_ret.sort()
+    dl_ret = [util.deep_convert_to_unordered(i) for i in dl_collection.find({})]
+    dl_ret.sort()
+
+    for doc in mm_ret:
+        del doc['_id']
+
+    for doc in dl_ret:
+        del doc['_id']
+
+    assert mm_ret == dl_ret
+
+
+def test_multiple_disparate_operators(fixture_collection):
+    run_and_compare(fixture_collection, ({
+                                             '$and': [{
+                                                 '$and': [{
+                                                     'a': 1
+                                                 }]
+                                             }],
+                                             'b': {
+                                                 '$gt': 1
+                                             }
+                                         }, {
+                                             '$set': {
+                                                 'c': 35
+                                             }
+                                         }))
+
+
+def test_logical_operators(fixture_collection):
+    run_and_compare(fixture_collection, ({'$and': [{'a.b.c.d': 1}, {'f': 17}]}, {'$set': {'yf': 17}}))
+
 
 # {$and:[{$and:[{a:1}]}], b:{$gt: 1}}
 
 
-def create_upsert_selector_operator_test(operator, object, depth, update, operator_type):
+def create_upsert_test_with_selector_operator(operator, object, depth, update):
     selector = next_selector = {}
     next_char = 'a'
     for i in range(0, depth):
@@ -74,10 +119,10 @@ def create_upsert_selector_operator_test(operator, object, depth, update, operat
 
     next_selector[operator] = object
 
-    return ("Upsert operator (%s) depth %s" % (operator, depth), selector, update, operator_type)
+    return selector, update
 
 
-def create_upsert_dotted_selector_operator_test(operator, object, depth, update, operator_type):
+def create_upsert_with_dotted_selector_operator(operator, object, depth, update):
     selector = {}
     k = ['a']
     next_char = 'b'
@@ -90,11 +135,10 @@ def create_upsert_dotted_selector_operator_test(operator, object, depth, update,
     selector[k_str] = {}
     selector[k_str][operator] = object
 
-    return ("Upsert operator (%s) depth %s (dotted selector)" % (operator, depth), selector, update, operator_type)
+    return selector, update
 
 
-def create_upsert_dotted_selector_operator_test_with_operator_in_initial_position(operator, object, depth, update,
-                                                                                  operator_type):
+def create_upsert_dotted_selector_operator_test_with_operator_in_initial_position(operator, object, depth, update):
     selector = {}
     k = ['a']
     next_char = 'b'
@@ -107,12 +151,12 @@ def create_upsert_dotted_selector_operator_test_with_operator_in_initial_positio
     selector[operator] = {}
     selector[operator][k_str] = object
 
-    return ("Upsert operator (%s) depth %s (dotted selector)" % (operator, depth), selector, update, operator_type)
+    return selector, update
 
 
-def create_operator_tests(operators, depth, update, operator_type):
+def create_operator_tests(operators, depth, update):
     return [
-        func(operator, object, depth, update, operator_type) for name, func in globals().iteritems()
+        func(operator, object, depth, update) for name, func in globals().iteritems()
         if name.startswith('create_upsert_') for operator, object in operators
     ]
 
@@ -128,86 +172,11 @@ def create_operator_permutation_tests(oplist, depth, repeat, update):
         for i in range(0, depth):
             for op, obj in ops:
                 next_selector[op] = obj
-            tests.append(("Permutation (%s) depth %s repeat %s" % (ops, depth, repeat), util.OrderedDict(selector),
-                          update, 'permutation'))
+            tests.append((util.OrderedDict(selector), update))
             next_selector[next_char] = {}
             next_selector = next_selector[next_char]
             next_char = chr(ord(next_char) + 1)
     return tests
-
-
-def test(collection1, collection2, test):
-    (label, selector, update, operator_type) = test
-
-    sys.stdout.write('\tTesting \"%s\"... ' % label)
-
-    update = util.deep_convert_to_ordered(update)
-
-    collection1.remove()
-    collection2.remove()
-
-    def up(c, s, u):
-        c.update(s, u, upsert=True, multi=False)
-
-    errors = []
-    ret1 = ret2 = []
-
-    for c in (collection1, collection2):
-        try:
-            up(c, selector, update)
-        except OperationFailure as e:
-            errors.append("PyMongo upsert failed! Error was: " + str(e))
-        except MongoModelException as e:
-            errors.append("MongoModel upsert failed! Error was: " + str(e))
-
-    if (len(errors)) == 1:
-        print util.alert('FAIL', 'fail')
-        print errors[0]
-        return (False, [], [], operator_type)
-    elif (len(errors)) == 2:
-        print util.alert('PASS', 'okblue')
-        return (True, [], [], operator_type)
-
-    ret1 = [util.deep_convert_to_unordered(i) for i in collection1.find({})]
-    ret1.sort()
-    ret2 = [util.deep_convert_to_unordered(i) for i in collection2.find({})]
-    ret2.sort()
-
-    def error_report(msg):
-        print util.indent(msg)
-        print util.indent("Selector was: %s" % pprint(dict(selector)))
-        print util.indent("Update was %s" % pprint(dict(update)))
-        print util.indent("Upsert from collection1: %s" % ret1)
-        print util.indent("Upsert from collection2: %s" % ret2)
-
-    passed = True
-
-    try:
-        if len(ret1) + len(ret2) == 0:
-            raise ValueError("NIL")
-        for i in range(0, max(len(ret1), len(ret2))):
-            try:
-                del ret1[i]['_id']
-            except:
-                pass
-            try:
-                del ret2[i]['_id']
-            except:
-                pass
-            assert ret1[i] == ret2[i]
-        print util.alert('PASS', 'okgreen')
-    except AssertionError:
-        print util.alert('FAIL', 'fail')
-        error_report("Upserts didn't match!")
-        passed = False
-    except IndexError:
-        print util.alert('FAIL', 'fail')
-        error_report("One or both upserts failed!")
-        passed = False
-    except ValueError as e:
-        print util.alert("PASS (%s)" % str(e), 'okblue')
-
-    return (passed, ret1, ret2, operator_type)
 
 
 operator_types = {
@@ -333,7 +302,7 @@ operator_types = {
             '$not': {
                 '$gte': 3
             }
-        }), ),
+        }),),
     'element_operators': (
         ('$exists', True),
         ('$type', 2),
@@ -432,49 +401,61 @@ updates = (
     },
 )
 
-tests = [locals()[attr] for attr in dir() if attr.startswith('test_')]
 
-oplist = []
-for _, operators in operator_types.iteritems():
-    for op in operators:
-        oplist.append(op)
-
-for depth in range(0, 5):
+def operators_test_with_depth(dl_collection, depth):
     for update in updates:
         for operator_type, operators in operator_types.iteritems():
-            tests = tests + create_operator_tests(operators, depth, update, operator_type)
+            for test_cfg in create_operator_tests(operators, depth, update):
+                run_and_compare(dl_collection, test_cfg)
+
+
+def test_operators_with_depth_0(fixture_collection):
+    operators_test_with_depth(fixture_collection, 0)
+
+
+def test_operators_with_depth_1(fixture_collection):
+    operators_test_with_depth(fixture_collection, 1)
+
+
+def test_operators_with_depth_2(fixture_collection):
+    operators_test_with_depth(fixture_collection, 2)
+
+
+def test_operators_with_depth_3(fixture_collection):
+    operators_test_with_depth(fixture_collection, 3)
+
+
+def test_operators_with_depth_4(fixture_collection):
+    operators_test_with_depth(fixture_collection, 4)
+
+
+def operators_permutation_test_with_depth(dl_collection, depth):
+    oplist = []
+    for _, operators in operator_types.iteritems():
+        for op in operators:
+            oplist.append(op)
+
+    for update in updates:
         for repeat in range(1, 2):
-            tests = tests + create_operator_permutation_tests(oplist, depth, repeat, update)
+            for test_cfg in create_operator_permutation_tests(oplist, depth, repeat, update):
+                run_and_compare(dl_collection, test_cfg)
 
 
-def test_all(collection1, collection2, **kwargs):
-    okay = True
-    number_passed = number_failed = 0
-    to_csv = kwargs.get("to_csv") or "upsert_test.csv"
-    if to_csv:
-        mf = open(to_csv, "a+")
-        mf.truncate()
-        mf.write('|'.join([
-            'Operator Type', 'Passed?', 'Return 1', 'Return 2', 'Selector', 'Update', 'Label', 'Collection1',
-            'Collection2'
-        ]) + '\r\n')
-    for t in tests:
-        passed, r1, r2, operator_type = test(collection1, collection2, t)
-        number_passed = number_passed + 1 if passed else number_passed
-        number_failed = number_failed + 1 if not passed else number_failed
-        okay = passed and okay
-        if to_csv:
-            mf.write("|".join([
-                t[3],
-                str(passed),
-                str(r1),
-                str(r2),
-                str(dict(t[1])),
-                str(dict(t[2])), t[0],
-                str(collection1),
-                str(collection2), '\r\n'
-            ]))
-    if to_csv:
-        mf.close()
-    print util.alert("Passed: %d, Failed: %d" % (number_passed, number_failed))
-    return okay
+def test_operators_permutation_with_depth_0(fixture_collection):
+    operators_permutation_test_with_depth(fixture_collection, 0)
+
+
+def test_operators_permutation_with_depth_1(fixture_collection):
+    operators_permutation_test_with_depth(fixture_collection, 1)
+
+
+def test_operators_permutation_with_depth_2(fixture_collection):
+    operators_permutation_test_with_depth(fixture_collection, 2)
+
+
+def test_operators_permutation_with_depth_3(fixture_collection):
+    operators_permutation_test_with_depth(fixture_collection, 3)
+
+
+def test_operators_permutation_with_depth_4(fixture_collection):
+    operators_permutation_test_with_depth(fixture_collection, 4)

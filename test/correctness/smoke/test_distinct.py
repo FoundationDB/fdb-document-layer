@@ -1,9 +1,9 @@
 #
-# distinct_tests.py
+# test_distinct.py
 #
 # This source file is part of the FoundationDB open source project
 #
-# Copyright 2013-2018 Apple Inc. and the FoundationDB project authors
+# Copyright 2013-2019 Apple Inc. and the FoundationDB project authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,14 +20,8 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-from pymongo.errors import OperationFailure
-
 import random
-import itertools
-import pprint
 import sys
-import util
-from util import MongoModelException
 
 
 def _generate_unique_int(seen):
@@ -61,20 +55,16 @@ def distinct_test(test_name, collection, field, records, expected_return, query=
 
     for record in records:
         # Make sure we first delete record if it exists
-        collection.remove({"_id": record["_id"]})
+        collection.delete_many({"_id": record["_id"]})
         # insert
         collection.insert_one(record)
     actual_return = map(transform, collection.distinct(field, query))
     expected_return = map(transform, expected_return)
-    if len(actual_return) == len(expected_return) and set(actual_return) == set(expected_return):
-        print "{} is OK".format(test_name)
-        return True
-    else:
-        print "{} failed. Expected: {}; Actual: {}".format(test_name, expected_return, actual_return)
-        return False
+    assert len(actual_return) == len(expected_return) and set(actual_return) == set(expected_return), \
+        "{} failed. Expected: {}; Actual: {}".format(test_name, expected_return, actual_return)
 
 
-def test_values_with_arrays():
+def test_values_with_arrays(fixture_collection):
     # test values like
     # {"k1": 1, "k2": [1,2,3]}
     # {"k1": 1, "k2": 2}
@@ -119,10 +109,11 @@ def test_values_with_arrays():
         else:
             return elm
 
-    return ("[Values with arrays; No query]", key, records, map(transform, list(values)), None)
+    distinct_test("[Values with arrays; No query]", fixture_collection,
+                  key, records, map(transform, list(values)), None)
 
 
-def test_values_no_duplicates_no_query():
+def test_values_no_duplicates_no_query(fixture_collection):
     number_of_records = random.randint(1, 100)
     key = "test_key_{}".format(random.randint(0, sys.maxint))
     records = []
@@ -132,10 +123,11 @@ def test_values_no_duplicates_no_query():
         id = _generate_unique_int(ids)
         value = _generate_unique_int(values)
         records.append({"_id": random.randint(0, sys.maxint), key: value})
-    return ("[Values with no duplicates; No query]", key, records, list(values), None)
+    distinct_test("[Values with no duplicates; No query]", fixture_collection,
+                  key, records, list(values), None)
 
 
-def test_values_no_duplicates_with_query():
+def test_values_no_duplicates_with_query(fixture_collection):
     number_of_records = random.randint(1, 100)
     key = "test_key_{}".format(random.randint(0, sys.maxint))
     key2 = "test_key_1"
@@ -147,10 +139,11 @@ def test_values_no_duplicates_with_query():
         id = _generate_unique_int(ids)
         value = _generate_unique_int(values[key2_val])
         records.append({"_id": random.randint(0, sys.maxint), key: value, key2: key2_val})
-    return ("[Values with no duplicates; With query]", key, records, list(values[key2_val]), {key2: key2_val})
+    distinct_test("[Values with no duplicates; With query]", fixture_collection,
+                  key, records, list(values[key2_val]), {key2: key2_val})
 
 
-def test_values_with_duplicates_no_query():
+def test_values_with_duplicates_no_query(fixture_collection):
     number_of_records = random.randint(1, 100)
     key = "test_key_{}".format(random.randint(0, sys.maxint))
     records = []
@@ -160,10 +153,11 @@ def test_values_with_duplicates_no_query():
         id = _generate_unique_int(ids)
         value = _generate_random_duplicated_int(values)
         records.append({"_id": random.randint(0, sys.maxint), key: value})
-    return ("[Values with duplicates; No query]", key, records, list(values), None)
+    distinct_test("[Values with duplicates; No query]",
+                  fixture_collection, key, records, list(values), None)
 
 
-def test_values_with_duplicates_with_query():
+def test_values_with_duplicates_with_query(fixture_collection):
     number_of_records = random.randint(1, 100)
     key = "test_key_{}".format(random.randint(0, sys.maxint))
     key2 = "test_key_1"
@@ -175,28 +169,6 @@ def test_values_with_duplicates_with_query():
         id = _generate_unique_int(ids)
         value = _generate_random_duplicated_int(values[key2_val])
         records.append({"_id": random.randint(0, sys.maxint), key: value, key2: key2_val})
-    return ("[Values with duplicates; With query]", key, records, list(values[key2_val]), {key2: key2_val})
 
-
-tests = [locals()[attr] for attr in dir() if attr.startswith('test_')]
-
-
-def test(collection, t):
-    (test_name, field, records, expected_return, query) = t
-    okay = distinct_test(test_name, collection, field, records, expected_return, query)
-    if okay:
-        print util.alert('PASS', 'okgreen')
-        return True
-    print util.alert('FAIL', 'fail')
-    return False
-
-
-#### `test_all()` is needed by the testing framework
-
-
-def test_all(collection1, collection2):
-    print "Distinct tests only use first collection specified"
-    okay = True
-    for t in tests:
-        okay = test(collection1, t()) and okay
-    return okay
+    distinct_test("[Values with duplicates; With query]", fixture_collection,
+                  key, records, list(values[key2_val]), {key2: key2_val})

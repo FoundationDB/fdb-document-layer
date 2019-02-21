@@ -1,9 +1,9 @@
 #
-# core_tests.py
+# test_core.py
 #
 # This source file is part of the FoundationDB open source project
 #
-# Copyright 2013-2018 Apple Inc. and the FoundationDB project authors
+# Copyright 2013-2019 Apple Inc. and the FoundationDB project authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,11 +20,13 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-import sys
 from collections import OrderedDict
+
+import pytest
 
 import util
 from gen import value_operators
+from mongo_model import MongoModel
 
 
 def operator_queries(base_query):
@@ -33,52 +35,76 @@ def operator_queries(base_query):
     return q_list
 
 
-def test_array1():
-    return ("Array Test #1", {'a': [{'b': 1}]}, operator_queries({"a.b": 1}))
+def run_and_match(dl_collection, test):
+    mm = MongoModel('DocLayer')
+    mm_collection = mm['test']['test']
+
+    dl_collection.delete_many({})
+
+    (doc, queries) = test
+
+    doc = util.deep_convert_to_ordered(doc)
+
+    mm_collection.insert_one(doc)
+    dl_collection.insert_one(doc)
+
+    for query in queries:
+        ret1 = [util.deep_convert_to_unordered(i) for i in mm_collection.find(query)]
+        ret1.sort()
+        ret2 = [util.deep_convert_to_unordered(i) for i in dl_collection.find(query)]
+        ret2.sort()
+
+        assert len(ret1) == len(ret2), "Number returned docs don't match, mm: {}, dl: {}".format(len(ret1), len(ret2))
+        for i in range(0, len(ret1)):
+            assert ret1[i] == ret2[i], "Mismatch at {}, mm: {}, dl: {}".format(i, ret1[i], ret2[i])
 
 
-def test_array2():
-    return ("Array Test #2", {'a': [3, 'b', {'b': 1}]}, operator_queries({"a.b": 1}))
+def test_array1(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [{'b': 1}]}, operator_queries({"a.b": 1})))
 
 
-def test_array3a():
-    return ("Array Test #3a", {'_id': 'Bhaskar', 'a': [[1]]}, operator_queries({"a.0": 1}))
+def test_array2(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [3, 'b', {'b': 1}]}, operator_queries({"a.b": 1})))
 
 
-def test_array3b():
-    return ("Array Test #3b", {'a': [{'0': 1}]}, operator_queries({"a.0": 1}))
+def test_array3a(fixture_collection):
+    run_and_match(fixture_collection, ({'_id': 'Bhaskar', 'a': [[1]]}, operator_queries({"a.0": 1})))
 
 
-def test_array3c():
-    return ("Array Test #3c", {'a': [[{'b': 1}]]}, operator_queries({"a.0.b": 1}))
+def test_array3b(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [{'0': 1}]}, operator_queries({"a.0": 1})))
 
 
-def test_array3d():
-    return ("Array Test #3d", {'a': [['h', {'b': 1}]]}, operator_queries({"a.0.b": 1}))
+def test_array3c(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [[{'b': 1}]]}, operator_queries({"a.0.b": 1})))
 
 
-def test_array3e():
-    return ("Array Test #3e", {'a': ['h', [{'b': 1}]]}, operator_queries({"a.0.b": 1}))
+def test_array3d(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [['h', {'b': 1}]]}, operator_queries({"a.0.b": 1})))
 
 
-def test_array4():
-    return ("Array Test #4", {'a': [1, {'b': [2, {'c': 1}]}]}, operator_queries({"a.b.c": 1}))
+def test_array3e(fixture_collection):
+    run_and_match(fixture_collection, ({'a': ['h', [{'b': 1}]]}, operator_queries({"a.0.b": 1})))
 
 
-def test_array5():
-    return ("Array Test #5", {'a': [1, {'0': 2}]}, operator_queries({"a.0": 1}))
+def test_array4(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [1, {'b': [2, {'c': 1}]}]}, operator_queries({"a.b.c": 1})))
 
 
-def test_array5a():
-    return ("Array Test #5a", {'a': [1, {'0': 2}]}, operator_queries({"a": 1}))
+def test_array5(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [1, {'0': 2}]}, operator_queries({"a.0": 1})))
 
 
-def test_array5b():
-    return ("Array Test #5b", {'a': [1, {'0': 2}]}, operator_queries({"a.0": 2}))
+def test_array5a(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [1, {'0': 2}]}, operator_queries({"a": 1})))
 
 
-def test_array5c():
-    return ("Array Test #5c", {
+def test_array5b(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [1, {'0': 2}]}, operator_queries({"a.0": 2})))
+
+
+def test_array5c(fixture_collection):
+    run_and_match(fixture_collection, ({
         'a': [1, {
             '0': 'hello',
             '1': [3, {
@@ -87,31 +113,31 @@ def test_array5c():
         }]
     }, operator_queries({
         'a.1.h': 'hello'
-    }))
+    })))
 
 
-def test_array6():
-    return ("Array Test #6", {'a': [2, {'0': 1}]}, operator_queries({"a.0": 1}))
+def test_array6(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [2, {'0': 1}]}, operator_queries({"a.0": 1})))
 
 
-def test_array7():
-    return ("Array Test #7", {'a': [[1]]}, operator_queries({"a": 1}))
+def test_array7(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [[1]]}, operator_queries({"a": 1})))
 
 
-def test_array8():
-    return ("Array Test #8", {'a': [2, {"1": ['e']}]}, operator_queries({"a.1": 'e'}))
+def test_array8(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [2, {"1": ['e']}]}, operator_queries({"a.1": 'e'})))
 
 
-def test_array9():
-    return ("Array Test #9", {'a': [2, {"1": ['e']}]}, operator_queries({"a.1.0": 'e'}))
+def test_array9(fixture_collection):
+    run_and_match(fixture_collection, ({'a': [2, {"1": ['e']}]}, operator_queries({"a.1.0": 'e'})))
 
 
-def test_array10():
-    return ("Array Test #10", {u'B': [1, 2, {u'2': [1, 6]}]}, [{'B.2.1': {'$exists': True}}])
+def test_array10(fixture_collection):
+    run_and_match(fixture_collection, ({u'B': [1, 2, {u'2': [1, 6]}]}, [{'B.2.1': {'$exists': True}}]))
 
 
-def test_array11():
-    return ("Array Test #11", {
+def test_array11(fixture_collection):
+    run_and_match(fixture_collection, ({
         u'2': [2, u'a', [], {
             u'1': u'd',
             u'2': {
@@ -125,132 +151,82 @@ def test_array11():
         "2.2.A": {
             "$exists": True
         }
-    }])
+    }]))
 
 
-def test_array12():
-    return ("Array Test #12", {u'B': [1, 2, {u'2': [1, 6]}]}, [{'B.2.1': 6}])
+def test_array12(fixture_collection):
+    run_and_match(fixture_collection, ({u'B': [1, 2, {u'2': [1, 6]}]}, [{'B.2.1': 6}]))
 
 
-def test_array13():
-    return ("Array Test #13", {'E': [[2, 2, [1]]]}, [{'E.0.2': 1}])
+def test_array13(fixture_collection):
+    run_and_match(fixture_collection, ({'E': [[2, 2, [1]]]}, [{'E.0.2': 1}]))
 
 
-def test_array14():
-    return ("Array Test #14", {'E': [2, 2, []]}, [{'E': {'$ne': []}}])
+def test_array14(fixture_collection):
+    run_and_match(fixture_collection, ({'E': [2, 2, []]}, [{'E': {'$ne': []}}]))
 
 
-def test_array16():
-    return ("Array Test #16", {'E': [2, 2, [1]]}, [{'E': [1]}])
+def test_array16(fixture_collection):
+    run_and_match(fixture_collection, ({'E': [2, 2, [1]]}, [{'E': [1]}]))
 
 
-def test_array17():
-    return ("Array Test #17", {'E': [2, 2, {'a': 'b', 'c': ['d', 'e']}]}, [{'E.2.c': 'e'}])
+def test_array17(fixture_collection):
+    run_and_match(fixture_collection, ({'E': [2, 2, {'a': 'b', 'c': ['d', 'e']}]}, [{'E.2.c': 'e'}]))
 
 
-def test_null1():
-    return ("Null Test #1", {"_id": 1, "A": [{"B": 5}]}, operator_queries({"A.B": None}))
+def test_null1(fixture_collection):
+    run_and_match(fixture_collection, ({"_id": 1, "A": [{"B": 5}]}, operator_queries({"A.B": None})))
 
 
-def test_null2():
-    return ("Null Test #2", {"_id": 1, "A": [{}]}, operator_queries({"A.B": None}))
+def test_null2(fixture_collection):
+    run_and_match(fixture_collection, ({"_id": 1, "A": [{}]}, operator_queries({"A.B": None})))
 
 
-def test_null3():
-    return ("Null Test #3", {"_id": 1, "A": []}, operator_queries({"A.B": None}))
+def test_null3(fixture_collection):
+    run_and_match(fixture_collection, ({"_id": 1, "A": []}, operator_queries({"A.B": None})))
 
 
-def test_null4():
-    return ("Null Test #4", {"_id": 1, "A": [{}, {"B": 5}]}, operator_queries({"A.B": None}))
+def test_null4(fixture_collection):
+    run_and_match(fixture_collection, ({"_id": 1, "A": [{}, {"B": 5}]}, operator_queries({"A.B": None})))
 
 
-def test_null5():
-    return ("Null Test #5", {"_id": 1, "A": [5, {"B": 5}]}, operator_queries({"A.B": None}))
+def test_null5(fixture_collection):
+    run_and_match(fixture_collection, ({"_id": 1, "A": [5, {"B": 5}]}, operator_queries({"A.B": None})))
 
 
-def test_null6():
-    return ("Null Test #6", {'2': ['A', [{}, u'a', 0]]}, operator_queries({"2.1.D": None}))
+def test_null6(fixture_collection):
+    run_and_match(fixture_collection, ({'2': ['A', [{}, u'a', 0]]}, operator_queries({"2.1.D": None})))
 
 
-def test_dict1():
+def test_dict1(fixture_collection):
     d = OrderedDict()
     d['C'] = 'c'
     d['D'] = 'd'
-    return ("Dict Test #1", {'_id': 'A', 'B': d}, [{'B': d}])
+    run_and_match(fixture_collection, ({'_id': 'A', 'B': d}, [{'B': d}]))
 
 
-def test_dict2():
+def test_dict2(fixture_collection):
     d = OrderedDict()
     d['C'] = 'c'
     d['D'] = 'd'
     e = OrderedDict()
     e['C'] = 'c'
     e['D'] = 'e'
-    return ("Dict Test #2", {'_id': 'A', 'B': d}, [{'B': e}])
+    run_and_match(fixture_collection, ({'_id': 'A', 'B': d}, [{'B': e}]))
 
 
-def test_dict3():
+def test_dict3(fixture_collection):
     d = OrderedDict()
     d['C'] = 'c'
     d['D'] = 'd'
     e = OrderedDict()
     e['D'] = 'd'
     e['C'] = 'c'
-    return ("Dict Test #2", {'_id': 'A', 'B': d}, [{'B': e}])
+    run_and_match(fixture_collection, ({'_id': 'A', 'B': d}, [{'B': e}]))
 
 
-tests = [globals()[f] for f in dir() if f.startswith("test_")]
-
-
-def test(collection1, collection2, test):
-    collection1.remove()
-    collection2.remove()
-
-    (info, doc, queries) = test()
-
-    sys.stdout.write("Testing %s..." % info)
-
-    doc = util.deep_convert_to_ordered(doc)
-
-    collection1.insert(doc)
-    collection2.insert(doc)
-
-    for query in queries:
-
-        ret1 = [util.deep_convert_to_unordered(i) for i in collection1.find(query)]
-        ret1.sort()
-        ret2 = [util.deep_convert_to_unordered(i) for i in collection2.find(query)]
-        ret2.sort()
-
-        try:
-            for i in range(0, max(len(ret1), len(ret2))):
-                assert ret1[i] == ret2[i]
-            print util.alert('PASS', 'okgreen')
-            return True
-        except AssertionError:
-            print util.alert('FAIL', 'fail')
-            print "Query results didn't match!"
-            print query
-            print ret1[i]
-            print ret2[i]
-            print len(ret1)
-            print len(ret2)
-            return False
-        except IndexError:
-            print util.alert('FAIL', 'fail')
-            print "Query results didn't match!"
-            print query
-            print len(ret1)
-            print len(ret2)
-            if len(ret1) < len(ret2):
-                print ret2[i]
-            else:
-                print ret1[i]
-            return False
-    return True
-
-
-def non_deterministic_query_test():
+@pytest.mark.skip
+def test_non_deterministic_query():
     # =====sort fields=====input data=====result=====expected
     data = [
         ([('x', 1)], 0, 0, {}, ['{"x":1}', '{"x":2}'], ['{"x":1}', '{"x":2}'], True),
@@ -366,30 +342,19 @@ def non_deterministic_query_test():
          ['{"2": "e"}', '{"2": ["c", {"0": "e", "C": -68, "D": "a"}]}', '{"2": "c"}'], True),
     ]
 
-    try:
-        for idx, test_item in enumerate(data):
-            print "\n========== test", idx, "=========="
-            (sort, limit, skip, query, input_data, result, expected) = test_item
-            input_data = util.generate_list_of_ordered_dict_from_json(input_data)
-            result = util.generate_list_of_ordered_dict_from_json(result)
+    for idx, test_item in enumerate(data):
+        print "\n========== test", idx, "=========="
+        (sort, limit, skip, query, input_data, result, expected) = test_item
+        input_data = util.generate_list_of_ordered_dict_from_json(input_data)
+        result = util.generate_list_of_ordered_dict_from_json(result)
 
-            nd_list = util.MongoModelNondeterministicList(input_data, sort, limit, skip, query)
+        nd_list = util.MongoModelNondeterministicList(input_data, sort, limit, skip, query)
 
-            # print nd_list
-            if nd_list.compare(result) != expected:
-                assert False
-            elif not expected:
-                util.trace('error', "Result doesn't match but this is what we expected!")
-
-    except AssertionError:
-        print nd_list
-        util.trace('error', "nonDeterministicQueryTest results didn't match!")
-        return False
-
-    return True
+        # print nd_list
+        assert nd_list.compare(result) == expected, str(nd_list)
 
 
-def is_list_subset_test():
+def test_is_list_subset():
     # =====sort fields=====input data=====result=====expected
     data = [
         (['{"x":1}', '{"x":2}'], ['{"x":1}', '{"x":2}'], True),
@@ -398,25 +363,13 @@ def is_list_subset_test():
         (['{"x":1}', '{"x":2}'], ['{"x":2}', '{"x":2}'], False),
     ]
 
-    try:
-        for idx, test_item in enumerate(data):
-            print "\n========== isListSubset test", idx, "=========="
-
-            (src_list, sub_list, expected) = test_item
-            if util.is_list_subset(src_list, sub_list) != expected:
-                assert False
-            elif not expected:
-                util.trace('error', "Result doesn't match but this is what we expected!")
-
-    except AssertionError:
-        print "src_list:", src_list, "sub_list:", sub_list, "expected:", expected
-        util.trace('error', "isListSubset() results didn't match!")
-        return False
-
-    return True
+    for idx, test_item in enumerate(data):
+        (src_list, sub_list, expected) = test_item
+        assert util.is_list_subset(src_list, sub_list) == expected,\
+            "src_list: {}, sub_listL: {}, expected: {}".format(src_list, sub_list, expected)
 
 
-def is_ambiguous_field_name_in_array_test():
+def test_is_ambiguous_field_name_in_array():
     # =====input=====path=====ambiguous
     data = [
         (['{"a":[2,{"1":3}]}'], "a.1", True),
@@ -431,32 +384,8 @@ def is_ambiguous_field_name_in_array_test():
         (src_list, path, ambiguous) = test_item
         src_list = util.generate_list_of_ordered_dict_from_json(src_list)
         for obj in src_list:
-            try:
+            if ambiguous:
+                with pytest.raises(util.MongoModelException):
+                    util.check_ambiguous_array(obj, path)
+            else:
                 util.check_ambiguous_array(obj, path)
-                if ambiguous:
-                    util.trace('error', "isAmbiguousFieldNameInArray result didn't match!")
-                    return False
-            except util.MongoModelException as e:
-                if not ambiguous:
-                    util.trace('error', "isAmbiguousFieldNameInArray result didn't match!")
-                    return False
-    return True
-
-
-def test_all(collection1, collection2):
-    okay = True
-    for t in tests:
-        okay = test(collection1, collection2, t) and okay
-
-    #   # FIXME: These unit tests were added later, and don't appear to fit the conventions of this file.
-    # They're also quite spammy.
-    #   if not nonDeterministicQueryTest():
-    #       okay = False
-    #       return okay
-    #   if not isListSubsetTest():
-    #       okay = False
-    #       return okay
-    #   if not isAmbiguousFieldNameInArrayTest():
-    #       okay = False
-    #       return okay
-    return okay

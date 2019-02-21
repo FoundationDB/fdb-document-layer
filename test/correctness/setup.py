@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/python
 #
-# run-tests.bash
+# setup.py
 #
 # This source file is part of the FoundationDB open source project
 #
-# Copyright 2013-2018 Apple Inc. and the FoundationDB project authors
+# Copyright 2013-2019 Apple Inc. and the FoundationDB project authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,16 +21,22 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-set -ex
+from setuptools import setup, find_packages
 
-FDB_HOST_IP=$(dig +short ${FDB_HOST})
+VERSION = '0.0.1'
 
-echo "docker:docker@${FDB_HOST_IP}:${FDB_PORT}" > fdb.cluster
+setup(
+    name='correctness',
+    version=VERSION,
 
-FDB_NETWORK_OPTION_TRACE_ENABLE="" ./build/bin/fdbdoc -l 127.0.0.1:27000 -d test -VV > test.out 2> test.err &
+    packages=find_packages(),
 
-cd test/correctness/
-
-python setup.py develop
-
-pytest --doclayer-port 27000 smoke/
+    install_requires=[
+        'pytest',
+        'pymongo==3.6.1',
+        'python-dateutil',
+        'PyYAML==3.12',
+        'psutil',
+        'coloredlogs==4.0.0'
+    ],
+)

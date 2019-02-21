@@ -20,8 +20,6 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-#!/usr/bin/python
-
 import json
 import os.path
 import random
@@ -37,6 +35,7 @@ from types import NoneType
 import bson.timestamp
 from bson import ObjectId, binary
 
+from gen import HashableOrderedDict
 import gen
 
 
@@ -53,15 +52,6 @@ class ModelOptions(object):
             self.mongo6050_enabled = True
             self.elem_match_convert_to_dict = False
             self.object_field_order_matters = False
-
-
-# this is outlandishly unsafe and terrible
-# however it should not crash anything, because we only use these for id fields which under mongo semantics are not allowed to change
-# so this class causing some bizarre crash in python should be interpreted as a correctness failure in the model, and not just evidence that it's
-# time to fix this horribleness
-class HashableOrderedDict(OrderedDict):
-    def __hash__(self):
-        return self.__str__().__hash__()
 
 
 def dedup(seq):

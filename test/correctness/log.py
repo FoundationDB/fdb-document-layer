@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/python
 #
-# run-tests.bash
+# log.py
 #
 # This source file is part of the FoundationDB open source project
 #
-# Copyright 2013-2018 Apple Inc. and the FoundationDB project authors
+# Copyright 2013-2019 Apple Inc. and the FoundationDB project authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,16 +21,30 @@
 # MongoDB is a registered trademark of MongoDB, Inc.
 #
 
-set -ex
+from __future__ import print_function, division, unicode_literals, \
+    absolute_import
 
-FDB_HOST_IP=$(dig +short ${FDB_HOST})
+import logging
+import logging.handlers
+import sys
 
-echo "docker:docker@${FDB_HOST_IP}:${FDB_PORT}" > fdb.cluster
+import coloredlogs
 
-FDB_NETWORK_OPTION_TRACE_ENABLE="" ./build/bin/fdbdoc -l 127.0.0.1:27000 -d test -VV > test.out 2> test.err &
+MAX_BYTES = 20000000  # 20 MB
 
-cd test/correctness/
 
-python setup.py develop
+def setup_logger(name):
+    """Set up stream and file handlers."""
+    root = logging.getLogger(name)
+    root.setLevel(logging.DEBUG)
+    root.propagate = False
 
-pytest --doclayer-port 27000 smoke/
+    stream_handler = coloredlogs.ColoredStreamHandler(
+        stream=sys.stdout,
+        show_name=False,
+        show_hostname=False,
+        level=logging.DEBUG)
+
+    root.addHandler(stream_handler)
+
+    return root

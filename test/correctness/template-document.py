@@ -18,8 +18,6 @@
 # limitations under the License.
 #
 
-#!/usr/bin/python
-
 # -*- coding: utf-8 -*-
 
 import datetime

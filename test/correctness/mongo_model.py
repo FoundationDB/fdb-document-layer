@@ -475,6 +475,12 @@ class MongoCollection(object):
         else:
             raise MongoModelException("Tried to insert an unordered document.")
 
+    def insert_one(self, dict):
+        self.insert(dict)
+
+    def insert_many(self, list):
+        self.insert(list)
+
     def find(self, query, fields=None):
         if len(query) == 0:
             results = self.data.values()
@@ -1040,3 +1046,9 @@ class MongoCollection(object):
                 raise MongoModelException(
                     "'$setOnInsert' is empty. You must specify a field like so: {$mod: {<field>: ...}}")
         return {'n': n}
+
+    def update_one(self, query, update, upsert):
+        self.update(query, update, upsert, multi=False)
+
+    def update_many(self, query, update, upsert):
+        self.update(query, update, upsert, multi=True)
