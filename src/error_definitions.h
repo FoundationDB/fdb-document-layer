@@ -63,6 +63,7 @@ DOCLAYER_ERROR(replace_with_id, 16836, "The _id field cannot be changed");
 DOCLAYER_ERROR(mul_applied_to_non_number, 16837, "Cannot apply $mul to a value of non-numeric type");
 DOCLAYER_ERROR(inc_or_mul_with_non_number, 16840, "Cannot increment with non-numeric argument")
 
+DOCLAYER_ERROR(index_key_too_large, 17282, "key too large to index.");
 DOCLAYER_ERROR(bad_regex_input, 17286, "$regex operator must take string or regex object");
 DOCLAYER_ERROR(bad_sort_specifier, 17287, "Invalid sort specification passed to operation")
 DOCLAYER_ERROR(invalid_projection, 17288, "Invalid projection object passed to operation")

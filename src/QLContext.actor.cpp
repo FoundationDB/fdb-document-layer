@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+#include "Constants.h"
 #include "ExtStructs.h"
 #include "ExtUtil.actor.h"
 #include "QLContext.h"
@@ -208,6 +209,10 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 		auto pair = findOrCreate(tr, key);
 		if (pair.first)
 			pair.second->deferred.emplace_back([k, v](Reference<DocTransaction> tr) {
+				if (k.size() > DocLayerConstants::FDB_KEY_LENGTH_LIMIT)
+					throw key_too_large();
+				if (v.size() > DocLayerConstants::FDB_VALUE_LENGTH_LIMIT)
+					throw value_too_large();
 				tr->tr->set(k, v);
 				return Void();
 			});
@@ -410,6 +415,14 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				for (int i = 0; i < nvv.size(); i++)
 					new_key.append(nvv[i].encode_key_part());
 				new_key.append(documentPath[documentPath.size() - 1]);
+				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
+					TraceEvent(SevError, "CompoundIndexKeyTooLarge")
+					    .detail("Offending Key size", new_key.byteSize())
+					    .detail("Index name", DataValue::decode_key_part(
+					                              DataKey::decode_item(self->indexPath[self->indexPath.size() - 1], 0))
+					                              .getString());
+					throw index_key_too_large();
+				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
 
@@ -530,6 +543,14 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				// fprintf(stderr, "New value: %s\n", printable(StringRef(v.encode_key_part())).c_str());
 				DataKey new_key(self->indexPath);
 				new_key.append(v.encode_key_part()).append(documentPath[documentPath.size() - 1]);
+				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
+					TraceEvent(SevError, "SimpleIndexKeyTooLarge")
+					    .detail("Offending Key size", new_key.byteSize())
+					    .detail("Index name", DataValue::decode_key_part(
+					                              DataKey::decode_item(self->indexPath[self->indexPath.size() - 1], 0))
+					                              .getString());
+					throw index_key_too_large();
+				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
 			if (self->flowControlLock.present()) {
