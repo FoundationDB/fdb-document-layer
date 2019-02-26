@@ -26,7 +26,7 @@ add_executable(fdbdoc
         QLTypes.cpp
         QLTypes.h
         StatusService.h
-        version.cpp)
+        version.cpp Constants.cpp Constants.h)
 
 set(ACTOR_FILES
         BufferedConnection.actor.cpp
