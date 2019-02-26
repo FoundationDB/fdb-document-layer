@@ -290,18 +290,20 @@ struct IndexPlugin : ITDoc {
 
 	DataKey collectionPath;
 	DataKey indexPath;
+	std::string indexName;
 	bool error_state;
 	bool multikey;
 	bool isUniqueIndex;
 	Optional<Reference<FlowLockHolder>> flowControlLock;
 
-	IndexPlugin(DataKey collectionPath, IndexInfo indexInfo, Reference<ITDoc> next)
+	IndexPlugin(DataKey collectionPath, IndexInfo const& indexInfo, Reference<ITDoc> next)
 	    : collectionPath(collectionPath),
 	      indexPath(indexInfo.indexCx->getPrefix()), // dbName+collectionName+"metadata"+"indices"+indexName
 	      ITDoc(next),
 	      error_state(false),
 	      multikey(indexInfo.multikey),
 	      isUniqueIndex(indexInfo.isUniqueIndex),
+	      indexName(indexInfo.indexName),
 	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLockHolder>>(
 	                                                    Reference<FlowLockHolder>(new FlowLockHolder(new FlowLock(1))))
 	                                              : Optional<Reference<FlowLockHolder>>()) {}
@@ -417,10 +419,8 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				new_key.append(documentPath[documentPath.size() - 1]);
 				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
 					TraceEvent(SevError, "CompoundIndexKeyTooLarge")
-					    .detail("Offending Key size", new_key.byteSize())
-					    .detail("Index name", DataValue::decode_key_part(
-					                              DataKey::decode_item(self->indexPath[self->indexPath.size() - 1], 0))
-					                              .getString());
+					    .detail("OffendingKeySize", new_key.byteSize())
+					    .detail("IndexName", self->indexName);
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
@@ -447,7 +447,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 	std::string toString() override { return "CompoundIndexPlugin"; }
 
 	CompoundIndexPlugin(DataKey collectionPath,
-	                    IndexInfo indexInfo,
+	                    IndexInfo const& indexInfo,
 	                    std::vector<std::pair<Reference<IExpression>, int>> exprs,
 	                    Reference<ITDoc> next)
 	    : IndexPlugin(collectionPath, indexInfo, next), exprs(exprs) {}
@@ -545,10 +545,8 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				new_key.append(v.encode_key_part()).append(documentPath[documentPath.size() - 1]);
 				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
 					TraceEvent(SevError, "SimpleIndexKeyTooLarge")
-					    .detail("Offending Key size", new_key.byteSize())
-					    .detail("Index name", DataValue::decode_key_part(
-					                              DataKey::decode_item(self->indexPath[self->indexPath.size() - 1], 0))
-					                              .getString());
+					    .detail("OffendingKeySize", new_key.byteSize())
+					    .detail("IndexName", self->indexName);
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
@@ -566,7 +564,10 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 
 	std::string toString() override { return "SimpleIndexPlugin"; }
 
-	SimpleIndexPlugin(DataKey collectionPath, IndexInfo indexInfo, Reference<IExpression> expr, Reference<ITDoc> next)
+	SimpleIndexPlugin(DataKey collectionPath,
+	                  IndexInfo const& indexInfo,
+	                  Reference<IExpression> expr,
+	                  Reference<ITDoc> next)
 	    : IndexPlugin(collectionPath, indexInfo, next), expr(expr) {}
 
 	Reference<IExpression> expr;
