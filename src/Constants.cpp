@@ -22,7 +22,7 @@
 
 namespace DocLayerConstants {
 
-extern const uint64_t INDEX_KEY_LENGTH_LIMIT = 1024;
+extern const uint64_t INDEX_KEY_LENGTH_LIMIT = (uint64_t)1e4;
 
 extern const uint64_t FDB_KEY_LENGTH_LIMIT = (uint64_t)1e4;
 extern const uint64_t FDB_VALUE_LENGTH_LIMIT = (uint64_t)1e5;

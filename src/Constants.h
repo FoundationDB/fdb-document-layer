@@ -24,13 +24,12 @@
 #include <cstdint>
 
 namespace DocLayerConstants {
+
 // On a par with MongoDB limits
 // https://docs.mongodb.com/manual/reference/limits/#indexes
-
-extern const uint64_t INDEX_KEY_LENGTH_LIMIT;
+extern const uint64_t INDEX_KEY_LENGTH_LIMIT; // This is set to 10K bytes, instead of 1K because why not.
 
 // Document Layer Limits
-
 extern const uint64_t FDB_KEY_LENGTH_LIMIT;
 extern const uint64_t FDB_VALUE_LENGTH_LIMIT;
 
