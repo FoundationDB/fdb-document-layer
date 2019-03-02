@@ -697,22 +697,21 @@ struct BuildInfoCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("version" << EXT_SERVER_VERSION << "gitVersion"
-		                                  << "<string>"
-		                                  << "OpenSSLVersion"
-		                                  << ""
-		                                  << "sysInfo"
-		                                  << "<string>"
-		                                  << "loaderFlags"
-		                                  << "<string>"
-		                                  << "compilerFlags"
-		                                  << "<string>"
-		                                  << "allocator"
-		                                  << "<string>"
-		                                  << "versionArray" << BSON_ARRAY(2 << 4 << 10) << "javascriptEngine"
-		                                  << "<string>"
-		                                  << "bits" << 64 << "debug" << false << "maxBsonObjectSize" << 16777216 << "ok"
-		                                  << 1.0));
+		reply->addDocument(BSON(
+				"version"          << EXT_SERVER_VERSION       <<
+				"gitVersion"       << "<string>"               <<
+				"OpenSSLVersion"   << ""                       <<
+				"sysInfo"          << "<string>"               <<
+				"loaderFlags"      << "<string>"               <<
+				"compilerFlags"    << "<string>"               <<
+				"allocator"        << "<string>"               <<
+				"versionArray"     << BSON_ARRAY(2 << 4 << 10) <<
+				"javascriptEngine" << "<string>"               <<
+				"bits"             << 64                       <<
+				"debug"            << false                    <<
+				"maxBsonObjectSize"<< 16777216                 <<
+				"ok"               << 1.0
+				));
 		return reply;
 	}
 };

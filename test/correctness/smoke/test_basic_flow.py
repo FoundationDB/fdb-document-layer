@@ -28,6 +28,16 @@ def test_simple_coll_index(fixture_collection):
     # Create an index
     collection.create_index('a', name='idx_a')
 
+    # Check the returned index by listindex command contains the primay one
+    indexes = collection.index_information()
+
+    found = False
+    for index in indexes.keys():
+        if index == '_id_':
+            found = True
+            break
+    assert found, "Returned list of indexes by listIndex command does not contains the primary index _id_"
+
     # Insert bunch of documents
     docs = []
     for i in range(1, 50):
