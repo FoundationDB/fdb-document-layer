@@ -697,6 +697,7 @@ struct BuildInfoCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
+		// clang-format off
 		reply->addDocument(BSON(
 				"version"          << EXT_SERVER_VERSION       <<
 				"gitVersion"       << "<string>"               <<
@@ -712,6 +713,7 @@ struct BuildInfoCmd {
 				"maxBsonObjectSize"<< 16777216                 <<
 				"ok"               << 1.0
 				));
+		// clang-format on
 		return reply;
 	}
 };
