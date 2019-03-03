@@ -11,6 +11,9 @@ deploy/bin/
 .dist/
 .out/
 .extdep/
+test/correctness/dist/
+test/correctness/local/
+certs/
 upsert_test.csv
 
 packages/

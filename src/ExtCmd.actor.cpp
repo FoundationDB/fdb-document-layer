@@ -697,23 +697,23 @@ struct BuildInfoCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("version"
-		                        << EXT_SERVER_VERSION
-		                        << "gitVersion"
-		                        << "<string>"
-		                        << "OpenSSLVersion"
-		                        << ""
-		                        << "sysInfo"
-		                        << "<string>"
-		                        << "loaderFlags"
-		                        << "<string>"
-		                        << "compilerFlags"
-		                        << "<string>"
-		                        << "allocator"
-		                        << "<string>"
-		                        << "versionArray" << BSON_ARRAY(2 << 4 << 10) << "javascriptEngine"
-		                        << "<string>"
-		                        << "bits" << 64 << "debug" << false << "maxBsonObjectSize" << 16777216 << "ok" << 1.0));
+		// clang-format off
+		reply->addDocument(BSON(
+				"version"          << EXT_SERVER_VERSION       <<
+				"gitVersion"       << "<string>"               <<
+				"OpenSSLVersion"   << ""                       <<
+				"sysInfo"          << "<string>"               <<
+				"loaderFlags"      << "<string>"               <<
+				"compilerFlags"    << "<string>"               <<
+				"allocator"        << "<string>"               <<
+				"versionArray"     << BSON_ARRAY(2 << 4 << 10) <<
+				"javascriptEngine" << "<string>"               <<
+				"bits"             << 64                       <<
+				"debug"            << false                    <<
+				"maxBsonObjectSize"<< 16777216                 <<
+				"ok"               << 1.0
+				));
+		// clang-format on
 		return reply;
 	}
 };
@@ -1278,6 +1278,14 @@ struct ListIndexesCmd {
 					indexList << indexObj;
 				}
 
+				// Add the _id index here
+				indexList << BSON("name"
+				                  << "_id_"
+				                  << "ns" << (msg->ns.first + "." + msg->ns.second) << "key" << BSON("_id" << 1)
+				                  << "metadata version" << 1 << "status"
+				                  << "ready"
+				                  << "unique" << true);
+
 				// FIXME: Not using cursors to return collection list.
 				reply->addDocument(BSON(
 				    // clang-format off
@@ -1288,7 +1296,6 @@ struct ListIndexesCmd {
 					                            "ok" << 1.0
 				    // clang-format on
 				    ));
-
 				return reply;
 			} catch (Error& e) {
 				if (e.code() != error_code_actor_cancelled) {
