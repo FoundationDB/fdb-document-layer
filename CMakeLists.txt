@@ -52,3 +52,4 @@ find_package(Threads)
 add_subdirectory(src)
 
 include(cmake/CPackConfig.cmake)
+include(cmake/CLangFormat.cmake)

@@ -2,7 +2,7 @@ version: "3"
 
 services:
   common: &common
-    image: fdb-document-layer-build:0.0.6
+    image: fdb-document-layer-build:0.0.8
     build:
       context: .
       dockerfile: Dockerfile
@@ -46,6 +46,10 @@ services:
 
   build-prb:
     <<: *build-snapshot
+
+  clang-format-prb:
+    <<: *snapshot-setup
+    command: bash -cl 'mkdir -p build && cd build && cmake .. && make check-format'
 
   test-release:
     <<: *release-setup
