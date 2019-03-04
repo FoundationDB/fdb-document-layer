@@ -2,6 +2,14 @@
 
 ### 1.6.3
 
+* [#38](https://github.com/FoundationDB/fdb-document-layer/issues/38) Fix for compound index selection in query planner
+* [#46](https://github.com/FoundationDB/fdb-document-layer/issues/46) Fix for query bounds with compound indexes
+* [#47](https://github.com/FoundationDB/fdb-document-layer/issues/47) Better errors on large keys
+* [#51](https://github.com/FoundationDB/fdb-document-layer/issues/51) `delete` commands don't create collection any more
+* [#54](https://github.com/FoundationDB/fdb-document-layer/issues/54) Fix for `buildInfo` command
+* [#66](https://github.com/FoundationDB/fdb-document-layer/issues/66) Fix for crash on `dropIndex` command
+* [#93](https://github.com/FoundationDB/fdb-document-layer/issues/93) Adding primary index to `listIndexes()` response
+
 ### 1.6.2
 
 * [#32](https://github.com/FoundationDB/fdb-document-layer/issues/32) Fix for Ubuntu deb packages
