@@ -1181,7 +1181,8 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 
 		// If collection not found then just return success from here.
 		try {
-			Reference<UnboundCollectionContext> _cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
+			Reference<UnboundCollectionContext> _cx =
+			    wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
 			cx = _cx;
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)

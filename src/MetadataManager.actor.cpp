@@ -81,8 +81,12 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 }
 
-ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>>
-constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docLayer, bool includeIndex, bool createCollectionIfAbsent) {
+ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> constructContext(
+    Namespace ns,
+    Reference<DocTransaction> tr,
+    DocumentLayer* docLayer,
+    bool includeIndex,
+    bool createCollectionIfAbsent) {
 	try {
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
@@ -210,14 +214,16 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 	}
 }
 
-Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(Reference<DocTransaction> tr,
-                                                                                         Namespace const& ns,
-                                                                                         bool allowSystemNamespace,
-                                                                                         bool includeIndex,
-                                                                                         bool createCollectionIfAbsent) {
+Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(
+    Reference<DocTransaction> tr,
+    Namespace const& ns,
+    bool allowSystemNamespace,
+    bool includeIndex,
+    bool createCollectionIfAbsent) {
 	if (!allowSystemNamespace && startsWith(ns.second.c_str(), "system."))
 		throw write_system_namespace();
-	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex, createCollectionIfAbsent);
+	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex,
+	                                 createCollectionIfAbsent);
 }
 
 Future<Reference<UnboundCollectionContext>> MetadataManager::refreshUnboundCollectionContext(
