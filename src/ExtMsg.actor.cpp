@@ -626,40 +626,35 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
                                                           bson::BSONObj d,
                                                           Optional<IdInfo> encodedIds) {
 	state Standalone<StringRef> encodedId;
-	state Standalone<StringRef> valueEncodedId;
 	state Optional<bson::BSONObj> idObj;
 	state Reference<QueryContext> dcx;
 
 	if (!encodedIds.present()) {
-		encodedId = DataValue(bson::OID::gen()).encode_key_part();
-		valueEncodedId = encodedId;
-		idObj = Optional<bson::BSONObj>();
+		// No _id field, generate a new one.
+		state bson::OID generatedId = bson::OID::gen();
+		state bson::BSONObj docWithGeneratedId =
+		    bson::BSONObjBuilder().appendElements(d).append("_id", generatedId).obj();
+		encodedId = DataValue(generatedId).encode_key_part();
 		dcx = cx->cx->getSubContext(encodedId);
+		// It's unlikely that the auto generated ID collides with an existing one, but just to be safe.
+		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+		if (existing.present()) {
+			TraceEvent(SevError, "insertDocument: Auto generated object id collides with an existing ID")
+			    .detail("Auto generated ID", generatedId.toString());
+			throw duplicated_key_field();
+		}
+		// Insert doc first
+		insertElementRecursive("", docWithGeneratedId, dcx);
 	} else {
 		encodedId = encodedIds.get().keyEncoded;
-		valueEncodedId = encodedIds.get().valueEncoded;
-		idObj = encodedIds.get().objValue;
 		dcx = cx->cx->getSubContext(encodedId);
+
 		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
 		if (existing.present())
 			throw duplicated_key_field();
+		// Insert the doc
+		insertElementRecursive("", d, dcx);
 	}
-
-	// FIXME: abstraction violation out of laziness
-	Key prefix = StringRef(dcx->getPrefix().toString());
-	dcx->getTransaction()->tr->addWriteConflictRange(KeyRangeRef(prefix, strinc(prefix)));
-
-	dcx->set(LiteralStringRef(""), DataValue::subObject().encode_value());
-
-	for (auto i = d.begin(); i.more();) {
-		auto e = i.next();
-		insertElementRecursive(e, dcx);
-	}
-
-	if (idObj.present())
-		insertElementRecursive("_id", idObj.get(), dcx);
-
-	dcx->set(DataValue("_id", DVTypeCode::STRING).encode_key_part(), valueEncodedId);
 
 	return dcx;
 }
@@ -694,13 +689,22 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 		state Optional<bson::BSONObj> idObj;
 		state Reference<QueryContext> dcx;
 
+		state bson::BSONObjBuilder indexObjToBeWritten;
 		Optional<IdInfo> encodedIds = extractEncodedIds(self->indexObj);
 
 		if (!encodedIds.present()) {
-			encodedId = DataValue(bson::OID::gen()).encode_key_part();
-			valueEncodedId = encodedId;
-			idObj = Optional<bson::BSONObj>();
+			// No _id field, generate a new one.
+			state bson::OID generatedId = bson::OID::gen();
+			indexObjToBeWritten.append("_id", generatedId);
+			encodedId = DataValue(generatedId).encode_key_part();
 			dcx = cx->cx->getSubContext(encodedId);
+			// It's unlikely that the auto generated ID collides with an existing one, but just to be safe.
+			Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+			if (existing.present()) {
+				TraceEvent(SevError, "insertIndexObj: Auto generated object id collides with an existing ID")
+				    .detail("Auto generated ID", generatedId.toString());
+				throw duplicated_key_field();
+			}
 		} else {
 			encodedId = encodedIds.get().keyEncoded;
 			valueEncodedId = encodedIds.get().valueEncoded;
@@ -711,31 +715,30 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 				throw duplicated_key_field();
 		}
 
-		// FIXME: abstraction violation out of laziness
-		Key prefix = StringRef(dcx->getPrefix().toString());
-		dcx->getTransaction()->tr->addWriteConflictRange(KeyRangeRef(prefix, strinc(prefix)));
+		for (auto i = self->indexObj.begin(); i.more();) {
+			bson::BSONElement e = i.next();
+			// Skip 'key' field as it requires special handling. See below for more details
+			if (strcmp(e.fieldName(), "key") != 0) {
+				indexObjToBeWritten.append(e);
+			}
+		}
 
-		dcx->set(LiteralStringRef(""), DataValue::subObject().encode_value());
+		// Fill-in all missing information
 
-		dcx->set(DataValue("ns", DVTypeCode::STRING).encode_key_part(), DataValue(self->ns).encode_value());
-		dcx->set(DataValue("name", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->indexObj.getStringField("name"), DVTypeCode::STRING).encode_value());
+		indexObjToBeWritten.append("ns", self->ns)
+		    .append("status", "building")
+		    .append("metadata version", 1)
+		    .append("build id", self->build_id.toString())
+		    .append("unique", self->indexObj.getBoolField("unique")) // getBool will default to false if not provided.
+		    .append("background", self->indexObj.getBoolField("background"));
+
+		// FIXME: abstraction violation
+		// this 'key' objects field needs to be packed, instead of recursively inserted as a normal object
+		// because that will break the declaring order of the index keys if we insert them one by one.
 		dcx->set(DataValue("key", DVTypeCode::STRING).encode_key_part(),
 		         DataValue(self->indexObj.getObjectField("key")).encode_value());
-		dcx->set(DataValue("status", DVTypeCode::STRING).encode_key_part(),
-		         DataValue("building", DVTypeCode::STRING).encode_value());
-		dcx->set(DataValue("metadata version", DVTypeCode::STRING).encode_key_part(), DataValue(1).encode_value());
-		dcx->set(DataValue("build id", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->build_id.toString()).encode_value());
-		dcx->set(DataValue("unique", DVTypeCode::STRING).encode_key_part(),
-		         self->indexObj.hasField("unique") ? DataValue(self->indexObj.getBoolField("unique")).encode_value()
-		                                           : DataValue(false).encode_value());
 
-		if (idObj.present())
-			insertElementRecursive("_id", idObj.get(), dcx);
-
-		dcx->set(DataValue("_id", DVTypeCode::STRING).encode_key_part(), valueEncodedId);
-
+		insertElementRecursive("", indexObjToBeWritten.obj(), dcx);
 		return dcx;
 	}
 
@@ -1181,7 +1184,8 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 
 		// If collection not found then just return success from here.
 		try {
-			Reference<UnboundCollectionContext> _cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
+			Reference<UnboundCollectionContext> _cx =
+			    wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
 			cx = _cx;
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)

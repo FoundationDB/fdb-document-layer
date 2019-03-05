@@ -1279,23 +1279,28 @@ struct ListIndexesCmd {
 				}
 
 				// Add the _id index here
-				indexList << BSON("name"
-				                  << "_id_"
-				                  << "ns" << (msg->ns.first + "." + msg->ns.second) << "key" << BSON("_id" << 1)
-				                  << "metadata version" << 1 << "status"
-				                  << "ready"
-				                  << "unique" << true);
+				// clang-format off
+				indexList << BSON(
+						"name" << "_id_" <<
+						"ns" << (msg->ns.first + "." + msg->ns.second) <<
+						"key" << BSON("_id" << 1) <<
+						"metadata version" << 1 <<
+						"status" << "ready" <<
+						"unique" << true
+						);
+				// clang-format on
 
 				// FIXME: Not using cursors to return collection list.
+				// clang-format off
 				reply->addDocument(BSON(
-				    // clang-format off
-					                   "cursor" << BSON(
-						                   "id" << 0 <<
-						                        "ns" << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
-						                        "firstBatch" << indexList.arr()) <<
-					                            "ok" << 1.0
-				    // clang-format on
-				    ));
+						"cursor" << BSON(
+								"id" << 0 <<
+								"ns" << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
+								"firstBatch" << indexList.arr()) <<
+								"ok" << 1.0
+								)
+								);
+				// clang-format on
 				return reply;
 			} catch (Error& e) {
 				if (e.code() != error_code_actor_cancelled) {

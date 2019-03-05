@@ -62,7 +62,6 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	bson::BSONObj keyObj = indexObj.getObjectField("key");
 	std::vector<std::pair<std::string, int>> indexKeys;
 	indexKeys.reserve(keyObj.nFields());
-	bool isUniqueIndex = indexObj.hasField("unique") ? indexObj.getBoolField("unique") : false;
 	for (auto i = keyObj.begin(); i.more();) {
 		auto e = i.next();
 		indexKeys.emplace_back(e.fieldName(), (int)e.Number());
@@ -75,14 +74,19 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 	if (status == IndexInfo::IndexStatus::BUILDING) {
 		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status,
-		                 UID::fromString(indexObj.getStringField("build id")), isUniqueIndex);
+		                 UID::fromString(indexObj.getStringField("build id")), indexObj.getBoolField("unique"));
 	} else {
-		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status, Optional<UID>(), isUniqueIndex);
+		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status, Optional<UID>(),
+		                 indexObj.getBoolField("unique"));
 	}
 }
 
-ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>>
-constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docLayer, bool includeIndex, bool createCollectionIfAbsent) {
+ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> constructContext(
+    Namespace ns,
+    Reference<DocTransaction> tr,
+    DocumentLayer* docLayer,
+    bool includeIndex,
+    bool createCollectionIfAbsent) {
 	try {
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
@@ -210,14 +214,16 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 	}
 }
 
-Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(Reference<DocTransaction> tr,
-                                                                                         Namespace const& ns,
-                                                                                         bool allowSystemNamespace,
-                                                                                         bool includeIndex,
-                                                                                         bool createCollectionIfAbsent) {
+Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectionContext(
+    Reference<DocTransaction> tr,
+    Namespace const& ns,
+    bool allowSystemNamespace,
+    bool includeIndex,
+    bool createCollectionIfAbsent) {
 	if (!allowSystemNamespace && startsWith(ns.second.c_str(), "system."))
 		throw write_system_namespace();
-	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex, createCollectionIfAbsent);
+	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex,
+	                                 createCollectionIfAbsent);
 }
 
 Future<Reference<UnboundCollectionContext>> MetadataManager::refreshUnboundCollectionContext(
