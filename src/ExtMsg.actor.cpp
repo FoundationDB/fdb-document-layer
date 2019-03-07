@@ -628,33 +628,30 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 	state Standalone<StringRef> encodedId;
 	state Optional<bson::BSONObj> idObj;
 	state Reference<QueryContext> dcx;
+	state Optional<state bson::BSONObj> docWithGeneratedId;
 
 	if (!encodedIds.present()) {
 		// No _id field, generate a new one.
 		state bson::OID generatedId = bson::OID::gen();
-		state bson::BSONObj docWithGeneratedId =
-		    bson::BSONObjBuilder().appendElements(d).append("_id", generatedId).obj();
+		docWithGeneratedId =
+		    Optional<state bson::BSONObj>(bson::BSONObjBuilder().appendElements(d).append("_id", generatedId).obj());
 		encodedId = DataValue(generatedId).encode_key_part();
 		dcx = cx->cx->getSubContext(encodedId);
-		// It's unlikely that the auto generated ID collides with an existing one, but just to be safe.
-		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
-		if (existing.present()) {
-			TraceEvent(SevError, "insertDocument: Auto generated object id collides with an existing ID")
-			    .detail("Auto generated ID", generatedId.toString());
-			throw duplicated_key_field();
-		}
-		// Insert doc first
-		insertElementRecursive("", docWithGeneratedId, dcx);
 	} else {
 		encodedId = encodedIds.get().keyEncoded;
 		dcx = cx->cx->getSubContext(encodedId);
-
-		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
-		if (existing.present())
-			throw duplicated_key_field();
-		// Insert the doc
-		insertElementRecursive("", d, dcx);
 	}
+
+	Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+	if (existing.present()) {
+		throw duplicated_key_field();
+	}
+
+	// FIXME: abstraction violation out of laziness
+	Key prefix = StringRef(dcx->getPrefix().toString());
+	dcx->getTransaction()->tr->addWriteConflictRange(KeyRangeRef(prefix, strinc(prefix)));
+
+	insertElementRecursive("", docWithGeneratedId.present ? docWithGeneratedId.get() : d, dcx);
 
 	return dcx;
 }
@@ -698,23 +695,17 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 			indexObjToBeWritten.append("_id", generatedId);
 			encodedId = DataValue(generatedId).encode_key_part();
 			dcx = cx->cx->getSubContext(encodedId);
-			// It's unlikely that the auto generated ID collides with an existing one, but just to be safe.
-			Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
-			if (existing.present()) {
-				TraceEvent(SevError, "insertIndexObj: Auto generated object id collides with an existing ID")
-				    .detail("Auto generated ID", generatedId.toString());
-				throw duplicated_key_field();
-			}
 		} else {
 			encodedId = encodedIds.get().keyEncoded;
 			valueEncodedId = encodedIds.get().valueEncoded;
 			idObj = encodedIds.get().objValue;
 			dcx = cx->cx->getSubContext(encodedId);
-			Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
-			if (existing.present())
-				throw duplicated_key_field();
 		}
 
+		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+		if (existing.present()) {
+			throw duplicated_key_field();
+		}
 		for (auto i = self->indexObj.begin(); i.more();) {
 			bson::BSONElement e = i.next();
 			// Skip 'key' field as it requires special handling. See below for more details
