@@ -38,7 +38,6 @@ from bson import ObjectId, binary
 from gen import HashableOrderedDict
 import gen
 
-
 class ModelOptions(object):
     # MongoDB bug SERVER-6050 (also implemented by document layer): {P:$elemMatch:{X}} can match {P:A} where A matches X rather than only {P:[A]}
     mongo6050_enabled = False
@@ -122,7 +121,6 @@ def BSON_order(term1, term2):
         return compare(term1, term2)
     else:
         return 0  # FIXME
-
 
 '''When comparing values of different BSON types, MongoDB uses the following comparison order, from lowest to highest:
     MinKey (internal type)
@@ -215,7 +213,6 @@ def mongo_compare_ordered_dict_items(lhs, rhs):
             return ret
 
     return -1
-
 
 def smallest_diff_key(A, B):
     """return the smallest key adiff in A such that A[adiff] != B[bdiff]"""
@@ -524,9 +521,10 @@ def is_none(obj):
 
 
 class MongoModelException(Exception):
-    def __init__(self, message, Errors=None):
+    def __init__(self, message, Errors=None, code=None):
         Exception.__init__(self, message)
         self.Errors = Errors
+        self.code = code
 
 
 def format_result(parent, result, index):
@@ -1240,7 +1238,6 @@ def test_mongo_nondeterministic_list():
     query = {}
 
     MongoModelNondeterministicList(docs, sort, 0, 0, query, ModelOptions(''))
-
 
 if __name__ == '__main__':
     # test_mongo_nondeterministic_list()

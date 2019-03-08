@@ -447,6 +447,7 @@ class MongoCollection(object):
             '$push': self.process_update_operator_push,
             '$bit': self.process_update_operator_bit,
         }
+        self.indexes = []
 
     def remove(self):
         self.data = dict()
@@ -454,6 +455,9 @@ class MongoCollection(object):
     def _insert(self, doc):
         if '_id' not in doc:
             doc['_id'] = gen.random_object_id()
+        tmp = self.data.values() + [doc]
+        for index in self.indexes:
+            index.validate_and_build_entry(tmp)
         self.data[doc['_id']] = deepcopy(doc)
 
     def insert(self, input):
@@ -467,11 +471,21 @@ class MongoCollection(object):
                         i['_id'] = HashableOrderedDict(sorted(i['_id'].items(), key=lambda (key, value): key))
                     if i['_id'] in all_ids:
                         # print i['_id']
-                        raise MongoModelException("can't insert document with duplicate _id field")
+                        raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
                     all_ids.add(i['_id'])
-
-            for i in input:
-                self._insert(i)
+            # All '_id's are good
+            buffer = []
+            # keep in mind when inserting many docs at once, the operation needs to be atomic, i.e. all or nothing.
+            for doc in input:
+                if '_id' not in doc:
+                    doc['_id'] = gen.random_object_id()
+                buffer.append(doc)
+                tmp = self.data.values() + buffer
+                for index in self.indexes:
+                    index.validate_and_build_entry(tmp)
+            # Ready to insert them all.
+            for doc in buffer:
+                self.data[doc['_id']] = deepcopy(doc)
         else:
             raise MongoModelException("Tried to insert an unordered document.")
 
@@ -519,13 +533,33 @@ class MongoCollection(object):
 
     # So that we can use PyMongo and MongoModel implementations of a "collection" interchangeably
     def drop_indexes(self):
-        pass
+        self.indexes = []
 
-    def ensure_index(self, fake_variable):
-        pass
+    def ensure_index(self, keys, **kwargs):
+        return self._create_index(keys, kwargs)
 
-    def create_index(self, _):
-        pass
+    # Only support online index build. No background build yet.
+    def create_index(self, keys, **kwargs):
+        return self._create_index(keys, kwargs)
+
+    def _create_index(self, keys, kwargs):
+        def _get_index_name(keys):
+            return "_".join(["%s_%s" % item for item in keys])
+        kwargs.setdefault("name", _get_index_name(keys))
+        for i in self.indexes:
+            if i.keys == keys:
+                return None
+            if i.name == kwargs["name"]:
+                raise MongoModelException("There is an index with this name and a different key spec", code=29993)
+
+        if "unique" in kwargs.keys() and kwargs["unique"]:
+            newIndex = MongoUniqueIndex(keys, kwargs)
+        else:
+            newIndex = MongoIndex(keys, kwargs)
+
+        self.indexes.append(newIndex) # insert first, since an index can be added but in error state if its constraints are violated.
+        newIndex.build(self.data.values())
+        return newIndex.name
 
     @staticmethod
     def check_fields(update):
@@ -836,6 +870,8 @@ class MongoCollection(object):
                         self.mapUpdateOperator[k](key, update[k])
             else:
                 self.replace(key, update)
+            for index in self.indexes:
+                index.validate_and_build_entry(self.data.values())
         except MongoModelException as e:
             self.data[key] = old_data
             raise e
@@ -1005,6 +1041,8 @@ class MongoCollection(object):
                         self.replace(k, update)
                         if not multi:
                             return
+            for index in self.indexes:
+                index.validate_and_build_entry(self.data.values())
         except MongoModelException as e:
             self.data = old_data
             raise
@@ -1052,3 +1090,74 @@ class MongoCollection(object):
 
     def update_many(self, query, update, upsert):
         self.update(query, update, upsert, multi=True)
+
+class MongoIndex(object):
+    def __init__(self, indexKeys, kwargs):
+        self.name = kwargs["name"]
+        if len(indexKeys) == 1:
+            self.isSimple = True
+        else:
+            self.isSimple = False
+        self.keys = indexKeys
+        # self check
+        self.validate_self()
+
+    # Invariants to check:
+    #    - Name cannot be empty, otherwise throw error code 29967
+    def validate_self(self):
+        if self.name is None or self.name == "":
+            raise MongoModelException("No index name specified", code=29967)
+
+    def build(self, documents):
+        self.validate_and_build_entry(documents)
+
+    # Validate the entry(ies) that will be built on this particular document for the following invariants:
+    #    - If it's compund index, the cartesian product of all index values cannot exceed 1000
+    def validate_and_build_entry(self, documents):
+        if not self.isSimple:
+            for document in documents:
+                nValues = 1
+                for key in self.keys:
+                    values = expand(
+                        field=key,
+                        document=document,
+                        check_last_array=True,
+                        expand_array=True,
+                        add_last_array=False,
+                        check_none_at_all=True,
+                        check_none_next=True,
+                        debug=False)
+                    nValues * len(values)
+                if nValues > 1000:
+                    raise MongoModelException("Multi-multikey index size exceeds maximum value.", code=0)
+
+class MongoUniqueIndex(MongoIndex):
+    def __init__(self, indexKeys, kwargs):
+        super(MongoUniqueIndex, self).__init__(indexKeys, kwargs)
+
+    def build(self, documents):
+        super(MongoUniqueIndex, self).validate_and_build_entry(documents)
+        self.validate_and_build_entry(documents)
+
+    # Validate the entry(ies) that will be built on this particular document for the following invariants:
+    #    - No duplicates
+    def validate_and_build_entry(self, documents):
+        seen = set()
+        for document in documents:
+            for key in self.keys:
+                entry = ""
+                _values = expand(
+                    field=key,
+                    document=document,
+                    check_last_array=True,
+                    expand_array=True,
+                    add_last_array=False,
+                    check_none_at_all=True,
+                    check_none_next=True,
+                    debug=False)
+
+                entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "None")
+                if entry in seen:
+                    raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
+                else:
+                    seen.add(entry)
