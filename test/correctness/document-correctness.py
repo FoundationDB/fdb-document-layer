@@ -304,6 +304,12 @@ def one_iteration(collection1, collection2, ns, seed):
             print '\033[91m', type(exceptionOne), ': ', str(exceptionOne), '\033[0m'
             print '\033[91m', type(exceptionTwo), ': ', str(exceptionTwo), '\033[0m'
             okay = False
+            if [x for x in ignored_exceptions if x.strip() == str(exceptionOne).strip().strip('\"').strip('.')]:
+                print "Ignoring EXCEPTION :", str(exceptionOne)
+                okay = True
+            elif [x for x in ignored_exceptions if x.strip() == str(exceptionTwo).strip().strip('\"').strip('.')]:
+                print "Ignoring EXCEPTION :", str(exceptionTwo)
+                okay = True
         return okay
 
     try:
@@ -408,7 +414,7 @@ def one_iteration(collection1, collection2, ns, seed):
 
 
 ignored_exceptions = [
-    # "Multi-multikey index size exceeds maximum value",
+    "Multi-multikey index size exceeds maximum value",
     "key too large to index", # it's hard to estimate the exact byte size of KVS key to be inserted, ignore for now.
     "Key length exceeds limit",
     "Operation aborted because the transaction timed out",
@@ -441,12 +447,6 @@ def test_forever(ns):
         print 'ID : ' + str(os.getpid()) + ' iteration : ' + str(jj)
         print '========================================================'
         (okay, fname, e) = one_iteration(collection1, collection2, ns, seed)
-
-        if not okay and e is not None:
-            print "EXCEPTION :", str(e)
-            if [x for x in ignored_exceptions if x.strip() == str(e).strip().strip('\"').strip('.')]:
-                print "Ignoring EXCEPTION :", str(e)
-                okay = True
 
         if not okay:
             # print 'Seed for failing iteration: ', seed
