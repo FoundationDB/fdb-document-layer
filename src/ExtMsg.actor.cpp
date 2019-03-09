@@ -728,8 +728,9 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 		dcx->set(DataValue("build id", DVTypeCode::STRING).encode_key_part(),
 		         DataValue(self->build_id.toString()).encode_value());
 		dcx->set(DataValue("unique", DVTypeCode::STRING).encode_key_part(),
-		         self->indexObj.hasField("unique") ? DataValue(self->indexObj.getBoolField("unique")).encode_value()
-		                                           : DataValue(false).encode_value());
+		         DataValue(self->indexObj.getBoolField("unique")).encode_value());
+		dcx->set(DataValue("background", DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->indexObj.getBoolField("background")).encode_value());
 
 		if (idObj.present())
 			insertElementRecursive("_id", idObj.get(), dcx);

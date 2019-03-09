@@ -62,7 +62,6 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	bson::BSONObj keyObj = indexObj.getObjectField("key");
 	std::vector<std::pair<std::string, int>> indexKeys;
 	indexKeys.reserve(keyObj.nFields());
-	bool isUniqueIndex = indexObj.hasField("unique") ? indexObj.getBoolField("unique") : false;
 	for (auto i = keyObj.begin(); i.more();) {
 		auto e = i.next();
 		indexKeys.emplace_back(e.fieldName(), (int)e.Number());
@@ -75,9 +74,10 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 	if (status == IndexInfo::IndexStatus::BUILDING) {
 		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status,
-		                 UID::fromString(indexObj.getStringField("build id")), isUniqueIndex);
+		                 UID::fromString(indexObj.getStringField("build id")), indexObj.getBoolField("unique"));
 	} else {
-		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status, Optional<UID>(), isUniqueIndex);
+		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status, Optional<UID>(),
+		                 indexObj.getBoolField("unique"));
 	}
 }
 
