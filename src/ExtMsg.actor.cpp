@@ -728,8 +728,9 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 		dcx->set(DataValue("build id", DVTypeCode::STRING).encode_key_part(),
 		         DataValue(self->build_id.toString()).encode_value());
 		dcx->set(DataValue("unique", DVTypeCode::STRING).encode_key_part(),
-		         self->indexObj.hasField("unique") ? DataValue(self->indexObj.getBoolField("unique")).encode_value()
-		                                           : DataValue(false).encode_value());
+		         DataValue(self->indexObj.getBoolField("unique")).encode_value());
+		dcx->set(DataValue("background", DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->indexObj.getBoolField("background")).encode_value());
 
 		if (idObj.present())
 			insertElementRecursive("_id", idObj.get(), dcx);
@@ -1181,7 +1182,8 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 
 		// If collection not found then just return success from here.
 		try {
-			Reference<UnboundCollectionContext> _cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
+			Reference<UnboundCollectionContext> _cx =
+			    wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
 			cx = _cx;
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)
