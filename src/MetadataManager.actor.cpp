@@ -26,8 +26,8 @@
 using namespace FDB;
 
 Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<DirectorySubspace> metadataDirectory) {
-	std::string versionKey =
-	    metadataDirectory->key().toString() + DataValue("version", DVTypeCode::STRING).encode_key_part();
+	std::string versionKey = metadataDirectory->key().toString() +
+	                         DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part();
 	Future<Optional<FDBStandalone<StringRef>>> fov = tr->tr->get(StringRef(versionKey));
 	Future<uint64_t> ret = map(fov, [](Optional<FDBStandalone<StringRef>> ov) -> uint64_t {
 		if (!ov.present())
@@ -48,10 +48,10 @@ std::string describeIndex(std::vector<std::pair<std::string, int>> indexKeys) {
 }
 
 IndexInfo::IndexStatus indexStatus(const bson::BSONObj& indexObj) {
-	const char* statusField = indexObj.getStringField("status");
-	if (strcmp(statusField, "ready") == 0)
+	const char* statusField = indexObj.getStringField(DocLayerConstants::STATUS_FIELD);
+	if (strcmp(statusField, DocLayerConstants::INDEX_STATUS_READY) == 0)
 		return IndexInfo::IndexStatus::READY;
-	else if (strcmp(statusField, "building") == 0)
+	else if (strcmp(statusField, DocLayerConstants::INDEX_STATUS_BUILDING) == 0)
 		return IndexInfo::IndexStatus::BUILDING;
 	else
 		return IndexInfo::IndexStatus::INVALID;
@@ -59,7 +59,7 @@ IndexInfo::IndexStatus indexStatus(const bson::BSONObj& indexObj) {
 
 IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Reference<UnboundCollectionContext> cx) {
 	IndexInfo::IndexStatus status = indexStatus(indexObj);
-	bson::BSONObj keyObj = indexObj.getObjectField("key");
+	bson::BSONObj keyObj = indexObj.getObjectField(DocLayerConstants::KEY_FIELD);
 	std::vector<std::pair<std::string, int>> indexKeys;
 	indexKeys.reserve(keyObj.nFields());
 	for (auto i = keyObj.begin(); i.more();) {
@@ -73,11 +73,12 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 		fprintf(stderr, "%s\n\n", describeIndex(indexKeys).c_str());
 	}
 	if (status == IndexInfo::IndexStatus::BUILDING) {
-		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status,
-		                 UID::fromString(indexObj.getStringField("build id")), indexObj.getBoolField("unique"));
+		return IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx, status,
+		                 UID::fromString(indexObj.getStringField(DocLayerConstants::BUILD_ID_FIELD)),
+		                 indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD));
 	} else {
-		return IndexInfo(indexObj.getStringField("name"), indexKeys, cx, status, Optional<UID>(),
-		                 indexObj.getBoolField("unique"));
+		return IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx, status, Optional<UID>(),
+		                 indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD));
 	}
 }
 
@@ -96,10 +97,10 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		snapshotTr->setVersion(v);
 		state Future<Reference<DirectorySubspace>> fcollectionDirectory =
 		    docLayer->rootDirectory->open(snapshotTr, {StringRef(ns.first), StringRef(ns.second)});
-		state Future<Reference<DirectorySubspace>> findexDirectory =
-		    docLayer->rootDirectory->open(snapshotTr, {StringRef(ns.first), LiteralStringRef("system.indexes")});
+		state Future<Reference<DirectorySubspace>> findexDirectory = docLayer->rootDirectory->open(
+		    snapshotTr, {StringRef(ns.first), StringRef(DocLayerConstants::SYSTEM_INDEXES)});
 		state Reference<DirectorySubspace> metadataDirectory = wait(docLayer->rootDirectory->open(
-		    snapshotTr, {StringRef(ns.first), StringRef(ns.second), LiteralStringRef("metadata")}));
+		    snapshotTr, {StringRef(ns.first), StringRef(ns.second), StringRef(DocLayerConstants::METADATA)}));
 
 		state Future<uint64_t> fv = getMetadataVersion(tr, metadataDirectory);
 		state Reference<DirectorySubspace> collectionDirectory = wait(fcollectionDirectory);
@@ -146,10 +147,10 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		// in parallel with the same transaction in the Flow directory layer.
 		state Reference<DirectorySubspace> tcollectionDirectory =
 		    wait(docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(ns.first), StringRef(ns.second)}));
-		state Reference<DirectorySubspace> tindexDirectory = wait(
-		    docLayer->rootDirectory->createOrOpen(tr->tr, {StringRef(ns.first), LiteralStringRef("system.indexes")}));
+		state Reference<DirectorySubspace> tindexDirectory = wait(docLayer->rootDirectory->createOrOpen(
+		    tr->tr, {StringRef(ns.first), StringRef(DocLayerConstants::SYSTEM_INDEXES)}));
 		state Reference<DirectorySubspace> tmetadataDirectory = wait(docLayer->rootDirectory->createOrOpen(
-		    tr->tr, {StringRef(ns.first), StringRef(ns.second), LiteralStringRef("metadata")}));
+		    tr->tr, {StringRef(ns.first), StringRef(ns.second), StringRef(DocLayerConstants::METADATA)}));
 		state Reference<UnboundCollectionContext> tcx =
 		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(tcollectionDirectory, tmetadataDirectory));
 		// fprintf(stderr, "%s.%s Creating: Collection dir: %s Metadata dir:%s Caller:%s\n", dbName.c_str(),
@@ -252,7 +253,9 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 		int64_t _ = wait(executeUntilCompletionTransactionally(buildingPlan, tr));
 
 		state Reference<Plan> finalizePlan = ec->isolatedWrapOperationPlan(
-		    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm, std::string("ready"), info.buildId)), 0, -1);
+		    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm,
+		                                  std::string(DocLayerConstants::INDEX_STATUS_READY), info.buildId)),
+		    0, -1);
 		int64_t _ = wait(executeUntilCompletionTransactionally(finalizePlan, ec->getOperationTransaction()));
 
 		return Void();
@@ -266,7 +269,9 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 			// UpdateIndexStatusPlan, if it has that optional parameter, will return an error in the event that the
 			// buildId field does not exist (as is the case for 'ready' indexes).
 			state Reference<Plan> errorPlan = ec->isolatedWrapOperationPlan(
-			    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm, std::string("error"), info.buildId)), 0, -1);
+			    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm,
+			                                  std::string(DocLayerConstants::INDEX_STATUS_ERROR), info.buildId)),
+			    0, -1);
 			try {
 				int64_t _ = wait(executeUntilCompletionTransactionally(errorPlan, ec->getOperationTransaction()));
 				okay = true;

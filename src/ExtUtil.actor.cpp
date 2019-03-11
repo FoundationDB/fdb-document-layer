@@ -771,7 +771,8 @@ Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
 	std::string nsStr = ns.first + "." + ns.second;
 	Future<Reference<UnboundCollectionContext>> unbound = mm->indexesCollection(tr, ns.first);
 	return map(unbound, [nsStr](Reference<UnboundCollectionContext> unbound) {
-		Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(nsStr))), false);
+		Reference<IPredicate> pred =
+		    any_predicate(DocLayerConstants::NS_FIELD, ref(new EqPredicate(DataValue(nsStr))), false);
 		return FilterPlan::construct_filter_plan_no_pushdown(unbound, ref(new TableScanPlan(unbound)), pred);
 	});
 }
@@ -779,7 +780,8 @@ Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
 Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection,
                                             Namespace const& ns) {
 	std::string nsStr = ns.first + "." + ns.second;
-	Reference<IPredicate> pred = any_predicate("ns", ref(new EqPredicate(DataValue(nsStr))), false);
+	Reference<IPredicate> pred =
+	    any_predicate(DocLayerConstants::NS_FIELD, ref(new EqPredicate(DataValue(nsStr))), false);
 	return FilterPlan::construct_filter_plan_no_pushdown(indexesCollection, ref(new TableScanPlan(indexesCollection)),
 	                                                     pred);
 }
@@ -831,7 +833,7 @@ Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector) {
 			throw invalid_projection();
 		} else {
 			bool elIncluded = el.trueValue();
-			if (fieldName == "_id") {
+			if (fieldName == DocLayerConstants::ID_FIELD) {
 				// Specifying _id:1 makes the projection an inclusive projection
 				if (elIncluded) {
 					if (hasIncludeValue && root->included) {
@@ -893,7 +895,7 @@ Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector) {
 	}
 
 	if (includeID != root->included) {
-		root->fields["_id"] = Reference<Projection>(new Projection(includeID));
+		root->fields[DocLayerConstants::ID_FIELD] = Reference<Projection>(new Projection(includeID));
 	}
 
 	Projection::filterUnneededReads(root);

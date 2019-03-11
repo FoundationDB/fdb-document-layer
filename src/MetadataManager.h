@@ -23,8 +23,10 @@
 
 #pragma once
 
+#include "Constants.h"
 #include "QLContext.h"
 #include "QLTypes.h"
+
 #include "bindings/flow/DirectorySubspace.h"
 
 using Namespace = std::pair<std::string, std::string>;
@@ -43,7 +45,8 @@ struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 
 	Future<Reference<UnboundCollectionContext>> indexesCollection(Reference<DocTransaction> tr,
 	                                                              std::string const& dbName) {
-		return getUnboundCollectionContext(tr, std::make_pair(dbName, std::string("system.indexes")), true);
+		return getUnboundCollectionContext(tr, std::make_pair(dbName, std::string(DocLayerConstants::SYSTEM_INDEXES)),
+		                                   true);
 	}
 
 	static Future<Void> buildIndex(bson::BSONObj indexObj,

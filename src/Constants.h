@@ -22,6 +22,7 @@
 #define FDB_DOC_LAYER_CONSTANTS_H
 
 #include <cstdint>
+#include <string>
 
 namespace DocLayerConstants {
 
@@ -32,6 +33,45 @@ extern const uint64_t INDEX_KEY_LENGTH_LIMIT; // This is set to 10K bytes, inste
 // Document Layer Limits
 extern const uint64_t FDB_KEY_LENGTH_LIMIT;
 extern const uint64_t FDB_VALUE_LENGTH_LIMIT;
+
+// KVS DocLayer internal keys
+extern const std::string METADATA;
+extern const std::string VERSION_KEY;
+extern const std::string INDICES_KEY;
+
+extern const std::string SYSTEM_INDEXES;
+extern const std::string SYSTEM_NAMESPACES;
+
+// BSON Field name constants
+extern const char* ID_FIELD;
+extern const char* KEY_FIELD;
+extern const char* BUILD_ID_FIELD;
+extern const char* STATUS_FIELD;
+extern const char* NAME_FIELD;
+extern const char* UNIQUE_FIELD;
+extern const char* BACKGROUND_FIELD;
+extern const char* METADATA_VERSION_FIELD;
+extern const char* NS_FIELD;
+extern const char* QUERY_FIELD;
+extern const char* CURRENTLY_PROCESSING_DOC_FIELD;
+
+// Mongo Operators
+extern const std::string RENAME;
+extern const std::string SET;
+extern const std::string SET_ON_INSERT;
+extern const std::string INC;
+extern const std::string MUL;
+extern const std::string MIN;
+extern const std::string MAX;
+extern const std::string PUSH;
+extern const std::string CURRENT_DATE;
+extern const std::string ADD_TO_SET;
+extern const std::string QUERY_OPERATOR;
+
+// Index status strings
+extern const char* INDEX_STATUS_READY;
+extern const char* INDEX_STATUS_BUILDING;
+extern const char* INDEX_STATUS_ERROR;
 
 } // namespace DocLayerConstants
 

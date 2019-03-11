@@ -140,7 +140,7 @@ Reference<IPredicate> queryToPredicate(bson::BSONObj const& query, bool toplevel
 			}
 		} else if (el.isABSONObj() && !is_literal_match(el.Obj())) {
 			// If this is a top-level _id path then force use of elemMatch because _id can NOT be an array.
-			if (toplevel && strcmp(el.fieldName(), "_id") == 0)
+			if (toplevel && strcmp(el.fieldName(), DocLayerConstants::ID_FIELD) == 0)
 				terms.push_back(ExtValueOperator::toPredicate("$elemMatch", el.fieldName(), el));
 			else
 				valueQueryToPredicates(el.Obj(), el.fieldName(), terms);
@@ -211,7 +211,7 @@ ExtMsgQuery::ExtMsgQuery(ExtMsgHeader* header, const uint8_t* body) : header(hea
 		ptr += returnFieldSelector.objsize();
 	}
 
-	ns = getDBCollectionPair(collName, std::make_pair("query", query.toString()));
+	ns = getDBCollectionPair(collName, std::make_pair(DocLayerConstants::QUERY_FIELD, query.toString()));
 	if (ns.second == "$cmd") {
 		isCmd = true;
 		// Mark it empty for now, command would be responsible for setting collection name later.
@@ -318,7 +318,7 @@ ACTOR static Future<Reference<ExtMsgReply>> listCollections(Reference<ExtMsgQuer
 
 	for (Standalone<StringRef> s : names) {
 		std::string str = databaseNameFromQuery + "." + s.toString();
-		reply->addDocument(BSON("name" << str));
+		reply->addDocument(BSON(DocLayerConstants::NAME_FIELD << str));
 	}
 
 	return reply;
@@ -394,7 +394,7 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 
 	try {
 		// Return `listCollections()` if `ns` is like "name.system.namespaces"
-		if (msg->ns.second == namespaces) {
+		if (msg->ns.second == DocLayerConstants::SYSTEM_NAMESPACES) {
 			Reference<ExtMsgReply> collections = wait(listCollections(msg, dtr, ec->docLayer->rootDirectory));
 			replyStream.send(collections);
 			throw end_of_stream();
@@ -403,10 +403,11 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, msg->ns, true));
 
 		// The following is required by ambiguity in the wire protocol we are speaking
-		bson::BSONObj queryObject =
-		    msg->query.hasField("query")
-		        ? msg->query.getObjectField("query")
-		        : msg->query.hasField("$query") ? msg->query.getObjectField("$query") : msg->query;
+		bson::BSONObj queryObject = msg->query.hasField(DocLayerConstants::QUERY_FIELD)
+		                                ? msg->query.getObjectField(DocLayerConstants::QUERY_FIELD)
+		                                : msg->query.hasField(DocLayerConstants::QUERY_OPERATOR.c_str())
+		                                      ? msg->query.getObjectField(DocLayerConstants::QUERY_OPERATOR.c_str())
+		                                      : msg->query;
 
 		// Plan needs to be state in case we have a sort plan,
 		// which in turn holds a reference to the actor that does the sorting
@@ -640,7 +641,8 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 		valueEncodedId = encodedIds.get().valueEncoded;
 		idObj = encodedIds.get().objValue;
 		dcx = cx->cx->getSubContext(encodedId);
-		Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+		Optional<DataValue> existing =
+		    wait(dcx->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));
 		if (existing.present())
 			throw duplicated_key_field();
 	}
@@ -657,9 +659,9 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 	}
 
 	if (idObj.present())
-		insertElementRecursive("_id", idObj.get(), dcx);
+		insertElementRecursive(DocLayerConstants::ID_FIELD, idObj.get(), dcx);
 
-	dcx->set(DataValue("_id", DVTypeCode::STRING).encode_key_part(), valueEncodedId);
+	dcx->set(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part(), valueEncodedId);
 
 	return dcx;
 }
@@ -706,7 +708,8 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 			valueEncodedId = encodedIds.get().valueEncoded;
 			idObj = encodedIds.get().objValue;
 			dcx = cx->cx->getSubContext(encodedId);
-			Optional<DataValue> existing = wait(dcx->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+			Optional<DataValue> existing =
+			    wait(dcx->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));
 			if (existing.present())
 				throw duplicated_key_field();
 		}
@@ -717,25 +720,28 @@ struct ExtIndexInsert : ConcreteInsertOp<ExtIndexInsert> {
 
 		dcx->set(LiteralStringRef(""), DataValue::subObject().encode_value());
 
-		dcx->set(DataValue("ns", DVTypeCode::STRING).encode_key_part(), DataValue(self->ns).encode_value());
-		dcx->set(DataValue("name", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->indexObj.getStringField("name"), DVTypeCode::STRING).encode_value());
-		dcx->set(DataValue("key", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->indexObj.getObjectField("key")).encode_value());
-		dcx->set(DataValue("status", DVTypeCode::STRING).encode_key_part(),
-		         DataValue("building", DVTypeCode::STRING).encode_value());
-		dcx->set(DataValue("metadata version", DVTypeCode::STRING).encode_key_part(), DataValue(1).encode_value());
-		dcx->set(DataValue("build id", DVTypeCode::STRING).encode_key_part(),
+		dcx->set(DataValue(DocLayerConstants::NS_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->ns).encode_value());
+		dcx->set(
+		    DataValue(DocLayerConstants::NAME_FIELD, DVTypeCode::STRING).encode_key_part(),
+		    DataValue(self->indexObj.getStringField(DocLayerConstants::NAME_FIELD), DVTypeCode::STRING).encode_value());
+		dcx->set(DataValue(DocLayerConstants::KEY_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->indexObj.getObjectField(DocLayerConstants::KEY_FIELD)).encode_value());
+		dcx->set(DataValue(DocLayerConstants::STATUS_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(DocLayerConstants::INDEX_STATUS_BUILDING, DVTypeCode::STRING).encode_value());
+		dcx->set(DataValue(DocLayerConstants::METADATA_VERSION_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(1).encode_value());
+		dcx->set(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part(),
 		         DataValue(self->build_id.toString()).encode_value());
-		dcx->set(DataValue("unique", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->indexObj.getBoolField("unique")).encode_value());
-		dcx->set(DataValue("background", DVTypeCode::STRING).encode_key_part(),
-		         DataValue(self->indexObj.getBoolField("background")).encode_value());
+		dcx->set(DataValue(DocLayerConstants::UNIQUE_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD)).encode_value());
+		dcx->set(DataValue(DocLayerConstants::BACKGROUND_FIELD, DVTypeCode::STRING).encode_key_part(),
+		         DataValue(self->indexObj.getBoolField(DocLayerConstants::BACKGROUND_FIELD)).encode_value());
 
 		if (idObj.present())
-			insertElementRecursive("_id", idObj.get(), dcx);
+			insertElementRecursive(DocLayerConstants::ID_FIELD, idObj.get(), dcx);
 
-		dcx->set(DataValue("_id", DVTypeCode::STRING).encode_key_part(), valueEncodedId);
+		dcx->set(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part(), valueEncodedId);
 
 		return dcx;
 	}
@@ -748,28 +754,28 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
                                                    Reference<DocTransaction> tr,
                                                    Namespace ns) {
 
-	if (!indexObj.hasField("name"))
+	if (!indexObj.hasField(DocLayerConstants::NAME_FIELD))
 		throw no_index_name();
 
-	if (indexObj.getObjectField("key").nFields() == 1) {
-		auto keyEl = indexObj.getObjectField("key").firstElement();
+	if (indexObj.getObjectField(DocLayerConstants::KEY_FIELD).nFields() == 1) {
+		auto keyEl = indexObj.getObjectField(DocLayerConstants::KEY_FIELD).firstElement();
 		if (!keyEl.isNumber() || !(keyEl.Number() == 1.0 || keyEl.Number() == -1.0)) {
 			(keyEl.isString() && keyEl.str() == "text") ? throw unsupported_index_type()
 			                                            : throw bad_index_specification();
 		}
-		if (!strcmp(keyEl.fieldName(), "_id")) {
+		if (!strcmp(keyEl.fieldName(), DocLayerConstants::ID_FIELD)) {
 			return WriteCmdResult();
 		}
 	} else {
 		bool first = true;
 		bool ascending;
-		for (bson::BSONObjIterator i = indexObj.getObjectField("key").begin(); i.more();) {
+		for (bson::BSONObjIterator i = indexObj.getObjectField(DocLayerConstants::KEY_FIELD).begin(); i.more();) {
 			auto el = i.next();
 			if (!el.isNumber()) {
 				(el.isString() && el.str() == "text") ? throw unsupported_index_type()
 				                                      : throw bad_index_specification();
 			}
-			if (!strcmp(el.fieldName(), "_id")) {
+			if (!strcmp(el.fieldName(), DocLayerConstants::ID_FIELD)) {
 				throw compound_id_index();
 			}
 			double direction = el.Number();
@@ -785,8 +791,8 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 		}
 	}
 
-	state bool background = indexObj.hasField("background") && indexObj.getField("background").trueValue();
-	if (indexObj.hasField("unique") && indexObj.getBoolField("unique") && background) {
+	state bool background = indexObj.hasField(DocLayerConstants::BACKGROUND_FIELD);
+	if (indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD) && background) {
 		throw unique_index_background_construction();
 	}
 
@@ -818,7 +824,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
                                          Reference<ExtConnection> ec) {
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
 
-	if (ns.second == indexes_collection) {
+	if (ns.second == DocLayerConstants::SYSTEM_INDEXES) {
 		if (verboseLogging)
 			TraceEvent("BD_doInsertRun").detail("AttemptIndexInsertion", "");
 		if (documents->size() != 1) {
@@ -826,7 +832,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 		}
 		bson::BSONObj firstDoc = documents->front();
 
-		const char* collnsStr = firstDoc.getField("ns").String().c_str();
+		const char* collnsStr = firstDoc.getField(DocLayerConstants::NS_FIELD).String().c_str();
 		const auto collns = getDBCollectionPair(collnsStr, std::make_pair("msg", "Bad coll name in index insert"));
 		WriteCmdResult result = wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, collns));
 		return result;
@@ -922,19 +928,19 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 			throw update_operator_empty_parameter();
 		}
 
-		if (upsert && operatorName == "$setOnInsert")
-			operatorName = "$set";
+		if (upsert && operatorName == DocLayerConstants::SET_ON_INSERT)
+			operatorName = DocLayerConstants::SET;
 
 		for (auto j = el.Obj().begin(); j.more();) {
 			bson::BSONElement subel = j.next();
 			auto fn = std::string(subel.fieldName());
-			if (fn == "_id") {
-				if (operatorName != "$set" && operatorName != "$setOnInsert") {
+			if (fn == DocLayerConstants::ID_FIELD) {
+				if (operatorName != DocLayerConstants::SET && operatorName != DocLayerConstants::SET_ON_INSERT) {
 					throw cant_modify_id();
 				}
 			}
 			staticValidateModifiedFields(fn, &affectedFields, &prefixesOfAffectedFields);
-			if (operatorName == "$rename") {
+			if (operatorName == DocLayerConstants::RENAME) {
 				if (!subel.isString())
 					throw bad_rename_target();
 				staticValidateModifiedFields(subel.String(), &affectedFields, &prefixesOfAffectedFields);
@@ -951,9 +957,10 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 }
 
 bool shouldCreateRoot(std::string operatorName) {
-	return operatorName == "$set" || operatorName == "$inc" || operatorName == "$mul" ||
-	       operatorName == "$currentDate" || operatorName == "$max" || operatorName == "$min" ||
-	       operatorName == "$push" || operatorName == "$addToSet";
+	return operatorName == DocLayerConstants::SET || operatorName == DocLayerConstants::INC ||
+	       operatorName == DocLayerConstants::MUL || operatorName == DocLayerConstants::CURRENT_DATE ||
+	       operatorName == DocLayerConstants::MAX || operatorName == DocLayerConstants::MIN ||
+	       operatorName == DocLayerConstants::PUSH || operatorName == DocLayerConstants::ADD_TO_SET;
 }
 
 ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
@@ -966,13 +973,13 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 		auto el = i.next();
 
 		std::string operatorName = el.fieldName();
-		if (upsert && operatorName == "$setOnInsert")
-			operatorName = "$set";
+		if (upsert && operatorName == DocLayerConstants::SET_ON_INSERT)
+			operatorName = DocLayerConstants::SET;
 		for (auto j = el.Obj().begin(); j.more();) {
 			bson::BSONElement subel = j.next();
 			auto fn = std::string(subel.fieldName());
-			if (fn == "_id") {
-				if (operatorName == "$set" || operatorName == "$setOnInsert") {
+			if (fn == DocLayerConstants::ID_FIELD) {
+				if (operatorName == DocLayerConstants::SET || operatorName == DocLayerConstants::SET_ON_INSERT) {
 					if (extractEncodedIds(subel.wrap()).get().keyEncoded != encodedId) {
 						throw cant_modify_id();
 					}
@@ -982,13 +989,14 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 				auto upOneFn = upOneLevel(fn);
 				if (!upOneFn.empty())
 					futures.push_back(ensureValidObject(cx, upOneFn, getLastPart(fn), true));
-			} else if (operatorName != "$setOnInsert") { // Don't bother checking/setting the targeted field if we hit
-				                                         // $setOnInsert and aren't upserting
+			} else if (operatorName !=
+			           DocLayerConstants::SET_ON_INSERT) { // Don't bother checking/setting the targeted field if we hit
+				// $setOnInsert and aren't upserting
 				auto upOneFn = upOneLevel(fn);
 				if (!upOneFn.empty())
 					futures.push_back(ensureValidObject(cx, upOneFn, getLastPart(fn), false));
 			}
-			if (operatorName == "$rename") {
+			if (operatorName == DocLayerConstants::RENAME) {
 				auto renameTarget = subel.String();
 				auto upOneRenameTarget = upOneLevel(renameTarget);
 				if (!upOneRenameTarget.empty())
@@ -1299,16 +1307,19 @@ struct ExtReplaceUpdate : ConcreteUpdateOp<ExtReplaceUpdate> {
 			throw replace_with_id();
 		}
 
-		Optional<DataValue> iddv2 = wait(document->get(DataValue("_id", DVTypeCode::STRING).encode_key_part()));
+		Optional<DataValue> iddv2 =
+		    wait(document->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));
 		document->clearDescendants();
 
 		if (iddv2.get().getBSONType() == bson::BSONType::Object) {
 			DataValue iddv = DataValue::decode_key_part(keyEncodedId);
 			if (iddv.getBSONType() == bson::BSONType::Object) {
-				insertElementRecursive(iddv.wrap("_id").getField("_id"), document);
+				insertElementRecursive(iddv.wrap(DocLayerConstants::ID_FIELD).getField(DocLayerConstants::ID_FIELD),
+				                       document);
 			}
 		} else {
-			document->set(DataValue("_id", DVTypeCode::STRING).encode_key_part(), iddv2.get().encode_value());
+			document->set(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part(),
+			              iddv2.get().encode_value());
 		}
 
 		for (auto i = self->replaceWith.begin(); i.more();) {

@@ -23,19 +23,18 @@
 
 #pragma once
 
-#include "flow/flow.h"
-
-#include "bson.h"
-
-#include "IDispatched.h"
-
+#include "Constants.h"
 #include "Ext.h"
 #include "ExtOperator.h"
 #include "ExtStructs.h"
 #include "ExtUtil.actor.h"
-
+#include "IDispatched.h"
 #include "QLPlan.h"
 #include "QLPredicate.h"
+
+#include "flow/flow.h"
+
+#include "bson.h"
 
 struct ExtMsg : IDispatched<ExtMsg, int32_t, std::function<ExtMsg*(ExtMsgHeader*, const uint8_t*)>>,
                 ReferenceCounted<ExtMsg> {
@@ -216,9 +215,6 @@ private:
 	ExtMsgKillCursors(ExtMsgHeader*, const uint8_t*);
 	friend struct ExtMsg::Factory<ExtMsgKillCursors>;
 };
-
-static const char* namespaces = "system.namespaces";
-static const char* indexes_collection = "system.indexes";
 
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, const bson::BSONObj& query);
 std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool multi, bool upsert);
