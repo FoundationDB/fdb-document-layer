@@ -111,7 +111,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 			Void _ = wait(Internal_doDropDatabase(ec->tr, query, ec->docLayer->rootDirectory));
 		} else {
 			Void _ = wait(runRYWTransaction(ec->docLayer->database,
-			                                [this](Reference<DocTransaction> tr) {
+			                                [=](Reference<DocTransaction> tr) {
 				                                return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
 			                                },
 			                                ec->options.retryLimit, ec->options.timeoutMillies));
@@ -372,7 +372,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropCollection(Reference<ExtConnec
 		} else {
 			Void _ = wait(runRYWTransaction(
 			    ec->docLayer->database,
-			    [this](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
+			    [=](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
 			    ec->options.retryLimit, ec->options.timeoutMillies));
 		}
 
@@ -568,7 +568,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					} else {
 						int result =
 						    wait(runRYWTransaction(ec->docLayer->database,
-						                           [this](Reference<DocTransaction> tr) {
+						                           [=](Reference<DocTransaction> tr) {
 							                           return internal_doDropIndexesActor(tr, query->ns, ec->mm);
 						                           },
 						                           ec->options.retryLimit, ec->options.timeoutMillies));
@@ -587,7 +587,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					} else {
 						std::pair<int, int> result = wait(runRYWTransaction(
 						    ec->docLayer->database,
-						    [this, el](Reference<DocTransaction> tr) {
+						    [=](Reference<DocTransaction> tr) {
 							    return dropIndexMatching(tr, query->ns, "name",
 							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
 						    },
@@ -606,7 +606,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				} else {
 					std::pair<int, int> result =
 					    wait(runRYWTransaction(ec->docLayer->database,
-					                           [this, el](Reference<DocTransaction> tr) {
+					                           [=](Reference<DocTransaction> tr) {
 						                           return dropIndexMatching(tr, query->ns, "key", DataValue(el.Obj()),
 						                                                    ec->mm);
 					                           },
@@ -627,7 +627,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 			} else {
 				int result = wait(runRYWTransaction(
 				    ec->docLayer->database,
-				    [this](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
+				    [=](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
 				    ec->options.retryLimit, ec->options.timeoutMillies));
 				dropped = result;
 			}
@@ -814,7 +814,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
 		} else {
 			Void _ = wait(runRYWTransaction(
 			    ec->docLayer->database,
-			    [this](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
+			    [=](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
 			    ec->options.retryLimit, ec->options.timeoutMillies));
 		}
 
@@ -1339,9 +1339,9 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		state PromiseStream<Reference<ScanReturnedContext>> filteredResults;
 
 		Void _ = wait(asyncFilter(queryResults,
-		                          [this](Reference<ScanReturnedContext> queryResult) mutable {
+		                          [=](Reference<ScanReturnedContext> queryResult) mutable {
 			                          scanned++;
-			                          return map(predicate->evaluate(queryResult), [this](bool keep) mutable {
+			                          return map(predicate->evaluate(queryResult), [=](bool keep) mutable {
 				                          if (keep)
 					                          filtered++;
 				                          // For `distinct`, accumulated distinct values are already held in the
