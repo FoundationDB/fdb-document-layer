@@ -194,14 +194,14 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 					throw connection_failed();
 				}
 				when(Void _ = wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
-					auto sr = ec->bc->peekExact(sizeof(ExtMsgHeader));
+					auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
 
-					state ExtMsgHeader* header = (ExtMsgHeader*)sr.begin();
+					state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
 
 					// FIXME: Check for unreasonable lengths
 
 					Void _ = wait(ec->bc->onBytesAvailable(header->messageLength));
-					auto sr = ec->bc->peekExact(header->messageLength);
+					auto messageBytes = ec->bc->peekExact(header->messageLength);
 
 					DocumentLayer::metricReporter->captureHistogram("messageLength", header->messageLength);
 					DocumentLayer::metricReporter->captureMeter("messageRate", 1);
@@ -211,8 +211,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 					   for everything at and below processRequest to assume that
 					   body - header == sizeof(ExtMsgHeader) */
 					ec->updateMaxReceivedRequestID(header->requestID);
-					Void _ = wait(
-					    processRequest(ec, (ExtMsgHeader*)sr.begin(), sr.begin() + sizeof(ExtMsgHeader), finished));
+					Void _ = wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
+					                             messageBytes.begin() + sizeof(ExtMsgHeader), finished));
 
 					ec->bc->advance(header->messageLength);
 					msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
@@ -256,20 +256,20 @@ ACTOR Future<Void> extProxyHandler(Reference<BufferedConnection> src,
 	loop {
 		choose {
 			when(Void _ = wait(src->onBytesAvailable(sizeof(ExtMsgHeader)))) {
-				auto sr = src->peekExact(sizeof(ExtMsgHeader));
+				auto headerBytes = src->peekExact(sizeof(ExtMsgHeader));
 
-				state ExtMsgHeader* header = (ExtMsgHeader*)sr.begin();
+				state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
 
 				Void _ = wait(src->onBytesAvailable(header->messageLength) && dest->onWritable());
-				auto sr = src->peekExact(header->messageLength);
+				auto messageBytes = src->peekExact(header->messageLength);
 
 				Promise<Void> finished;
 
-				Reference<ExtMsg> msg =
-				    ExtMsg::create((ExtMsgHeader*)sr.begin(), sr.begin() + sizeof(ExtMsgHeader), finished);
+				Reference<ExtMsg> msg = ExtMsg::create((ExtMsgHeader*)messageBytes.begin(),
+				                                       messageBytes.begin() + sizeof(ExtMsgHeader), finished);
 				fprintf(stderr, "\n%s: %s\n", label.c_str(), msg->toString().c_str());
 
-				dest->write(sr);
+				dest->write(messageBytes);
 
 				src->advance(header->messageLength);
 				src->pop(header->messageLength);
@@ -403,11 +403,11 @@ ACTOR static void runUnitTests(StringRef testPattern) {
 		// self->totalWallTime += wallTime;
 		// self->totalSimTime += simTime;
 
-		auto test = *t;
+		auto unitTest = *t;
 		TraceEvent(result.code() != error_code_success ? SevError : SevInfo, "UnitTest")
-		    .detail("Name", test->name)
-		    .detail("File", test->file)
-		    .detail("Line", test->line)
+		    .detail("Name", unitTest->name)
+		    .detail("File", unitTest->file)
+		    .detail("Line", unitTest->line)
 		    .error(result, true)
 		    .detail("WallTime", wallTime)
 		    .detail("FlowTime", simTime);
