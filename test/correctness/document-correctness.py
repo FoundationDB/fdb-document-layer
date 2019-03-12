@@ -277,6 +277,41 @@ def one_iteration(collection1, collection2, ns, seed):
     num_doc = ns['num_doc']
     fname = "unknown"
 
+    def _run_operation_(op1, op2):
+        okay = True
+        exceptionOne = None
+        exceptionTwo = None
+        func1, args1, kwargs1 = op1
+        func2, args2, kwargs2 = op2
+        try:
+            func1(*args1, **kwargs1)
+        except pymongo.errors.OperationFailure as e:
+            exceptionOne = e
+        except MongoModelException as e:
+            exceptionOne = e
+        try:
+            func1(*args2, **kwargs2)
+        except pymongo.errors.OperationFailure as e:
+            exceptionTwo = e
+        except MongoModelException as e:
+            exceptionTwo = e
+
+        if ((exceptionOne is None and exceptionTwo is None)
+            or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
+            pass
+        else:
+            print '\033[91m Unmatched result: \033[0m'
+            print '\033[91m', type(exceptionOne), ': ', str(exceptionOne), '\033[0m'
+            print '\033[91m', type(exceptionTwo), ': ', str(exceptionTwo), '\033[0m'
+            okay = False
+            if [x for x in ignored_exceptions if x.strip() == str(exceptionOne).strip().strip('\"').strip('.')]:
+                print "Ignoring EXCEPTION :", str(exceptionOne)
+                okay = True
+            elif [x for x in ignored_exceptions if x.strip() == str(exceptionTwo).strip().strip('\"').strip('.')]:
+                print "Ignoring EXCEPTION :", str(exceptionTwo)
+                okay = True
+        return okay
+
     try:
         okay = True
 
@@ -300,40 +335,40 @@ def one_iteration(collection1, collection2, ns, seed):
 
         if indexes_first:
             for i in indexes:
-                transactional_shim.ensure_index(collection1, i)
-                transactional_shim.ensure_index(collection2, i)
-
+                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
+                # uniqueIndex = gen.global_prng.choice([True, False])
+                uniqueIndex = False
+                okay = _run_operation_(
+                    (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
+                    (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
+                    )
+                if not okay:
+                    return (okay, fname, None)
         docs = []
         for i in range(0, num_doc):
             doc = gen.random_document(True)
             docs.append(doc)
 
-        exception = []
-        exception_msg = []
-        for c in [collection1, collection2]:
-            try:
-                transactional_shim.insert(c, docs)
-            except pymongo.errors.OperationFailure as e:
-                exception.append(e)
-                exception_msg.append(' '.join(
-                    ['Caught PyMongo error with collection {} . Offending insert({})'.format(str(c), str(docs))]))
-            except MongoModelException as e:
-                exception.append(e)
-                exception_msg.append(' '.join(
-                    ['Caught MongoModel error with collection {} . Offending insert({})'.format(str(c), str(docs))]))
+        okay = _run_operation_(
+            (transactional_shim.insert, (collection1, docs), {}),
+            (transactional_shim.insert, (collection2, docs), {})
+            )
+        if not okay:
+            print "Failed when doing inserts"
+            return (okay, fname, None)
 
         if not indexes_first:
             for i in indexes:
-                transactional_shim.ensure_index(collection1, i)
-                transactional_shim.ensure_index(collection2, i)
-
-        if len(exception_msg) == 1:
-            print '\033[91m', exception[0], '\033[0m'
-            print '\033[91m', exception_msg[0], '\033[0m'
-            okay = False
-
-        if exception_msg:
-            return (okay, fname, None)
+                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
+                # uniqueIndex = gen.global_prng.choice([True, False])
+                uniqueIndex = False
+                okay = _run_operation_(
+                    (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
+                    (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
+                    )
+                if not okay:
+                    print "Failed when adding index after insert"
+                    return (okay, fname, None)
 
         okay = check_query(dict(), collection1, collection2)
         if not okay:
@@ -371,16 +406,17 @@ def one_iteration(collection1, collection2, ns, seed):
             return (okay, fname, None)
 
     except Exception as e:
-        # import traceback
-        # traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return (False, fname, e)
 
     return (okay, fname, None)
 
 
 ignored_exceptions = [
-    # MongoModel doesn't implement indexes. Index correctness can be simulated but not failures.
     "Multi-multikey index size exceeds maximum value",
+    "key too large to index", # it's hard to estimate the exact byte size of KVS key to be inserted, ignore for now.
+    "Key length exceeds limit",
     "Operation aborted because the transaction timed out",
 ]
 
@@ -411,12 +447,6 @@ def test_forever(ns):
         print 'ID : ' + str(os.getpid()) + ' iteration : ' + str(jj)
         print '========================================================'
         (okay, fname, e) = one_iteration(collection1, collection2, ns, seed)
-
-        if not okay and e is not None:
-            print "EXCEPTION :", str(e)
-            if [x for x in ignored_exceptions if x.strip() == str(e).strip().strip('\"').strip('.')]:
-                print "Ignoring EXCEPTION :", str(e)
-                okay = True
 
         if not okay:
             # print 'Seed for failing iteration: ', seed
