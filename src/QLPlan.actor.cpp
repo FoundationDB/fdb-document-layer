@@ -325,14 +325,14 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
                                     int scanID,
                                     GenFutureStream<KeyValue> index_keys,
                                     PromiseStream<Reference<ScanReturnedContext>> dis,
-                                    Reference<FlowLockHolder> inputLock) {
+                                    Reference<FlowLock> inputLock) {
 	// Each key has a document ID as its last entry
 	state Key lastKey;
 	state PlanCheckpoint::FlowControlLock* outputLock = checkpoint->getDocumentFinishedLock();
 	try {
 		loop {
 			state KeyValue kv = waitNext(index_keys);
-			inputLock->lock->release();
+			inputLock->release();
 			Void _ = wait(outputLock->take());
 			lastKey = Key(kv.key, kv.arena());
 			// fprintf(stderr, "lastkey: %s\n", printable(lastKey).c_str());
@@ -495,7 +495,7 @@ FutureStream<Reference<ScanReturnedContext>> IndexScanPlan::execute(PlanCheckpoi
 	FDB::Key upperBound =
 	    std::max<FDB::Key>(lowerBound, std::min(end.present() ? strinc(end.get()) : LiteralStringRef("\xff"),
 	                                            checkpoint->getBounds(scanID).end));
-	Reference<FlowLockHolder> flowControlLock(new FlowLockHolder(new FlowLock(1)));
+	Reference<FlowLock> flowControlLock(new FlowLock(1));
 	GenFutureStream<KeyValue> kvs = index_cx->getDescendants(lowerBound, upperBound, flowControlLock);
 	checkpoint->addOperation(kvs.actor && toDocInfo(checkpoint, bcx->cx, scanID, kvs, p, flowControlLock), p);
 
@@ -537,14 +537,14 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
                                    int scanID,
                                    GenFutureStream<KeyValue> kvs,
                                    PromiseStream<Reference<ScanReturnedContext>> output,
-                                   Reference<FlowLockHolder> inputLock) {
+                                   Reference<FlowLock> inputLock) {
 	state PlanCheckpoint::FlowControlLock* outputLock = checkpoint->getDocumentFinishedLock();
 	state Standalone<StringRef> lastPK;
 	state Key lastKey;
 	try {
 		loop {
 			state KeyValue kv = waitNext(kvs);
-			inputLock->lock->release();
+			inputLock->release();
 			StringRef curPK(DataKey::decode_item(kv.key, 0));
 			if (curPK.compare(lastPK)) {
 				lastPK = Standalone<StringRef>(curPK, kv.arena());
@@ -582,7 +582,7 @@ FutureStream<Reference<ScanReturnedContext>> PrimaryKeyLookupPlan::execute(PlanC
 		return p.getFuture();
 	} else {
 		PromiseStream<Reference<ScanReturnedContext>> p;
-		Reference<FlowLockHolder> descendantFlowControlLock(new FlowLockHolder(new PlanCheckpoint::FlowControlLock(1)));
+		Reference<FlowLock> descendantFlowControlLock(new PlanCheckpoint::FlowControlLock(1));
 
 		Standalone<StringRef> beginKey =
 		    std::max(begin.present() ? begin.get().encode_key_part() : LiteralStringRef("\x00"),
@@ -661,7 +661,7 @@ FutureStream<Reference<ScanReturnedContext>> TableScanPlan::execute(PlanCheckpoi
 	Reference<CollectionContext> bcx = cx->bindCollectionContext(tr);
 	int scanID = checkpoint->addScan();
 	PromiseStream<Reference<ScanReturnedContext>> p;
-	Reference<FlowLockHolder> descendantFlowControlLock(new FlowLockHolder(new PlanCheckpoint::FlowControlLock(1)));
+	Reference<FlowLock> descendantFlowControlLock(new PlanCheckpoint::FlowControlLock(1));
 	Standalone<StringRef> beginKey = std::max(LiteralStringRef("\x00"), checkpoint->getBounds(scanID).begin);
 	Standalone<StringRef> endKey = std::max<Standalone<StringRef>>(
 	    beginKey, std::min(LiteralStringRef("\xff"), checkpoint->getBounds(scanID).end));
