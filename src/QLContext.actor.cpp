@@ -226,7 +226,6 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 				if (v.size() > DocLayerConstants::FDB_VALUE_LENGTH_LIMIT)
 					throw value_too_large();
 				tr->tr->set(k, v);
-				return Void();
 			});
 	}
 	void clearDescendants(Reference<DocTransaction> tr, DataKey key) override {
@@ -235,19 +234,13 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 		KeyRange kr = KeyRangeRef(_key + '\x00', _key + '\xFF');
 		auto pair = findOrCreate(tr, key);
 		if (pair.first)
-			pair.second->deferred.emplace_back([kr](Reference<DocTransaction> tr) {
-				tr->tr->clear(kr);
-				return Void();
-			});
+			pair.second->deferred.emplace_back([kr](Reference<DocTransaction> tr) { tr->tr->clear(kr); });
 	}
 	void clear(Reference<DocTransaction> tr, DataKey key) override {
 		std::string k = getFDBKey(key);
 		auto pair = findOrCreate(tr, key);
 		if (pair.first)
-			pair.second->deferred.emplace_back([k](Reference<DocTransaction> tr) {
-				tr->tr->clear(k);
-				return Void();
-			});
+			pair.second->deferred.emplace_back([k](Reference<DocTransaction> tr) { tr->tr->clear(k); });
 	}
 	std::string toString() override { return "FDBPlugin"; }
 };
