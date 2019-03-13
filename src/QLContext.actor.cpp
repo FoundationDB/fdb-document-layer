@@ -52,6 +52,18 @@ ACTOR Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr,
 	return Void();
 }
 
+/**
+ * Reset all the state in DocTransaction and call onError on transaction. Its important to
+ * cancel the pending actors before calling `tr->onError()`. onError on FDB transaction
+ * resets the transaction, concurrent actors using this Transaction will have inconsistent
+ * behaviour, if not cancelled.
+ */
+Future<Void> DocTransaction::onError(Error const& e) {
+	cancel_ongoing_index_reads();
+	infos.clear();
+	return tr->onError(e);
+}
+
 void DocTransaction::cancel_ongoing_index_reads() {
 	for (auto it : infos) {
 		for (auto actor : it.second->index_update_actors)

@@ -85,6 +85,8 @@ struct DocTransaction : ReferenceCounted<DocTransaction> {
 	}
 	static Future<Void> commitChanges(Reference<DocTransaction> const& self, std::string const& docPrefix);
 
+	Future<Void> onError(Error const& e);
+
 	// If you are about to call this function, think very carefully about why you are doing that. It is not safe to call
 	// in general. Look at the comments in doNonIsolatedRW() for more on what it's for.
 	void cancel_ongoing_index_reads();

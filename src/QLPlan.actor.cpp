@@ -857,7 +857,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 					bufferedDocs.pop_front();
 				}
 			} catch (Error& e) {
-				Void _ = wait(dtr->tr->onError(e));
+				Void _ = wait(dtr->onError(e));
 				finished = false;
 			}
 
@@ -957,7 +957,7 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 					throw;
 				if (e.code() == error_code_end_of_stream)
 					throw;
-				Void _ = wait(tr->tr->onError(e));
+				Void _ = wait(tr->onError(e));
 				tr = self->newTransaction(); // FIXME: keep dtr->tr if this is a retry
 			}
 		}
