@@ -1224,7 +1224,7 @@ struct ListCollectionsCmd {
 					break;
 				}
 				if (e.code() != error_code_actor_cancelled) {
-					Void _ = wait(dtr->tr->onError(e));
+					Void _ = wait(dtr->onError(e));
 				}
 			}
 		}
@@ -1304,7 +1304,7 @@ struct ListIndexesCmd {
 				return reply;
 			} catch (Error& e) {
 				if (e.code() != error_code_actor_cancelled) {
-					Void _ = wait(dtr->tr->onError(e));
+					Void _ = wait(dtr->onError(e));
 				}
 			}
 		}
