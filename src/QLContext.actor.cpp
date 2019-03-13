@@ -379,6 +379,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				// When building the unique index, each record out of the table scan needs to wait for the previous
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
+				ASSERT(self->flowControlLock.present());
 				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 				Void _ = wait(self->flowControlLock.get()->take(1));
 
@@ -506,6 +507,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				// When building the unique index, each record out of the table scan needs to wait for the previous
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
+				ASSERT(self->flowControlLock.present());
 				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 				Void _ = wait(self->flowControlLock.get()->take(1));
 
