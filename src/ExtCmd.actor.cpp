@@ -64,15 +64,15 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 			if (value.getString() == indexObj.getStringField(field.c_str())) {
 				any = true;
 				matchingIndex = indexesCollection->bindCollectionContext(tr)->cx->getSubContext(
-				    DataValue(indexObj.getField("_id")).encode_key_part());
-				matchingName = std::string(indexObj.getStringField("name"));
+				    DataValue(indexObj.getField(DocLayerConstants::ID_FIELD)).encode_key_part());
+				matchingName = std::string(indexObj.getStringField(DocLayerConstants::NAME_FIELD));
 			}
 		} else if (value.getBSONType() == bson::BSONType::Object) {
 			if (value.getPackedObject().woCompare(indexObj.getObjectField(field.c_str())) == 0) {
 				any = true;
 				matchingIndex = indexesCollection->bindCollectionContext(tr)->cx->getSubContext(
-				    DataValue(indexObj.getField("_id")).encode_key_part());
-				matchingName = std::string(indexObj.getStringField("name"));
+				    DataValue(indexObj.getField(DocLayerConstants::ID_FIELD)).encode_key_part());
+				matchingName = std::string(indexObj.getStringField(DocLayerConstants::NAME_FIELD));
 			}
 		}
 	}
@@ -120,7 +120,11 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 1.0 << "err" << e.what() << "code" << e.code()));
+		// clang-format off
+		reply->addDocument(BSON("ok" << 1.0 <<
+		                        "err" << e.what() <<
+		                        "code" << e.code()));
+		// clang-format on
 		return reply;
 	}
 }
@@ -140,8 +144,10 @@ struct WhatsmyuriCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("you" << nmc->bc->getPeerAddress().toString() << "ok" << 1.0));
-
+		// clang-format off
+		reply->addDocument(BSON("you" << nmc->bc->getPeerAddress().toString() <<
+		                        "ok" << 1.0));
+		// clang-format on
 		return Future<Reference<ExtMsgReply>>(reply);
 	}
 };
@@ -152,7 +158,10 @@ struct GetCmdLineOptsCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("argv" << BSON_ARRAY("fdbdoc") << "ok" << 1.0));
+		// clang-format off
+		reply->addDocument(BSON("argv" << BSON_ARRAY("fdbdoc") <<
+		                        "ok" << 1.0));
+		// clang-format on
 
 		return Future<Reference<ExtMsgReply>>(reply);
 	}
@@ -217,9 +226,10 @@ struct GetLogCmd {
 		bson::BSONObjBuilder bob;
 
 		if (query->ns.first != "admin") {
-			reply->addDocument((bob << "ok" << 0.0 << "errmsg"
-			                        << "access denied; use admin db")
-			                       .obj());
+			// clang-format off
+			reply->addDocument((bob << "ok" << 0.0 <<
+			                           "errmsg" << "access denied; use admin db").obj());
+			// clang-format on
 			return reply;
 		}
 
@@ -400,7 +410,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnecti
 	try {
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 		Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, query->ns, true));
-		Reference<Plan> plan = planQuery(cx, query->query.getObjectField("query"));
+		Reference<Plan> plan = planQuery(cx, query->query.getObjectField(DocLayerConstants::QUERY_FIELD));
 		plan = ec->wrapOperationPlan(plan, true, cx);
 
 		// fprintf(stderr, "Plan: %s\n", plan->describe().toString().c_str());
@@ -442,8 +452,9 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		state bool isupdate = query->query.hasField("update");
 		state bool isupsert =
 		    isupdate && query->query.hasField("upsert") && query->query.getField("upsert").trueValue();
-		state bson::BSONObj selector =
-		    query->query.hasField("query") ? query->query.getObjectField("query").getOwned() : bson::BSONObj();
+		state bson::BSONObj selector = query->query.hasField(DocLayerConstants::QUERY_FIELD)
+		                                   ? query->query.getObjectField(DocLayerConstants::QUERY_FIELD).getOwned()
+		                                   : bson::BSONObj();
 		state Reference<Projection> projection = query->query.hasField("fields")
 		                                             ? parseProjection(query->query.getObjectField("fields").getOwned())
 		                                             : Reference<Projection>(new Projection());
@@ -524,7 +535,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		lastErrorObject.appendBool("updatedExisting", i && !returnedUpserted);
 		lastErrorObject.appendNumber("n", (int)i);
 		if (returnedUpserted)
-			lastErrorObject.append(retval.getField("_id"));
+			lastErrorObject.append(retval.getField(DocLayerConstants::ID_FIELD));
 		bson::BSONObj lastErrorObj = lastErrorObject.obj().getOwned();
 		bob.appendObject("lastErrorObject", lastErrorObj.objdata());
 		bob.appendNumber("ok", 1.0);
@@ -581,14 +592,15 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					return reply;
 				} else {
 					if (ec->explicitTransaction) {
-						std::pair<int, int> result = wait(dropIndexMatching(
-						    ec->tr, query->ns, "name", DataValue(el.String(), DVTypeCode::STRING), ec->mm));
+						std::pair<int, int> result =
+						    wait(dropIndexMatching(ec->tr, query->ns, DocLayerConstants::NAME_FIELD,
+						                           DataValue(el.String(), DVTypeCode::STRING), ec->mm));
 						dropped = result.first;
 					} else {
 						std::pair<int, int> result = wait(runRYWTransaction(
 						    ec->docLayer->database,
 						    [=](Reference<DocTransaction> tr) {
-							    return dropIndexMatching(tr, query->ns, "name",
+							    return dropIndexMatching(tr, query->ns, DocLayerConstants::NAME_FIELD,
 							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
 						    },
 						    ec->options.retryLimit, ec->options.timeoutMillies));
@@ -600,15 +612,15 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				}
 			} else if (el.type() == bson::BSONType::Object) {
 				if (ec->explicitTransaction) {
-					std::pair<int, int> result =
-					    wait(dropIndexMatching(ec->tr, query->ns, "key", DataValue(el.Obj()), ec->mm));
+					std::pair<int, int> result = wait(dropIndexMatching(ec->tr, query->ns, DocLayerConstants::KEY_FIELD,
+					                                                    DataValue(el.Obj()), ec->mm));
 					dropped = result.first;
 				} else {
 					std::pair<int, int> result =
 					    wait(runRYWTransaction(ec->docLayer->database,
 					                           [=](Reference<DocTransaction> tr) {
-						                           return dropIndexMatching(tr, query->ns, "key", DataValue(el.Obj()),
-						                                                    ec->mm);
+						                           return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD,
+						                                                    DataValue(el.Obj()), ec->mm);
 					                           },
 					                           ec->options.retryLimit, ec->options.timeoutMillies));
 					dropped = result.first;
@@ -632,13 +644,19 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				dropped = result;
 			}
 
-			reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "msg"
-			                                      << "non-_id indexes dropped for collection"
-			                                      << "ok" << 1.0));
+			// clang-format off
+			reply->addDocument(BSON("nIndexesWas" << dropped + 1 <<
+			                        "msg" << "non-_id indexes dropped for collection" <<
+			                        "ok" << 1.0));
+			// clang-format on
 			return reply;
 		}
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 0.0 << "err" << e.what() << "code" << e.code()));
+		// clang-format off
+		reply->addDocument(BSON("ok" << 0.0 <<
+		                        "err" << e.what() <<
+		                        "code" << e.code()));
+		// clang-format on
 		return reply;
 	}
 }
@@ -731,7 +749,8 @@ ACTOR static Future<Reference<ExtMsgReply>> listDatabases(Reference<DocTransacti
 		dbName = db.toString();
 		Standalone<VectorRef<StringRef>> colls = wait(rootDirectory->list(tr->tr, {db}));
 		bool empty = colls.empty();
-		bab.append(BSON("name" << dbName << "sizeOnDisk" << (empty ? 0 : 1000000) << "empty" << empty));
+		bab.append(
+		    BSON(DocLayerConstants::NAME_FIELD << dbName << "sizeOnDisk" << (empty ? 0 : 1000000) << "empty" << empty));
 	}
 
 	bob.appendArray("databases", bab.arr());
@@ -783,8 +802,8 @@ ACTOR static Future<Reference<ExtMsgReply>> getCollectionStats(Reference<ExtConn
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
 	state Reference<Plan> plan = wait(getIndexesForCollectionPlan(query->ns, tr, ec->mm));
 	state int64_t indexesCount = wait(executeUntilCompletionTransactionally(plan, tr));
-	reply->addDocument(
-	    BSON("ns" << query->ns.first + "." + query->ns.second << "nindexes" << (int)indexesCount + 1 << "ok" << 1.0));
+	reply->addDocument(BSON(DocLayerConstants::NS_FIELD << query->ns.first + "." + query->ns.second << "nindexes"
+	                                                    << (int)indexesCount + 1 << "ok" << 1.0));
 	return reply;
 }
 
@@ -1176,7 +1195,7 @@ ACTOR static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnecti
 			auto& upsertedOID = ret.upsertedOIDList[i];
 			bson::BSONObjBuilder builder;
 			builder << "index" << i;
-			builder.appendElements(DataValue::decode_key_part(upsertedOID).wrap("_id"));
+			builder.appendElements(DataValue::decode_key_part(upsertedOID).wrap(DocLayerConstants::ID_FIELD));
 			upsertBuilder << builder.done();
 		}
 		replyBuilder << "upserted" << upsertBuilder.arr();
@@ -1231,7 +1250,8 @@ struct ListCollectionsCmd {
 
 		bson::BSONArrayBuilder collList;
 		for (Standalone<StringRef> name : names) {
-			collList << BSON("name" << name.toString() << "options" << bson::BSONObjBuilder().obj());
+			collList << BSON(DocLayerConstants::NAME_FIELD << name.toString() << "options"
+			                                               << bson::BSONObjBuilder().obj());
 		}
 
 		// FIXME: Not using cursors to return collection list.
@@ -1239,7 +1259,7 @@ struct ListCollectionsCmd {
 		    // clang-format off
 							   "cursor" << BSON(
 								   "id" << (long long) 0 <<
-								   "ns" << databaseName + ".$cmd.listCollections" <<
+								   DocLayerConstants::NS_FIELD << databaseName + ".$cmd.listCollections" <<
 								   "firstBatch" << collList.arr()) <<
 								   "ok" << 1.0
 		    // clang-format on
@@ -1281,12 +1301,12 @@ struct ListIndexesCmd {
 				// Add the _id index here
 				// clang-format off
 				indexList << BSON(
-						"name" << "_id_" <<
-						"ns" << (msg->ns.first + "." + msg->ns.second) <<
-						"key" << BSON("_id" << 1) <<
-						"metadata version" << 1 <<
-						"status" << "ready" <<
-						"unique" << true
+						DocLayerConstants::NAME_FIELD             << "_id_" <<
+						DocLayerConstants::NS_FIELD               << (msg->ns.first + "." + msg->ns.second) <<
+						DocLayerConstants::KEY_FIELD              << BSON(DocLayerConstants::ID_FIELD << 1) <<
+						DocLayerConstants::METADATA_VERSION_FIELD << 1 <<
+						DocLayerConstants::STATUS_FIELD           << DocLayerConstants::INDEX_STATUS_READY <<
+						DocLayerConstants::UNIQUE_FIELD           << true
 						);
 				// clang-format on
 
@@ -1294,10 +1314,10 @@ struct ListIndexesCmd {
 				// clang-format off
 				reply->addDocument(BSON(
 						"cursor" << BSON(
-								"id" << 0 <<
-								"ns" << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
-								"firstBatch" << indexList.arr()) <<
-								"ok" << 1.0
+								"id"           << 0 <<
+								"ns"           << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
+								"firstBatch"   << indexList.arr()) <<
+								"ok"           << 1.0
 								)
 								);
 				// clang-format on
@@ -1323,12 +1343,12 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 		Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, query->ns, true));
 
-		if (!query->query.hasField("key")) {
+		if (!query->query.hasField(DocLayerConstants::KEY_FIELD)) {
 			throw wire_protocol_mismatch();
 		}
-		state std::string keyValue = query->query.getStringField("key");
+		state std::string keyValue = query->query.getStringField(DocLayerConstants::KEY_FIELD);
 
-		Reference<Plan> qrPlan = planQuery(cx, query->query.getObjectField("query"));
+		Reference<Plan> qrPlan = planQuery(cx, query->query.getObjectField(DocLayerConstants::QUERY_FIELD));
 		qrPlan = ec->wrapOperationPlan(qrPlan, true, cx);
 		state Reference<DistinctPredicate> distinctPredicate = ref(new DistinctPredicate(keyValue));
 		state Reference<IPredicate> predicate = any_predicate(keyValue, distinctPredicate);
@@ -1361,13 +1381,17 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		// `nscanned`: Number of documents or indexes scanned
 		// `nscannedObjects`: Number of documents scanned
 		// `nscanned` and `nscannedObjects` should always be the same here.
+		// clang-format off
 		reply->addDocument(
 		    BSON("values" << arrayBuilder.arr() << "stats"
-		                  << BSON("n" << filtered << "nscanned" << scanned << "nscannedObjects" << scanned << "timems"
-		                              << int((timer_monotonic() - startTime) * 1e3) << "cursor"
-		                              << "BasicCursor")
+		                  << BSON("n" << filtered <<
+		                          "nscanned" << scanned <<
+		                          "nscannedObjects" << scanned <<
+		                          "timems" << int((timer_monotonic() - startTime) * 1e3) <<
+		                          "cursor" << "BasicCursor"
+		                          )
 		                  << "ok" << 1.0));
-
+		// clang-format on
 		return reply;
 	} catch (Error& e) {
 		reply->addDocument(BSON("$err" << e.what() << "code" << e.code() << "ok" << 1.0));

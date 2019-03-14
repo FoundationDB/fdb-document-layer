@@ -705,7 +705,7 @@ void UnboundCollectionContext::addIndex(IndexInfo info) {
 
 Key UnboundCollectionContext::getIndexesSubspace() {
 	return Standalone<StringRef>(metadataDirectory->key().toString() +
-	                             DataValue(std::string("indices")).encode_key_part());
+	                             DataValue(std::string(DocLayerConstants::INDICES_KEY)).encode_key_part());
 }
 
 Reference<UnboundQueryContext> UnboundCollectionContext::getIndexesContext() {
@@ -740,8 +740,8 @@ Optional<IndexInfo> UnboundCollectionContext::getCompoundIndex(std::vector<std::
 }
 
 Key UnboundCollectionContext::getVersionKey() {
-	return Key(
-	    KeyRef(metadataDirectory->key().toString() + DataValue("version", DVTypeCode::STRING).encode_key_part()));
+	return Key(KeyRef(metadataDirectory->key().toString() +
+	                  DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part()));
 }
 
 std::string UnboundCollectionContext::databaseName() {
@@ -770,14 +770,16 @@ Future<uint64_t> CollectionContext::getMetadataVersion() {
 }
 
 Future<Standalone<StringRef>> IReadWriteContext::getValueEncodedId() {
-	return map(getMaybeRecursiveIfPresent(getSubContext(DataValue("_id", DVTypeCode::STRING).encode_key_part())),
+	return map(getMaybeRecursiveIfPresent(
+	               getSubContext(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part())),
 	           [](Optional<DataValue> odv) -> Standalone<StringRef> {
 		           return odv.present() ? odv.get().encode_value() : StringRef();
 	           }); // FIXME: this is inefficient in about 12 different ways
 }
 
 Future<Standalone<StringRef>> IReadWriteContext::getKeyEncodedId() {
-	return map(getMaybeRecursiveIfPresent(getSubContext(DataValue("_id", DVTypeCode::STRING).encode_key_part())),
+	return map(getMaybeRecursiveIfPresent(
+	               getSubContext(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part())),
 	           [](Optional<DataValue> odv) -> Standalone<StringRef> {
 		           return odv.present() ? odv.get().encode_key_part() : StringRef();
 	           }); // FIXME: this is inefficient in about 12 different ways

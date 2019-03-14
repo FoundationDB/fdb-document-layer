@@ -23,16 +23,17 @@
 
 #pragma once
 
+#include "Constants.h"
+#include "Cursor.h"
+#include "IMetric.h"
+#include "Knobs.h"
+#include "MetadataManager.h"
+
 #include "bindings/flow/DirectoryLayer.h"
 #include "bindings/flow/DirectorySubspace.h"
 #include "bindings/flow/fdb_flow.h"
 #include "flow/ActorCollection.h"
 #include "flow/flow.h"
-
-#include "Cursor.h"
-#include "IMetric.h"
-#include "Knobs.h"
-#include "MetadataManager.h"
 
 struct ConnectionOptions {
 	bool pipelineCompatMode;

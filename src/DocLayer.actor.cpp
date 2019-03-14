@@ -323,7 +323,7 @@ ACTOR Future<Void> validateStorageVersion(Reference<DocumentLayer> docLayer) {
 	int64_t timeout = 5000;
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&(timeout), sizeof(int64_t)));
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
-	state FDB::Key versionKey = docLayer->rootDirectory->pack(LiteralStringRef("version"));
+	state FDB::Key versionKey = docLayer->rootDirectory->pack(StringRef(DocLayerConstants::VERSION_KEY));
 	Optional<FDB::FDBStandalone<StringRef>> version = wait(tr->get(versionKey));
 	if (version.present()) {
 		DataValue vv = DataValue::decode_value(version.get());
@@ -562,13 +562,13 @@ void printHelp(const char* name) {
 
   -l ADDRESS Listen address, specified as `[IP_ADDRESS:]PORT' (defaults
              to 127.0.0.1:27016).
-  -C CONNFILE    
+  -C CONNFILE
              The path of a file containing the connection string for the
              FoundationDB cluster. The default is first the value of the
              FDB_CLUSTER_FILE environment variable, then `./fdb.cluster',
              then `/etc/foundationdb/fdb.cluster'.
-  -d NAME    Name of the directory (managed by the Directory Layer) in the 
-             Key-Value Store which the Document Layer will use to store all 
+  -d NAME    Name of the directory (managed by the Directory Layer) in the
+             Key-Value Store which the Document Layer will use to store all
              of its state.
   -L PATH    Store log files in the given folder (default is `.').
   --loggroup LOGGROUP
@@ -580,14 +580,14 @@ void printHelp(const char* name) {
              files exceeds SIZE bytes. If set to 0, old log files will not
              be deleted. The default value is 100MiB.
   --pipeline OPTION
-             Set to `compat' to enable pipelining compatibility mode. This 
-             mode is both slower and more difficult to use correctly than 
+             Set to `compat' to enable pipelining compatibility mode. This
+             mode is both slower and more difficult to use correctly than
              the default. It should only be turned on for compatibility purposes.
   --implicit-transaction-max-retries NUMBER
-             Set the maximum number of times that transactions will be retried. 
+             Set the maximum number of times that transactions will be retried.
              Defaults to 3. If set to -1, will disable the retry limit.
   --implicit-transaction-timeout NUMBER
-             Set a timeout in milliseconds for transactions. Defaults to 7000. 
+             Set a timeout in milliseconds for transactions. Defaults to 7000.
              If set to 0, will disable all timeouts.
   --metric_plugin PATH
              The path of the metric plugin dynamic library to load during runtime.

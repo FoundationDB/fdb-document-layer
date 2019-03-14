@@ -95,7 +95,7 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 	switch (query->getTypeCode()) {
 	case IPredicate::ANY: {
 		auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());
-		if (anyPred->expr->get_index_key() == "_id") {
+		if (anyPred->expr->get_index_key() == DocLayerConstants::ID_FIELD) {
 			Optional<DataValue> begin, end;
 			anyPred->pred->get_range(begin, end);
 			if (begin.present() || end.present()) {
@@ -1400,10 +1400,12 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 		try {
 			std::vector<bson::BSONObj> indexObjs = wait(getIndexesTransactionally(getIndexesPlan, tr));
 			for (const auto& existingindexObj : indexObjs) {
-				if (indexObj.getObjectField("key").woCompare(existingindexObj.getObjectField("key")) == 0) {
+				if (indexObj.getObjectField(DocLayerConstants::KEY_FIELD)
+				        .woCompare(existingindexObj.getObjectField(DocLayerConstants::KEY_FIELD)) == 0) {
 					throw index_already_exists();
 				}
-				if (strcmp(indexObj.getStringField("name"), existingindexObj.getStringField("name")) == 0) {
+				if (strcmp(indexObj.getStringField(DocLayerConstants::NAME_FIELD),
+				           existingindexObj.getStringField(DocLayerConstants::NAME_FIELD)) == 0) {
 					throw index_name_taken();
 				}
 			}
@@ -1562,7 +1564,8 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 		Reference<UnboundCollectionContext> ucx = wait(mm->getUnboundCollectionContext(tr, ns));
 		state Reference<CollectionContext> mcx = ucx->bindCollectionContext(tr);
 		if (buildId.present()) {
-			Optional<DataValue> dv = wait(indexDoc->get(DataValue("build id", DVTypeCode::STRING).encode_key_part()));
+			Optional<DataValue> dv =
+			    wait(indexDoc->get(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part()));
 			if (dv.present()) {
 				UID currId = UID::fromString(dv.get().getString());
 				if (currId == buildId.get()) {
@@ -1579,10 +1582,11 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 
 		if (okay) {
 			Void _ = wait(flowControlLock->take());
-			indexDoc->set(DataValue("status", DVTypeCode::STRING).encode_key_part(),
+			indexDoc->set(DataValue(DocLayerConstants::STATUS_FIELD, DVTypeCode::STRING).encode_key_part(),
 			              DataValue(newStatus, DVTypeCode::STRING).encode_value());
-			indexDoc->clear(DataValue("currently processing document", DVTypeCode::STRING).encode_key_part());
-			indexDoc->clear(DataValue("build id", DVTypeCode::STRING).encode_key_part());
+			indexDoc->clear(
+			    DataValue(DocLayerConstants::CURRENTLY_PROCESSING_DOC_FIELD, DVTypeCode::STRING).encode_key_part());
+			indexDoc->clear(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part());
 			mcx->bumpMetadataVersion();
 			output.send(ref(new ScanReturnedContext(indexDoc, -1, Key())));
 			throw end_of_stream();
@@ -1671,11 +1675,13 @@ ACTOR static Future<Void> scanAndBuildIndex(PlanCheckpoint* checkpoint,
 			    indexCollection->bindCollectionContext(tr)->cx->getSubContext(encodedIndexId);
 			try {
 				std::string encodedId = unstrincObjectId(checkpoint->getBounds(0).begin);
-				indexDoc->set(DataValue("currently processing document", DVTypeCode::STRING).encode_key_part(),
-				              DataValue::decode_key_part(DataKey::decode_item(StringRef(encodedId), 0)).encode_value());
+				indexDoc->set(
+				    DataValue(DocLayerConstants::CURRENTLY_PROCESSING_DOC_FIELD, DVTypeCode::STRING).encode_key_part(),
+				    DataValue::decode_key_part(DataKey::decode_item(StringRef(encodedId), 0)).encode_value());
 			} catch (Error& e) {
-				indexDoc->set(DataValue("currently processing document", DVTypeCode::STRING).encode_key_part(),
-				              DataValue("unknown", DVTypeCode::STRING).encode_value());
+				indexDoc->set(
+				    DataValue(DocLayerConstants::CURRENTLY_PROCESSING_DOC_FIELD, DVTypeCode::STRING).encode_key_part(),
+				    DataValue("unknown", DVTypeCode::STRING).encode_value());
 			}
 			Void _ = wait(indexDoc->commitChanges());
 		}
