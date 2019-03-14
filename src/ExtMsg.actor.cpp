@@ -791,7 +791,7 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 		}
 	}
 
-	state bool background = indexObj.hasField(DocLayerConstants::BACKGROUND_FIELD);
+	state bool background = indexObj.getBoolField(DocLayerConstants::BACKGROUND_FIELD);
 	if (indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD) && background) {
 		throw unique_index_background_construction();
 	}

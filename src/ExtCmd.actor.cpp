@@ -599,7 +599,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					} else {
 						std::pair<int, int> result = wait(runRYWTransaction(
 						    ec->docLayer->database,
-						    [this, el](Reference<DocTransaction> tr) {
+						    [=](Reference<DocTransaction> tr) {
 							    return dropIndexMatching(tr, query->ns, DocLayerConstants::NAME_FIELD,
 							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
 						    },
@@ -618,7 +618,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				} else {
 					std::pair<int, int> result =
 					    wait(runRYWTransaction(ec->docLayer->database,
-					                           [this, el](Reference<DocTransaction> tr) {
+					                           [=](Reference<DocTransaction> tr) {
 						                           return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD,
 						                                                    DataValue(el.Obj()), ec->mm);
 					                           },
