@@ -5,6 +5,6 @@
 #define FDB_DOC_VT_PACKAGE_NAME "@BUILD_PACKAGE_NAME@"
 
 
-#define docLayerGitVersion "@GIT_COMMIT_HASH@";
+#define DOC_LAYER_GIT_VERSION "@GIT_COMMIT_HASH@"
 
 #endif // FDB_DOC_LAYER_GIT_VERSION_H

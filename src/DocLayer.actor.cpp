@@ -128,8 +128,8 @@ bool verboseConsoleOutput = false;
 bool slowQueryLogging = true;
 IMetricReporter* DocumentLayer::metricReporter;
 
-extern const char* getHGVersion();
-extern const char* getFlowHGVersion();
+extern const char* getGitVersion();
+extern const char* getFlowGitVersion();
 extern bool g_crashOnError;
 
 ACTOR Future<Void> wrapError(Future<Void> actorThatCouldThrow) {
@@ -548,8 +548,8 @@ ACTOR void setup(NetworkAddress na,
 
 static void printVersion() {
 	fprintf(stderr, "FoundationDB Document Layer " FDB_DOC_VT_PACKAGE_NAME " (v" FDB_DOC_VT_VERSION ")\n");
-	fprintf(stderr, "source version %s\n", getHGVersion());
-	fprintf(stderr, "Flow source version %s\n", getFlowHGVersion());
+	fprintf(stderr, "source version %s\n", getGitVersion());
+	fprintf(stderr, "Flow source version %s\n", getFlowGitVersion());
 }
 
 static void printHelpTeaser(const char* name) {
