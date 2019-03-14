@@ -380,8 +380,8 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
 				ASSERT(self->flowControlLock.present());
-				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 				Void _ = wait(self->flowControlLock.get()->take(1));
+				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 
 				for (; nvv; ++nvv) {
 					DataKey potential_index_key(self->indexPath);
@@ -508,8 +508,8 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
 				ASSERT(self->flowControlLock.present());
-				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 				Void _ = wait(self->flowControlLock.get()->take(1));
+				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 
 				for (const DataValue& v : new_values) {
 					state DataKey potential_index_key(self->indexPath);
