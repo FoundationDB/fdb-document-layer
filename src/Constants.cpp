@@ -54,7 +54,7 @@ const std::string MUL = "$mul";
 const std::string MIN = "$min";
 const std::string MAX = "$max";
 const std::string PUSH = "$push";
-const std::string CURRENT_DATE = "$currentData";
+const std::string CURRENT_DATE = "$currentDate";
 const std::string ADD_TO_SET = "$addToSet";
 const std::string QUERY_OPERATOR = "$query";
 
