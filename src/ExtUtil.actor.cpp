@@ -791,7 +791,7 @@ ACTOR Future<std::vector<bson::BSONObj>> getIndexesTransactionally(Reference<Pla
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 	state FutureStream<Reference<ScanReturnedContext>> indexStream =
 	    indexMetadataPlan->execute(checkpoint.getPtr(), tr);
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	loop {
 		try {

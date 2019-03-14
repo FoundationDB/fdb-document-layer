@@ -265,7 +265,7 @@ ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,
                                    Reference<IPredicate> predicate) {
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<bool>>> futures;
 	state std::pair<Reference<ScanReturnedContext>, Future<bool>> p;
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		loop {
 			try {
@@ -328,7 +328,7 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
                                     Reference<FlowLock> inputLock) {
 	// Each key has a document ID as its last entry
 	state Key lastKey;
-	state PlanCheckpoint::FlowControlLock* outputLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* outputLock = checkpoint->getDocumentFinishedLock();
 	try {
 		loop {
 			state KeyValue kv = waitNext(index_keys);
@@ -435,7 +435,7 @@ ACTOR static Future<Void> deduplicateIndexStream(PlanCheckpoint* checkpoint,
 	state std::vector<Reference<IExpression>> exprs;
 	for (const auto& indexKey : self.indexKeys)
 		exprs.push_back(Reference<IExpression>(new ExtPathExpression(indexKey.first, true, true)));
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		loop {
 			try {
@@ -513,7 +513,7 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
                                            Reference<CollectionContext> cx,
                                            DataValue begin,
                                            int scanID) {
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		state std::string x(begin.encode_key_part());
 		FDB::KeyRangeRef scanBounds = checkpoint->getBounds(scanID);
@@ -538,7 +538,7 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
                                    GenFutureStream<KeyValue> kvs,
                                    PromiseStream<Reference<ScanReturnedContext>> output,
                                    Reference<FlowLock> inputLock) {
-	state PlanCheckpoint::FlowControlLock* outputLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* outputLock = checkpoint->getDocumentFinishedLock();
 	state Standalone<StringRef> lastPK;
 	state Key lastKey;
 	try {
@@ -582,7 +582,7 @@ FutureStream<Reference<ScanReturnedContext>> PrimaryKeyLookupPlan::execute(PlanC
 		return p.getFuture();
 	} else {
 		PromiseStream<Reference<ScanReturnedContext>> p;
-		Reference<FlowLock> descendantFlowControlLock(new PlanCheckpoint::FlowControlLock(1));
+		Reference<FlowLock> descendantFlowControlLock(new FlowLock(1));
 
 		Standalone<StringRef> beginKey =
 		    std::max(begin.present() ? begin.get().encode_key_part() : LiteralStringRef("\x00"),
@@ -661,7 +661,7 @@ FutureStream<Reference<ScanReturnedContext>> TableScanPlan::execute(PlanCheckpoi
 	Reference<CollectionContext> bcx = cx->bindCollectionContext(tr);
 	int scanID = checkpoint->addScan();
 	PromiseStream<Reference<ScanReturnedContext>> p;
-	Reference<FlowLock> descendantFlowControlLock(new PlanCheckpoint::FlowControlLock(1));
+	Reference<FlowLock> descendantFlowControlLock(new FlowLock(1));
 	Standalone<StringRef> beginKey = std::max(LiteralStringRef("\x00"), checkpoint->getBounds(scanID).begin);
 	Standalone<StringRef> endKey = std::max<Standalone<StringRef>>(
 	    beginKey, std::min(LiteralStringRef("\xff"), checkpoint->getBounds(scanID).end));
@@ -700,7 +700,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int64_t nTransactions = 0;
 	state int64_t nResults = 0;
-	state PlanCheckpoint::FlowControlLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
 		loop {
@@ -708,7 +708,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 			// printable(innerCheckpoint->getBounds(0).begin).c_str(),
 			// printable(innerCheckpoint->getBounds(0).end).c_str());
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
-			state PlanCheckpoint::FlowControlLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
+			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
 			state Future<Void> timeout = delay(3.0);
 
@@ -767,7 +767,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 	if (!dtr)
 		dtr = self->newTransaction();
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
-	state PlanCheckpoint::FlowControlLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state int oCount = 0;
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
@@ -776,7 +776,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 			// printable(innerCheckpoint->getBounds(0).begin).c_str(),
 			// printable(innerCheckpoint->getBounds(0).end).c_str());
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
-			state PlanCheckpoint::FlowControlLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
+			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
 			state bool finished = false;
 			state Future<Void> timeout = delay(3.0);
@@ -904,13 +904,13 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 		tr = self->newTransaction();
 	state std::vector<Reference<ScanReturnedContext>> ret;
 	state FutureStream<Reference<ScanReturnedContext>> docs;
-	state PlanCheckpoint::FlowControlLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	try {
 		loop {
 			try {
 				state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 				docs = subPlan->execute(innerCheckpoint.getPtr(), tr);
-				state PlanCheckpoint::FlowControlLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
+				state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 				state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> committing;
 				ret = std::vector<Reference<ScanReturnedContext>>();
 				try {
@@ -1093,7 +1093,7 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
                                    Reference<UnboundCollectionContext> cx) {
 	state int64_t& count = checkpoint->getIntState(0);
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	try {
 		try {
@@ -1166,7 +1166,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int64_t nTransactions = 0;
 	state int64_t nResults = 0;
-	state PlanCheckpoint::FlowControlLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> firstDoc;
 	state bool any = false;
 	state bson::BSONObj proj;
@@ -1177,7 +1177,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 			// printable(innerCheckpoint->getBounds(0).begin).c_str(),
 			// printable(innerCheckpoint->getBounds(0).end).c_str());
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
-			state PlanCheckpoint::FlowControlLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
+			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state Future<Void> timeout = delay(1.0);
 			state bool done = false;
 
@@ -1290,7 +1290,7 @@ ACTOR static Future<Void> projectAndUpdate(PlanCheckpoint* checkpoint,
                                            Optional<bson::BSONObj> ordering,
                                            bool projectNew,
                                            Reference<UnboundCollectionContext> cx) {
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> firstDoc;
 	state bson::BSONObj proj;
 	state bool any;
@@ -1358,7 +1358,7 @@ ACTOR static Future<Void> doSkip(PlanCheckpoint* checkpoint,
                                  PromiseStream<Reference<ScanReturnedContext>> output,
                                  int64_t skip) {
 	state int64_t& leftToSkip = checkpoint->getIntState(skip);
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	try {
 		while (leftToSkip != 0) {
@@ -1391,7 +1391,7 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
                                         Namespace ns,
                                         PromiseStream<Reference<ScanReturnedContext>> output,
                                         Reference<MetadataManager> mm) {
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
 		Void _ = wait(flowControlLock->take(1));
 		state Reference<UnboundCollectionContext> mcx = wait(mm->getUnboundCollectionContext(tr, ns));
@@ -1440,7 +1440,7 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
                                    PromiseStream<Reference<ScanReturnedContext>> output) {
 	// state int64_t& inserted = checkpoint->getIntState(0); <- This is broken for now.
 	state Deque<Future<Reference<IReadWriteContext>>> f;
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	state int i = 0; // = inserted;
 
 	try {
@@ -1495,8 +1495,8 @@ ACTOR static Future<Void> doSort(PlanCheckpoint* outerCheckpoint,
 	state std::vector<bson::BSONObj> returnProjections;
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), tr);
-	state PlanCheckpoint::FlowControlLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
-	state PlanCheckpoint::FlowControlLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 	loop {
 		try {
 			Reference<ScanReturnedContext> doc = waitNext(docs);
@@ -1553,7 +1553,7 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
                                             Optional<UID> buildId,
                                             PromiseStream<Reference<ScanReturnedContext>> output) {
 	state bool okay;
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	try {
 		state Reference<UnboundCollectionContext> indexCollection = wait(mm->indexesCollection(tr, ns.first));
@@ -1744,7 +1744,7 @@ ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCom
 	state int64_t count = 0;
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 	state FutureStream<Reference<ScanReturnedContext>> stream = plan->execute(checkpoint.getPtr(), tr);
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> last;
 
 	try {
@@ -1767,7 +1767,7 @@ ACTOR Future<int64_t> executeUntilCompletionTransactionally(Reference<Plan> plan
 	state int64_t count = 0;
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 	state FutureStream<Reference<ScanReturnedContext>> stream = plan->execute(checkpoint.getPtr(), tr);
-	state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 	try {
 		loop {

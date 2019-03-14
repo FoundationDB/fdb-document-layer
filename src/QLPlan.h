@@ -83,8 +83,7 @@ struct PlanCheckpoint : ReferenceCounted<PlanCheckpoint>, FastAllocated<PlanChec
 	 */
 	int64_t& getIntState(int64_t defaultValue);
 
-	typedef FlowLock FlowControlLock;
-	FlowControlLock* getDocumentFinishedLock() {
+	FlowLock* getDocumentFinishedLock() {
 		return &flowControlLock;
 	} // To be called in topsort order along with addOperation(), addScan(), etc.
 	// void newDocumentFinishedLock();
@@ -108,7 +107,7 @@ private:
 		int64_t split;
 		explicit StateInfo(int64_t x) : begin(x) {}
 	};
-	FlowControlLock flowControlLock;
+	FlowLock flowControlLock;
 	std::vector<OpInfo> ops;
 
 	// Scans either added to this via addScan() or bounds inherited from previous stopAndCheckpoint().
