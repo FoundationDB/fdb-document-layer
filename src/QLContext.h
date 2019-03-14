@@ -63,7 +63,7 @@ struct DocumentDeferred : ReferenceCounted<DocumentDeferred> {
 	Promise<Void> writes_finished;
 	std::vector<Future<Void>> index_update_actors;
 	std::set<struct ITDoc*> dirty;
-	std::vector<std::function<Future<Void>(Reference<struct DocTransaction>)>> deferred;
+	std::vector<std::function<void(Reference<struct DocTransaction>)>> deferred;
 
 	Future<Void> commitChanges(Reference<DocTransaction> tr) {
 		return commitChanges(tr, Reference<DocumentDeferred>::addRef(this));
