@@ -368,12 +368,14 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				// for all new entries going to be written, before we clear the potentially existing old index entries,
 				// we need to make sure there is no existing unique index for that new value under path
 				// dbName+collectionName+"metadata"+"indices"+encodedIndexName+encodedValue
-				if (self->flowControlLock.present()) {
-					// When building the unique index, each record out of the table scan needs to wait for the previous
-					// one finished duplication detecting and index record writing. And thus the following section
-					// before the `lock.release()` call, needs to be protected using a mutex lock.
-					Void _ = wait(self->flowControlLock.get()->take(1));
-				}
+
+				// When building the unique index, each record out of the table scan needs to wait for the previous
+				// one finished duplication detecting and index record writing. And thus the following section
+				// before the `lock.release()` call, needs to be protected using a mutex lock.
+				ASSERT(self->flowControlLock.present());
+				Void _ = wait(self->flowControlLock.get()->take(1));
+				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
+
 				for (; nvv; ++nvv) {
 					DataKey potential_index_key(self->indexPath);
 					for (int i = 0; i < nvv.size(); i++)
@@ -428,10 +430,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
-			}
-
-			if (self->flowControlLock.present()) {
-				self->flowControlLock.get()->release(1);
 			}
 
 		} catch (Error& e) {
@@ -499,12 +497,13 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				// we need to make sure there is no existing unique index for that new value under path
 				// dbName+collectionName+"metadata"+"indices"+encodedIndexName+encodedValue
 
-				if (self->flowControlLock.present()) {
-					// When building the unique index, each record out of the table scan needs to wait for the previous
-					// one finished duplication detecting and index record writing. And thus the following section
-					// before the `lock.release()` call, needs to be protected using a mutex lock.
-					Void _ = wait(self->flowControlLock.get()->take(1));
-				}
+				// When building the unique index, each record out of the table scan needs to wait for the previous
+				// one finished duplication detecting and index record writing. And thus the following section
+				// before the `lock.release()` call, needs to be protected using a mutex lock.
+				ASSERT(self->flowControlLock.present());
+				Void _ = wait(self->flowControlLock.get()->take(1));
+				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
+
 				for (const DataValue& v : new_values) {
 					state DataKey potential_index_key(self->indexPath);
 					potential_index_key.append(v.encode_key_part());
@@ -554,9 +553,6 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
-			}
-			if (self->flowControlLock.present()) {
-				self->flowControlLock.get()->release(1);
 			}
 		} catch (Error& e) {
 			TraceEvent(SevError, "BD_doIndexUpdate").detail("error", e.what());
