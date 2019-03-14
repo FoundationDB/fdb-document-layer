@@ -80,7 +80,7 @@ struct ITDoc {
 	                                                 DataKey key,
 	                                                 StringRef begin,
 	                                                 StringRef end,
-	                                                 Reference<FlowLockHolder> flowControlLock) {
+	                                                 Reference<FlowLock> flowControlLock) {
 		return next->getDescendants(tr, key, begin, end, flowControlLock);
 	}
 
@@ -137,7 +137,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
                                                    Standalone<StringRef> relBegin,
                                                    Standalone<StringRef> relEnd,
                                                    PromiseStream<KeyValue> output,
-                                                   Reference<FlowLockHolder> flowControlLock) {
+                                                   Reference<FlowLock> flowControlLock) {
 	std::string prefix = getFDBKey(key, relEnd.size());
 	state int substrOffset = static_cast<int>(prefix.size());
 	state std::string begin = strAppend(prefix, relBegin);
@@ -162,7 +162,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 			while (!rr.empty()) {
 				state int permits = rr.size();
 				if (flowControlLock)
-					Void _ = wait(flowControlLock->lock->takeUpTo(permits));
+					Void _ = wait(flowControlLock->takeUpTo(permits));
 
 				for (int i = 0; i < permits; i++) {
 					auto& kv = rr[i];
@@ -209,7 +209,7 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 	                                         DataKey key,
 	                                         StringRef begin,
 	                                         StringRef end,
-	                                         Reference<FlowLockHolder> flowControlLock) override {
+	                                         Reference<FlowLock> flowControlLock) override {
 		PromiseStream<KeyValue> p;
 		GenFutureStream<KeyValue> r(p.getFuture());
 		r.actor = FDBPlugin_getDescendants(key, tr, begin, end, p, flowControlLock);
@@ -226,7 +226,6 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 				if (v.size() > DocLayerConstants::FDB_VALUE_LENGTH_LIMIT)
 					throw value_too_large();
 				tr->tr->set(k, v);
-				return Void();
 			});
 	}
 	void clearDescendants(Reference<DocTransaction> tr, DataKey key) override {
@@ -235,19 +234,13 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 		KeyRange kr = KeyRangeRef(_key + '\x00', _key + '\xFF');
 		auto pair = findOrCreate(tr, key);
 		if (pair.first)
-			pair.second->deferred.emplace_back([kr](Reference<DocTransaction> tr) {
-				tr->tr->clear(kr);
-				return Void();
-			});
+			pair.second->deferred.emplace_back([kr](Reference<DocTransaction> tr) { tr->tr->clear(kr); });
 	}
 	void clear(Reference<DocTransaction> tr, DataKey key) override {
 		std::string k = getFDBKey(key);
 		auto pair = findOrCreate(tr, key);
 		if (pair.first)
-			pair.second->deferred.emplace_back([k](Reference<DocTransaction> tr) {
-				tr->tr->clear(k);
-				return Void();
-			});
+			pair.second->deferred.emplace_back([k](Reference<DocTransaction> tr) { tr->tr->clear(k); });
 	}
 	std::string toString() override { return "FDBPlugin"; }
 };
@@ -316,7 +309,7 @@ struct IndexPlugin : ITDoc {
 	      multikey(indexInfo.multikey),
 	      isUniqueIndex(indexInfo.isUniqueIndex),
 	      indexName(indexInfo.indexName),
-	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLock>>(new FlowLock(1))
+	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLock>>(Reference<FlowLock>(new FlowLock(1)))
 	                                              : Optional<Reference<FlowLock>>()) {}
 };
 
@@ -389,7 +382,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 						potential_index_key.append(nvv[i].encode_key_part());
 					std::vector<Standalone<FDB::KeyValueRef>> existing_index_entries =
 					    wait(consumeAll(self->getDescendants(tr, potential_index_key, LiteralStringRef("\x00"),
-					                                         LiteralStringRef("\xff"), Reference<FlowLockHolder>())));
+					                                         LiteralStringRef("\xff"), Reference<FlowLock>())));
 					// There are two major scenarios that may cause the violation:
 					//    1. During the building of unique index:
 					//      In this case, the existing entry will NEVER point to the same docId. So we simply throw
@@ -516,7 +509,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 					potential_index_key.append(v.encode_key_part());
 					std::vector<Standalone<FDB::KeyValueRef>> existing_index_entries =
 					    wait(consumeAll(self->getDescendants(tr, potential_index_key, LiteralStringRef("\x00"),
-					                                         LiteralStringRef("\xff"), Reference<FlowLockHolder>())));
+					                                         LiteralStringRef("\xff"), Reference<FlowLock>())));
 					// There are two major scenarios that may cause the violation:
 					//    1. During the building of unique index:
 					//      In this case, the existing entry will NEVER point to the same docId. So we simply throw
@@ -594,7 +587,7 @@ struct QueryContextData {
 	virtual Future<Optional<DataValue>> get(StringRef key) { return layers->get(tr, DataKey(prefix).append(key)); }
 	virtual GenFutureStream<KeyValue> getDescendants(StringRef begin,
 	                                                 StringRef end,
-	                                                 Reference<FlowLockHolder> flowControlLock) {
+	                                                 Reference<FlowLock> flowControlLock) {
 		return layers->getDescendants(tr, prefix, begin, end, flowControlLock);
 	}
 	virtual void set(StringRef key, ValueRef value) { layers->set(tr, DataKey(prefix).append(key), value); }
@@ -640,7 +633,7 @@ Future<Optional<DataValue>> QueryContext::get(StringRef key) {
 
 GenFutureStream<KeyValue> QueryContext::getDescendants(StringRef begin,
                                                        StringRef end,
-                                                       Reference<FlowLockHolder> flowControlLock) {
+                                                       Reference<FlowLock> flowControlLock) {
 	return self->getDescendants(begin, end, flowControlLock);
 }
 
