@@ -29,13 +29,6 @@
 #include "flow/flow.h"
 using namespace FDB;
 
-struct FlowLockHolder : ReferenceCounted<FlowLockHolder> {
-	Reference<FlowLock> lock;
-
-	FlowLockHolder(Reference<FlowLock> lock) : lock(lock) {}
-	explicit FlowLockHolder(FlowLock* lock) : lock(Reference<FlowLock>(lock)) {}
-};
-
 struct SnapshotLock {
 	int use_count;
 	AsyncVar<bool> in_use;
@@ -106,7 +99,7 @@ struct IReadContext {
 	virtual GenFutureStream<Standalone<FDB::KeyValueRef>> getDescendants(
 	    StringRef begin = LiteralStringRef("\x00"),
 	    StringRef end = LiteralStringRef("\xff"),
-	    Reference<FlowLockHolder> flowControlLock = Reference<FlowLockHolder>()) = 0;
+	    Reference<FlowLock> flowControlLock = Reference<FlowLock>()) = 0;
 	Reference<IReadContext> getSubContext(StringRef sub) { return Reference<IReadContext>(v_getSubContext(sub)); }
 	virtual Future<DataValue> toDataValue();
 	virtual std::string toDbgString() = 0;
@@ -140,7 +133,7 @@ struct NullContext : IReadContext, ReferenceCounted<NullContext>, FastAllocated<
 	virtual GenFutureStream<Standalone<FDB::KeyValueRef>> getDescendants(
 	    StringRef begin = LiteralStringRef("\x00"),
 	    StringRef end = LiteralStringRef("\xff"),
-	    Reference<FlowLockHolder> flowControlLock = Reference<FlowLockHolder>()) {
+	    Reference<FlowLock> flowControlLock = Reference<FlowLock>()) {
 		PromiseStream<Standalone<FDB::KeyValueRef>> p;
 		GenFutureStream<Standalone<FDB::KeyValueRef>> ret(p.getFuture());
 		p.sendError(end_of_stream());
@@ -169,7 +162,7 @@ struct BsonContext : IReadWriteContext, ReferenceCounted<BsonContext>, FastAlloc
 	GenFutureStream<Standalone<FDB::KeyValueRef>> getDescendants(
 	    StringRef begin = LiteralStringRef("\x00"),
 	    StringRef end = LiteralStringRef("\xff"),
-	    Reference<FlowLockHolder> flowControlLock = Reference<FlowLockHolder>()) override {
+	    Reference<FlowLock> flowControlLock = Reference<FlowLock>()) override {
 		PromiseStream<Standalone<FDB::KeyValueRef>> out;
 		bson_getDescendants(StringRef(), begin, end, out);
 		out.sendError(end_of_stream());
@@ -251,7 +244,7 @@ struct QueryContext : IReadWriteContext, ReferenceCounted<QueryContext>, FastAll
 	GenFutureStream<Standalone<FDB::KeyValueRef>> getDescendants(
 	    StringRef begin = LiteralStringRef("\x00"),
 	    StringRef end = LiteralStringRef("\xff"),
-	    Reference<FlowLockHolder> flowControlLock = Reference<FlowLockHolder>()) override;
+	    Reference<FlowLock> flowControlLock = Reference<FlowLock>()) override;
 	void set(StringRef key, FDB::ValueRef value) override;
 	void clearDescendants() override;
 	void clearRoot() override;
@@ -295,7 +288,7 @@ struct ScanReturnedContext : IReadWriteContext,
 	GenFutureStream<Standalone<FDB::KeyValueRef>> getDescendants(
 	    StringRef begin = LiteralStringRef("\x00"),
 	    StringRef end = LiteralStringRef("\xff"),
-	    Reference<FlowLockHolder> flowControlLock = Reference<FlowLockHolder>()) override {
+	    Reference<FlowLock> flowControlLock = Reference<FlowLock>()) override {
 		return internal_context->getDescendants(begin, end, flowControlLock);
 	}
 	Future<DataValue> toDataValue() override { return internal_context->toDataValue(); }

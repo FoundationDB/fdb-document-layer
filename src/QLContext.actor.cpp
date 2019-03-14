@@ -80,7 +80,7 @@ struct ITDoc {
 	                                                 DataKey key,
 	                                                 StringRef begin,
 	                                                 StringRef end,
-	                                                 Reference<FlowLockHolder> flowControlLock) {
+	                                                 Reference<FlowLock> flowControlLock) {
 		return next->getDescendants(tr, key, begin, end, flowControlLock);
 	}
 
@@ -137,7 +137,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
                                                    Standalone<StringRef> relBegin,
                                                    Standalone<StringRef> relEnd,
                                                    PromiseStream<KeyValue> output,
-                                                   Reference<FlowLockHolder> flowControlLock) {
+                                                   Reference<FlowLock> flowControlLock) {
 	std::string prefix = getFDBKey(key, relEnd.size());
 	state int substrOffset = static_cast<int>(prefix.size());
 	state std::string begin = strAppend(prefix, relBegin);
@@ -162,7 +162,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 			while (!rr.empty()) {
 				state int permits = rr.size();
 				if (flowControlLock)
-					Void _ = wait(flowControlLock->lock->takeUpTo(permits));
+					Void _ = wait(flowControlLock->takeUpTo(permits));
 
 				for (int i = 0; i < permits; i++) {
 					auto& kv = rr[i];
@@ -209,7 +209,7 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 	                                         DataKey key,
 	                                         StringRef begin,
 	                                         StringRef end,
-	                                         Reference<FlowLockHolder> flowControlLock) override {
+	                                         Reference<FlowLock> flowControlLock) override {
 		PromiseStream<KeyValue> p;
 		GenFutureStream<KeyValue> r(p.getFuture());
 		r.actor = FDBPlugin_getDescendants(key, tr, begin, end, p, flowControlLock);
@@ -299,7 +299,7 @@ struct IndexPlugin : ITDoc {
 	bool error_state;
 	bool multikey;
 	bool isUniqueIndex;
-	Optional<Reference<FlowLockHolder>> flowControlLock;
+	Optional<Reference<FlowLock>> flowControlLock;
 
 	IndexPlugin(DataKey collectionPath, IndexInfo const& indexInfo, Reference<ITDoc> next)
 	    : collectionPath(collectionPath),
@@ -309,9 +309,8 @@ struct IndexPlugin : ITDoc {
 	      multikey(indexInfo.multikey),
 	      isUniqueIndex(indexInfo.isUniqueIndex),
 	      indexName(indexInfo.indexName),
-	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLockHolder>>(
-	                                                    Reference<FlowLockHolder>(new FlowLockHolder(new FlowLock(1))))
-	                                              : Optional<Reference<FlowLockHolder>>()) {}
+	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLock>>(Reference<FlowLock>(new FlowLock(1)))
+	                                              : Optional<Reference<FlowLock>>()) {}
 };
 
 struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>, FastAllocated<CompoundIndexPlugin> {
@@ -373,7 +372,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 					// When building the unique index, each record out of the table scan needs to wait for the previous
 					// one finished duplication detecting and index record writing. And thus the following section
 					// before the `lock.release()` call, needs to be protected using a mutex lock.
-					Void _ = wait(self->flowControlLock.get()->lock->take(1));
+					Void _ = wait(self->flowControlLock.get()->take(1));
 				}
 				for (; nvv; ++nvv) {
 					DataKey potential_index_key(self->indexPath);
@@ -381,7 +380,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 						potential_index_key.append(nvv[i].encode_key_part());
 					std::vector<Standalone<FDB::KeyValueRef>> existing_index_entries =
 					    wait(consumeAll(self->getDescendants(tr, potential_index_key, LiteralStringRef("\x00"),
-					                                         LiteralStringRef("\xff"), Reference<FlowLockHolder>())));
+					                                         LiteralStringRef("\xff"), Reference<FlowLock>())));
 					// There are two major scenarios that may cause the violation:
 					//    1. During the building of unique index:
 					//      In this case, the existing entry will NEVER point to the same docId. So we simply throw
@@ -432,7 +431,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			}
 
 			if (self->flowControlLock.present()) {
-				self->flowControlLock.get()->lock->release(1);
+				self->flowControlLock.get()->release(1);
 			}
 
 		} catch (Error& e) {
@@ -504,14 +503,14 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 					// When building the unique index, each record out of the table scan needs to wait for the previous
 					// one finished duplication detecting and index record writing. And thus the following section
 					// before the `lock.release()` call, needs to be protected using a mutex lock.
-					Void _ = wait(self->flowControlLock.get()->lock->take(1));
+					Void _ = wait(self->flowControlLock.get()->take(1));
 				}
 				for (const DataValue& v : new_values) {
 					state DataKey potential_index_key(self->indexPath);
 					potential_index_key.append(v.encode_key_part());
 					std::vector<Standalone<FDB::KeyValueRef>> existing_index_entries =
 					    wait(consumeAll(self->getDescendants(tr, potential_index_key, LiteralStringRef("\x00"),
-					                                         LiteralStringRef("\xff"), Reference<FlowLockHolder>())));
+					                                         LiteralStringRef("\xff"), Reference<FlowLock>())));
 					// There are two major scenarios that may cause the violation:
 					//    1. During the building of unique index:
 					//      In this case, the existing entry will NEVER point to the same docId. So we simply throw
@@ -557,7 +556,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
 			if (self->flowControlLock.present()) {
-				self->flowControlLock.get()->lock->release(1);
+				self->flowControlLock.get()->release(1);
 			}
 		} catch (Error& e) {
 			TraceEvent(SevError, "BD_doIndexUpdate").detail("error", e.what());
@@ -592,7 +591,7 @@ struct QueryContextData {
 	virtual Future<Optional<DataValue>> get(StringRef key) { return layers->get(tr, DataKey(prefix).append(key)); }
 	virtual GenFutureStream<KeyValue> getDescendants(StringRef begin,
 	                                                 StringRef end,
-	                                                 Reference<FlowLockHolder> flowControlLock) {
+	                                                 Reference<FlowLock> flowControlLock) {
 		return layers->getDescendants(tr, prefix, begin, end, flowControlLock);
 	}
 	virtual void set(StringRef key, ValueRef value) { layers->set(tr, DataKey(prefix).append(key), value); }
@@ -638,7 +637,7 @@ Future<Optional<DataValue>> QueryContext::get(StringRef key) {
 
 GenFutureStream<KeyValue> QueryContext::getDescendants(StringRef begin,
                                                        StringRef end,
-                                                       Reference<FlowLockHolder> flowControlLock) {
+                                                       Reference<FlowLock> flowControlLock) {
 	return self->getDescendants(begin, end, flowControlLock);
 }
 

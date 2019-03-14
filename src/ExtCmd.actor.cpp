@@ -1334,7 +1334,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		state Reference<IPredicate> predicate = any_predicate(keyValue, distinctPredicate);
 
 		state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
-		state PlanCheckpoint::FlowControlLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+		state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 		state FutureStream<Reference<ScanReturnedContext>> queryResults = qrPlan->execute(checkpoint.getPtr(), dtr);
 		state PromiseStream<Reference<ScanReturnedContext>> filteredResults;
 
