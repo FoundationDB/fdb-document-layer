@@ -36,8 +36,8 @@
 
 using namespace FDB;
 
-extern const char* getHGVersion();
-extern const char* getFlowHGVersion();
+extern const char* getGitVersion();
+extern const char* getFlowGitVersion();
 
 ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransaction> tr,
                                                            Namespace ns,
@@ -718,13 +718,13 @@ struct BuildInfoCmd {
 		// clang-format off
 		reply->addDocument(BSON(
 				"version"          << EXT_SERVER_VERSION       <<
-				"gitVersion"       << "<string>"               <<
+				"gitVersion"       << getGitVersion()          <<
 				"OpenSSLVersion"   << ""                       <<
 				"sysInfo"          << "<string>"               <<
 				"loaderFlags"      << "<string>"               <<
 				"compilerFlags"    << "<string>"               <<
 				"allocator"        << "<string>"               <<
-				"versionArray"     << BSON_ARRAY(2 << 4 << 10) <<
+				"versionArray"     << EXT_SERVER_VERSION_ARRAY <<
 				"javascriptEngine" << "<string>"               <<
 				"bits"             << 64                       <<
 				"debug"            << false                    <<
@@ -993,8 +993,8 @@ struct GetDocLayerVersionCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("package version" << FDB_DOC_VT_VERSION << "source version" << getHGVersion()
-		                                          << "flow source version" << getFlowHGVersion()));
+		reply->addDocument(BSON("package version" << FDB_DOC_VT_VERSION << "source version" << getGitVersion()
+		                                          << "flow source version" << getFlowGitVersion()));
 		return reply;
 	}
 };

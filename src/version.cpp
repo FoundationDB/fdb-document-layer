@@ -22,10 +22,10 @@
 
 #include "flow/hgVersion.h"
 
-const char* getHGVersion() {
-	return docLayerGitVersion;
+const char* getGitVersion() {
+	return DOC_LAYER_GIT_VERSION;
 }
 
-const char* getFlowHGVersion() {
+const char* getFlowGitVersion() {
 	return hgVersion;
 }
