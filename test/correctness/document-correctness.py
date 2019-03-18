@@ -268,6 +268,16 @@ def test_update(collections, verbose=False):
     return okay
 
 
+class IgnoredException(Exception):
+    def __init__(self, message):
+        Exception.__init__(self, message)
+
+
+def ignored_exception_check(e):
+    if [x for x in ignored_exceptions if x.strip() == str(e).strip().strip('\"').strip('.')]:
+        raise IgnoredException(str(e))
+
+
 def one_iteration(collection1, collection2, ns, seed):
     update_tests_enabled = ns['no_updates']
     sorting_tests_enabled = gen.generator_options.allow_sorts
@@ -300,16 +310,12 @@ def one_iteration(collection1, collection2, ns, seed):
             or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
             pass
         else:
-            print '\033[91m Unmatched result: \033[0m'
-            print '\033[91m', type(exceptionOne), ': ', str(exceptionOne), '\033[0m'
-            print '\033[91m', type(exceptionTwo), ': ', str(exceptionTwo), '\033[0m'
+            print 'Unmatched result: '
+            print type(exceptionOne), ': ', str(exceptionOne)
+            print type(exceptionTwo), ': ', str(exceptionTwo)
             okay = False
-            if [x for x in ignored_exceptions if x.strip() == str(exceptionOne).strip().strip('\"').strip('.')]:
-                print "Ignoring EXCEPTION :", str(exceptionOne)
-                okay = True
-            elif [x for x in ignored_exceptions if x.strip() == str(exceptionTwo).strip().strip('\"').strip('.')]:
-                print "Ignoring EXCEPTION :", str(exceptionTwo)
-                okay = True
+            ignored_exception_check(exceptionOne)
+            ignored_exception_check(exceptionTwo)
         return okay
 
     try:
@@ -405,6 +411,9 @@ def one_iteration(collection1, collection2, ns, seed):
         if not okay:
             return (okay, fname, None)
 
+    except IgnoredException as e:
+        print "Ignoring EXCEPTION: ", e.message
+        return True, fname, None
     except Exception as e:
         import traceback
         traceback.print_exc()
