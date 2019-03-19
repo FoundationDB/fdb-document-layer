@@ -424,9 +424,12 @@ def one_iteration(collection1, collection2, ns, seed):
 
 ignored_exceptions = [
     "Multi-multikey index size exceeds maximum value",
-    "key too large to index", # it's hard to estimate the exact byte size of KVS key to be inserted, ignore for now.
+    "key too large to index",  # it's hard to estimate the exact byte size of KVS key to be inserted, ignore for now.
     "Key length exceeds limit",
     "Operation aborted because the transaction timed out",
+    # This is another variant of "Operation aborted" error. For now, ignoring this error. We have to fix this part of
+    # transaction handling redesign.
+    "Attempting to change status of a different index build",
 ]
 
 

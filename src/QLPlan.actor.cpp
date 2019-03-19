@@ -1552,7 +1552,7 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
                                             Standalone<StringRef> encodedIndexId,
                                             Reference<MetadataManager> mm,
                                             std::string newStatus,
-                                            Optional<UID> buildId,
+                                            UID buildId,
                                             PromiseStream<Reference<ScanReturnedContext>> output) {
 	state bool okay;
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
@@ -1563,21 +1563,23 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 		    indexCollection->bindCollectionContext(tr)->cx->getSubContext(encodedIndexId);
 		Reference<UnboundCollectionContext> ucx = wait(mm->getUnboundCollectionContext(tr, ns));
 		state Reference<CollectionContext> mcx = ucx->bindCollectionContext(tr);
-		if (buildId.present()) {
-			Optional<DataValue> dv =
-			    wait(indexDoc->get(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part()));
-			if (dv.present()) {
-				UID currId = UID::fromString(dv.get().getString());
-				if (currId == buildId.get()) {
-					okay = true;
-				} else {
-					okay = false;
-				}
+		Optional<DataValue> dv =
+		    wait(indexDoc->get(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part()));
+		if (dv.present()) {
+			UID currId = UID::fromString(dv.get().getString());
+			if (currId == buildId) {
+				okay = true;
 			} else {
+				TraceEvent(SevError, "MismatchedIndexBuildID")
+				    .detail("indexDoc", indexDoc->toDbgString())
+				    .detail("newStatus", newStatus);
 				okay = false;
 			}
 		} else {
-			okay = true;
+			TraceEvent(SevError, "MissingIndexBuildID")
+			    .detail("indexDoc", indexDoc->toDbgString())
+			    .detail("newStatus", newStatus);
+			okay = false;
 		}
 
 		if (okay) {

@@ -254,12 +254,13 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 
 		state Reference<Plan> finalizePlan = ec->isolatedWrapOperationPlan(
 		    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm,
-		                                  std::string(DocLayerConstants::INDEX_STATUS_READY), info.buildId)),
+		                                  std::string(DocLayerConstants::INDEX_STATUS_READY), build_id)),
 		    0, -1);
 		int64_t _ = wait(executeUntilCompletionTransactionally(finalizePlan, ec->getOperationTransaction()));
 
 		return Void();
 	} catch (Error& e) {
+		TraceEvent(SevError, "indexRebuildFailed").error(e);
 		state Error err = e;
 		// try forever to set the index into an error status (unless somebody comes along before us and starts a
 		// different build)
@@ -270,7 +271,7 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 			// buildId field does not exist (as is the case for 'ready' indexes).
 			state Reference<Plan> errorPlan = ec->isolatedWrapOperationPlan(
 			    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm,
-			                                  std::string(DocLayerConstants::INDEX_STATUS_ERROR), info.buildId)),
+			                                  std::string(DocLayerConstants::INDEX_STATUS_ERROR), build_id)),
 			    0, -1);
 			try {
 				int64_t _ = wait(executeUntilCompletionTransactionally(errorPlan, ec->getOperationTransaction()));
