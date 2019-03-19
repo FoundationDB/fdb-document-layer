@@ -669,13 +669,13 @@ struct UpdateIndexStatusPlan : ConcretePlan<UpdateIndexStatusPlan> {
 	Standalone<StringRef> encodedIndexId;
 	Reference<MetadataManager> mm;
 	std::string newStatus;
-	Optional<UID> buildId;
+	UID buildId;
 
 	UpdateIndexStatusPlan(Namespace const& ns,
 	                      Standalone<StringRef> encodedIndexId,
 	                      Reference<MetadataManager> mm,
 	                      std::string newStatus,
-	                      Optional<UID> buildId = Optional<UID>())
+	                      UID buildId)
 	    : ns(ns), encodedIndexId(encodedIndexId), mm(mm), newStatus(newStatus), buildId(buildId) {}
 
 	bson::BSONObj describe() override {
