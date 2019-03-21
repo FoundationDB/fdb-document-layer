@@ -753,9 +753,27 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
                                                    Reference<ExtConnection> ec,
                                                    Reference<DocTransaction> tr,
                                                    Namespace ns) {
-
 	if (!indexObj.hasField(DocLayerConstants::NAME_FIELD))
 		throw no_index_name();
+
+	// It is legal to have index key to be simple string for simple value indexes.
+	if (indexObj.getField(DocLayerConstants::KEY_FIELD).isString()) {
+		bson::BSONObjBuilder builder;
+		for (auto it = indexObj.begin(); it.more();) {
+			auto el = it.next();
+			if (std::string(el.fieldName()) == DocLayerConstants::KEY_FIELD) {
+				builder.append(DocLayerConstants::KEY_FIELD, BSON(el.String() << 1));
+			} else {
+				builder.append(el);
+			}
+		}
+		indexObj = builder.obj();
+	}
+
+	if (!indexObj.getField(DocLayerConstants::KEY_FIELD).isABSONObj()) {
+		TraceEvent(SevWarn, "BadIndexSpec").detail("err_msg", "Bad key format");
+		throw bad_index_specification();
+	}
 
 	if (indexObj.getObjectField(DocLayerConstants::KEY_FIELD).nFields() == 1) {
 		auto keyEl = indexObj.getObjectField(DocLayerConstants::KEY_FIELD).firstElement();
