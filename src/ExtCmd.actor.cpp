@@ -828,6 +828,11 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
                                                                Reference<ExtMsgQuery> query,
                                                                Reference<ExtMsgReply> reply) {
 	try {
+		if (query->query.getBoolField("capped") || query->query.hasField("storageEngine")) {
+			TraceEvent(SevWarn, "CreateUnsupportedOption").detail("query", query->toString());
+			throw unsupported_cmd_option();
+		}
+
 		if (ec->explicitTransaction) {
 			Void _ = wait(Internal_doCreateCollection(ec->tr, query, ec->mm));
 		} else {
