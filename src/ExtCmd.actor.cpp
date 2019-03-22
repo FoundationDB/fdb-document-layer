@@ -1314,7 +1314,7 @@ struct ListIndexesCmd {
 				// clang-format off
 				reply->addDocument(BSON(
 						"cursor" << BSON(
-								"id"           << 0 <<
+								"id"           << (long long) 0 <<
 								"ns"           << msg->ns.first + ".$cmd.listIndexes." + msg->ns.second <<
 								"firstBatch"   << indexList.arr()) <<
 								"ok"           << 1.0
