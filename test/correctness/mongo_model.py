@@ -546,16 +546,23 @@ class MongoCollection(object):
         def _get_index_name(keys):
             return "_".join(["%s_%s" % item for item in keys])
         kwargs.setdefault("name", _get_index_name(keys))
+        seen = set()
+        deduplicatedKeys = []
+        for key in keys:
+            if key[0] not in seen:
+                deduplicatedKeys.append(key)
+                seen.add(key[0])
         for i in self.indexes:
-            if i.keys == keys:
+            if i.keys == deduplicatedKeys:
+                # There was an index that indexes on the same field(s), abort here.
                 return None
             if i.name == kwargs["name"]:
                 raise MongoModelException("There is an index with this name and a different key spec", code=29993)
 
         if "unique" in kwargs.keys() and kwargs["unique"]:
-            newIndex = MongoUniqueIndex(keys, kwargs)
+            newIndex = MongoUniqueIndex(deduplicatedKeys, kwargs)
         else:
-            newIndex = MongoIndex(keys, kwargs)
+            newIndex = MongoIndex(deduplicatedKeys, kwargs)
 
         self.indexes.append(newIndex) # insert first, since an index can be added but in error state if its constraints are violated.
         newIndex.build(self.data.values())
@@ -1095,10 +1102,29 @@ class MongoIndex(object):
     def __init__(self, indexKeys, kwargs):
         self.name = kwargs["name"]
         if len(indexKeys) == 1:
+            if indexKeys[0][1] == "text" :
+                raise MongoModelException("Document Layer does not support this index type, yet.", code=29969)
+            elif (type(indexKeys[0][1]) is int and abs(indexKeys[0][1]) != 1) or (type(indexKeys[0][1]) is not int):
+                raise MongoModelException("Index must be 1 for ascending or -1 for descending", code=29991)
+        else :
+            first = True
+            ascending = True
+            for key in indexKeys:
+                if key[1] == "text":
+                    raise MongoModelException("Document Layer does not support this index type, yet.", code=29969)
+                elif (type(key[1]) is int and abs(key[1]) != 1) or (type(key[1]) is not int):
+                    raise MongoModelException("Index must be 1 for ascending or -1 for descending", code=29991)
+                if first:
+                    first = False
+                    ascending = (key[1] == 1)
+                else:
+                    if ascending != (key[1] == 1):
+                        raise MongoModelException("Mixed order compound indexes are not supported", code=29990)
+        self.keys = indexKeys
+        if len(self.keys) == 1:
             self.isSimple = True
         else:
             self.isSimple = False
-        self.keys = indexKeys
         # self check
         self.validate_self()
 
@@ -1119,7 +1145,7 @@ class MongoIndex(object):
                 nValues = 1
                 for key in self.keys:
                     values = expand(
-                        field=key,
+                        field=key[0],
                         document=document,
                         check_last_array=True,
                         expand_array=True,
@@ -1144,10 +1170,10 @@ class MongoUniqueIndex(MongoIndex):
     def validate_and_build_entry(self, documents):
         seen = set()
         for document in documents:
+            entry = ""
             for key in self.keys:
-                entry = ""
                 _values = expand(
-                    field=key,
+                    field=key[0],
                     document=document,
                     check_last_array=True,
                     expand_array=True,
@@ -1155,9 +1181,12 @@ class MongoUniqueIndex(MongoIndex):
                     check_none_at_all=True,
                     check_none_next=True,
                     debug=False)
-
-                entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "None")
-                if entry in seen:
-                    raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
-                else:
-                    seen.add(entry)
+                entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "")
+            if entry in seen:
+                # print "[{}] in {} ? {}".format(entry, seen, entry in seen)
+                # print "Violating keys " + str(key)
+                # print "Duplicated value: " + entry
+                raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
+            else:
+                # print "Inserting {} for key {}".format(entry, key)
+                seen.add(entry)

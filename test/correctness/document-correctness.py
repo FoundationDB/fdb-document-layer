@@ -341,9 +341,8 @@ def one_iteration(collection1, collection2, ns, seed):
 
         if indexes_first:
             for i in indexes:
-                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
-                # uniqueIndex = gen.global_prng.choice([True, False])
-                uniqueIndex = False
+                # 5% likelyhood to be unique, assuming a uniform distribution
+                uniqueIndex = (gen.global_prng.randint(1,20) == 1)
                 okay = _run_operation_(
                     (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
                     (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
@@ -365,9 +364,8 @@ def one_iteration(collection1, collection2, ns, seed):
 
         if not indexes_first:
             for i in indexes:
-                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
-                # uniqueIndex = gen.global_prng.choice([True, False])
-                uniqueIndex = False
+                # 5% likelyhood to be unique, assuming a uniform distribution
+                uniqueIndex = (gen.global_prng.randint(1,20) == 1)
                 okay = _run_operation_(
                     (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
                     (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
