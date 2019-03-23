@@ -333,23 +333,31 @@ def one_iteration(collection1, collection2, ns, seed):
         transactional_shim.remove(collection2)
 
         indexes = []
+        num_of_indexes = 5;
         indexes_first = gen.global_prng.choice([True, False])
         if indexes_enabled:
-            for i in range(0, 5):
+            for i in range(0, num_of_indexes):
                 index_obj = gen.random_index_spec()
                 indexes.append(index_obj)
 
+        # 0.5% likelyhood to allow using unique index in this iteration, assuming a uniform distribution
+        useUnique = (gen.global_prng.randint(1,200) == 1)
+        # only allow one out of $num_of_indexes to be unique.
+        allowed_ii = gen.global_prng.randint(1,num_of_indexes)
         if indexes_first:
+            ii = 1
             for i in indexes:
-                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
-                # uniqueIndex = gen.global_prng.choice([True, False])
-                uniqueIndex = False
+                if ii == allowed_ii:
+                    uniqueIndex = useUnique
+                else:
+                    uniqueIndex = False
                 okay = _run_operation_(
                     (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
                     (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
                     )
                 if not okay:
                     return (okay, fname, None)
+                ii += 1
         docs = []
         for i in range(0, num_doc):
             doc = gen.random_document(True)
@@ -364,10 +372,12 @@ def one_iteration(collection1, collection2, ns, seed):
             return (okay, fname, None)
 
         if not indexes_first:
+            ii = 1
             for i in indexes:
-                # When we do enable make sure we don't enable for 50% cases. That way unique indexes will cloud everything else. Make it something like 5-10%.
-                # uniqueIndex = gen.global_prng.choice([True, False])
-                uniqueIndex = False
+                if ii == allowed_ii:
+                    uniqueIndex = useUnique
+                else:
+                    uniqueIndex = False
                 okay = _run_operation_(
                     (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
                     (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
@@ -375,6 +385,7 @@ def one_iteration(collection1, collection2, ns, seed):
                 if not okay:
                     print "Failed when adding index after insert"
                     return (okay, fname, None)
+                ii += 1
 
         okay = check_query(dict(), collection1, collection2)
         if not okay:
