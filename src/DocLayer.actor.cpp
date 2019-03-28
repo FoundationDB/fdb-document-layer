@@ -434,7 +434,7 @@ ACTOR void setup(NetworkAddress na,
                  std::string unitTestPattern,
                  std::vector<std::pair<std::string, std::string>> client_knobs,
                  NetworkOptionsT client_network_options,
-                 Optional<StringRef> fdbDatacenterId) {
+                 std::string fdbDatacenterID) {
 	state FDB::API* fdb;
 	try {
 		fdb = FDB::API::selectAPIVersion(510);
@@ -464,7 +464,10 @@ ACTOR void setup(NetworkAddress na,
 		try {
 			auto cluster = fdb->createCluster(clusterFile);
 			Reference<DatabaseContext> database = cluster->createDatabase();
-			database->setDatabaseOption(FDBDatabaseOption::FDB_DB_OPTION_DATACENTER_ID, fdbDatacenterId);
+			if (!fdbDatacenterID.empty()) {
+				database->setDatabaseOption(FDBDatabaseOption::FDB_DB_OPTION_DATACENTER_ID,
+				                            Optional<StringRef>(fdbDatacenterID));
+			}
 			db = database;
 			try {
 				state Reference<Transaction> tr3(new Transaction(db));
@@ -648,7 +651,7 @@ int main(int argc, char** argv) {
 	NetworkOptionsT client_network_options;
 	std::string metricReporterConfig;
 	char* metricPluginPath = nullptr;
-	Optional<StringRef> fdbDatacenterid;
+	std::string fdbDatacenterID;
 #ifndef TLS_DISABLED
 	Reference<TLSOptions> tlsOptions = Reference<TLSOptions>(new TLSOptions);
 #endif
@@ -883,9 +886,9 @@ int main(int argc, char** argv) {
 			break;
 		}
 		case OPT_FDB_DC_ID: {
-			const char* fdbDatacenterIdStr = args.OptionArg();
-			if (fdbDatacenterIdStr) {
-				fdbDatacenterid = Optional<StringRef>(LiteralStringRef(fdbDatacenterIdStr));
+			const char* fdbDatacenterIDStr = args.OptionArg();
+			if (fdbDatacenterIDStr) {
+				fdbDatacenterID = fdbDatacenterIDStr;
 			}
 			break;
 		}
@@ -1006,7 +1009,7 @@ int main(int argc, char** argv) {
 	TraceEvent::setNetworkThread();
 	openTraceFile(na, rollsize, maxLogsSize, logFolder, "fdbdoc-trace", logGroup);
 	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options,
-	      fdbDatacenterid);
+	      fdbDatacenterID);
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
 
