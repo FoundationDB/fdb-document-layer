@@ -886,10 +886,7 @@ int main(int argc, char** argv) {
 			break;
 		}
 		case OPT_FDB_DC_ID: {
-			const char* fdbDatacenterIDStr = args.OptionArg();
-			if (fdbDatacenterIDStr) {
-				fdbDatacenterID = fdbDatacenterIDStr;
-			}
+			fdbDatacenterID = args.OptionArg();
 			break;
 		}
 #ifndef TLS_DISABLED
