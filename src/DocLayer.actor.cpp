@@ -82,7 +82,8 @@ enum {
 	OPT_BUGGIFY,
 	OPT_BUGGIFY_INTENSITY,
 	OPT_METRIC_PLUGIN,
-	OPT_METRIC_CONFIG
+	OPT_METRIC_CONFIG,
+	OPT_FDB_DC_ID
 };
 CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_CONNFILE, "--cluster_file", SO_REQ_SEP},
@@ -116,6 +117,7 @@ CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_BUGGIFY_INTENSITY, "--buggify_intensity", SO_REQ_SEP},
                                      {OPT_METRIC_PLUGIN, "--metric_plugin", SO_OPT},
                                      {OPT_METRIC_CONFIG, "--metric_plugin_config", SO_OPT},
+                                     {OPT_FDB_DC_ID, "--fdb_datacenter_id", SO_OPT},
 #ifndef TLS_DISABLED
                                      TLS_OPTION_FLAGS
 #endif
@@ -431,7 +433,8 @@ ACTOR void setup(NetworkAddress na,
                  const char* rootDirectory,
                  std::string unitTestPattern,
                  std::vector<std::pair<std::string, std::string>> client_knobs,
-                 NetworkOptionsT client_network_options) {
+                 NetworkOptionsT client_network_options,
+                 std::string fdbDatacenterID) {
 	state FDB::API* fdb;
 	try {
 		fdb = FDB::API::selectAPIVersion(510);
@@ -461,6 +464,10 @@ ACTOR void setup(NetworkAddress na,
 		try {
 			auto cluster = fdb->createCluster(clusterFile);
 			Reference<DatabaseContext> database = cluster->createDatabase();
+			if (!fdbDatacenterID.empty()) {
+				database->setDatabaseOption(FDBDatabaseOption::FDB_DB_OPTION_DATACENTER_ID,
+				                            Optional<StringRef>(fdbDatacenterID));
+			}
 			db = database;
 			try {
 				state Reference<Transaction> tr3(new Transaction(db));
@@ -596,6 +603,9 @@ void printHelp(const char* name) {
   --proxy-ports LISTEN_PORT MONGODB_PORT
              Runs Document Layer in proxy mode on LISTEN_PORT proxying all commands
              to MongoDB server running on MONGODB_PORT.
+  --fdb_datacenter_id DC_ID
+             The id of the preferred datacenter to use when connecting to a FoundationDB cluster 
+             that's run in multi-dc mode
 )HELPTEXT",
 	        name);
 #ifndef TLS_DISABLED
@@ -642,6 +652,7 @@ int main(int argc, char** argv) {
 	NetworkOptionsT client_network_options;
 	std::string metricReporterConfig;
 	char* metricPluginPath = nullptr;
+	std::string fdbDatacenterID;
 #ifndef TLS_DISABLED
 	Reference<TLSOptions> tlsOptions = Reference<TLSOptions>(new TLSOptions);
 #endif
@@ -875,6 +886,10 @@ int main(int argc, char** argv) {
 			}
 			break;
 		}
+		case OPT_FDB_DC_ID: {
+			fdbDatacenterID = args.OptionArg();
+			break;
+		}
 #ifndef TLS_DISABLED
 		case TLSOptions::OPT_TLS_PLUGIN:
 			args.OptionArg();
@@ -991,7 +1006,8 @@ int main(int argc, char** argv) {
 	setThreadName("fdbdoc-main");
 	TraceEvent::setNetworkThread();
 	openTraceFile(na, rollsize, maxLogsSize, logFolder, "fdbdoc-trace", logGroup);
-	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options);
+	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options,
+	      fdbDatacenterID);
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
 
