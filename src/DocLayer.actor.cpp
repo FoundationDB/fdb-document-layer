@@ -604,7 +604,8 @@ void printHelp(const char* name) {
              Runs Document Layer in proxy mode on LISTEN_PORT proxying all commands
              to MongoDB server running on MONGODB_PORT.
   --fdb_datacenter_id DC_ID
-             Specify the datacenter id to use when connecting to the FDB that's run in multi-dc mode
+             The id of the preferred datacenter to use when connecting to a FoundationDB cluster 
+             that's run in multi-dc mode
 )HELPTEXT",
 	        name);
 #ifndef TLS_DISABLED
