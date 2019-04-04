@@ -31,6 +31,8 @@
 
 using Namespace = std::pair<std::string, std::string>;
 
+std::string fullCollNameToString(Namespace const& ns);
+
 struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	explicit MetadataManager(struct DocumentLayer* docLayer) : docLayer(docLayer) {}
 	~MetadataManager() = default;
@@ -38,7 +40,6 @@ struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	Future<Reference<UnboundCollectionContext>> getUnboundCollectionContext(Reference<DocTransaction> tr,
 	                                                                        Namespace const& ns,
 	                                                                        bool allowSystemNamespace = false,
-	                                                                        bool includeIndex = true,
 	                                                                        bool createCollectionIfAbsent = true);
 	Future<Reference<UnboundCollectionContext>> refreshUnboundCollectionContext(Reference<UnboundCollectionContext> cx,
 	                                                                            Reference<DocTransaction> tr);

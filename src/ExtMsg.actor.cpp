@@ -63,10 +63,6 @@ Namespace getDBCollectionPair(const char* ns, std::pair<std::string, std::string
 	return std::make_pair(std::string(ns, dotPtr - ns), std::string(dotPtr + 1));
 }
 
-std::string fullCollNameToString(Namespace const& ns) {
-	return ns.first + "." + (ns.second.empty() ? "$cmd" : ns.second);
-}
-
 /**
  * query := { $bool_op : [ query* ],   *          (a predicate)
  * 			  path : literal_match,    *
@@ -1208,8 +1204,7 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 
 		// If collection not found then just return success from here.
 		try {
-			Reference<UnboundCollectionContext> _cx =
-			    wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, true, false));
+			Reference<UnboundCollectionContext> _cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, false, false));
 			cx = _cx;
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)
