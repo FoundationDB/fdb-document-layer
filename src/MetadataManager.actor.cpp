@@ -86,12 +86,8 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 }
 
-ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> constructContext(
-    Namespace ns,
-    Reference<DocTransaction> tr,
-    DocumentLayer* docLayer,
-    bool includeIndex,
-    bool createCollectionIfAbsent) {
+ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>>
+constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docLayer, bool createCollectionIfAbsent) {
 	try {
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
@@ -112,20 +108,15 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		state Reference<UnboundCollectionContext> cx =
 		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(collectionDirectory, metadataDirectory));
 
-		// Only include existing indexes into the context when it's NOT building a new index.
-		// When it's building a new index, it's unnecessary and inefficient to pass each recorded returned by a
-		// TableScan through the existing indexes.
-		if (includeIndex) {
-			state Reference<UnboundCollectionContext> indexCx = Reference<UnboundCollectionContext>(
-			    new UnboundCollectionContext(indexDirectory, Reference<DirectorySubspace>()));
-			state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexCx, ns);
-			std::vector<bson::BSONObj> allIndexes = wait(getIndexesTransactionally(indexesPlan, tr));
+		state Reference<UnboundCollectionContext> indexCx = Reference<UnboundCollectionContext>(
+		    new UnboundCollectionContext(indexDirectory, Reference<DirectorySubspace>()));
+		state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexCx, ns);
+		std::vector<bson::BSONObj> allIndexes = wait(getIndexesTransactionally(indexesPlan, tr));
 
-			for (const auto& indexObj : allIndexes) {
-				IndexInfo index = MetadataManager::indexInfoFromObj(indexObj, cx);
-				if (index.status != IndexInfo::IndexStatus::INVALID) {
-					cx->addIndex(index);
-				}
+		for (const auto& indexObj : allIndexes) {
+			IndexInfo index = MetadataManager::indexInfoFromObj(indexObj, cx);
+			if (index.status != IndexInfo::IndexStatus::INVALID) {
+				cx->addIndex(index);
 			}
 		}
 
@@ -172,16 +163,15 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionContext(Reference<DocTransaction> tr,
                                                                                    Namespace ns,
                                                                                    Reference<MetadataManager> self,
-                                                                                   bool includeIndex,
                                                                                    bool createCollectionIfAbsent) {
-	if (self->contexts.size() > 100)
+	if (self->contexts.size() > DocLayerConstants::METADATA_CACHE_SIZE)
 		self->contexts.clear();
 
 	auto match = self->contexts.find(ns);
 
 	if (match == self->contexts.end()) {
 		std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
-		    wait(constructContext(ns, tr, self->docLayer, includeIndex, createCollectionIfAbsent));
+		    wait(constructContext(ns, tr, self->docLayer, createCollectionIfAbsent));
 
 		// Here and below don't pollute the cache if we just created the directory, since this transaction might
 		// not commit.
@@ -204,7 +194,7 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 		uint64_t version = wait(getMetadataVersion(tr, oldUnbound->metadataDirectory));
 		if (version != oldVersion) {
 			std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
-			    wait(constructContext(ns, tr, self->docLayer, includeIndex, createCollectionIfAbsent));
+			    wait(constructContext(ns, tr, self->docLayer, createCollectionIfAbsent));
 			if (unboundPair.second != -1) {
 				// Create the iterator again instead of making the previous value state, because the map could have
 				// changed during the previous wait. Either way, replace it with ours (can no longer optimize this by
@@ -231,19 +221,17 @@ Future<Reference<UnboundCollectionContext>> MetadataManager::getUnboundCollectio
     Reference<DocTransaction> tr,
     Namespace const& ns,
     bool allowSystemNamespace,
-    bool includeIndex,
     bool createCollectionIfAbsent) {
 	if (!allowSystemNamespace && startsWith(ns.second.c_str(), "system."))
 		throw write_system_namespace();
-	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), includeIndex,
-	                                 createCollectionIfAbsent);
+	return assembleCollectionContext(tr, ns, Reference<MetadataManager>::addRef(this), createCollectionIfAbsent);
 }
 
 Future<Reference<UnboundCollectionContext>> MetadataManager::refreshUnboundCollectionContext(
     Reference<UnboundCollectionContext> cx,
     Reference<DocTransaction> tr) {
 	return assembleCollectionContext(tr, std::make_pair(cx->databaseName(), cx->collectionName()),
-	                                 Reference<MetadataManager>::addRef(this), false, false);
+	                                 Reference<MetadataManager>::addRef(this), false);
 }
 
 ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
@@ -254,7 +242,7 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 	state IndexInfo info;
 	try {
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
-		state Reference<UnboundCollectionContext> mcx = wait(ec->mm->getUnboundCollectionContext(tr, ns, false, false));
+		state Reference<UnboundCollectionContext> mcx = wait(ec->mm->getUnboundCollectionContext(tr, ns, false));
 		info = MetadataManager::indexInfoFromObj(indexObj, mcx);
 		info.status = IndexInfo::IndexStatus::BUILDING;
 		info.buildId = build_id;

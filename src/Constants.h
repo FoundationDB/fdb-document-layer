@@ -34,6 +34,9 @@ extern const uint64_t INDEX_KEY_LENGTH_LIMIT; // This is set to 10K bytes, inste
 extern const uint64_t FDB_KEY_LENGTH_LIMIT;
 extern const uint64_t FDB_VALUE_LENGTH_LIMIT;
 
+// Size of metadata cache in entries, number of collections
+extern const uint64_t METADATA_CACHE_SIZE;
+
 // KVS DocLayer internal keys
 extern const std::string METADATA;
 extern const std::string VERSION_KEY;
