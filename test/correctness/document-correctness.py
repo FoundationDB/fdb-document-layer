@@ -26,6 +26,7 @@ import copy
 import os.path
 import random
 import sys
+import pprint
 
 import pymongo
 
@@ -151,6 +152,8 @@ total_queries = 0
 
 
 def check_query(query, collection1, collection2, projection=None, sort=None, limit=0, skip=0):
+    # if projection:
+    #     projection['_id'] = True
     util.trace('debug', '\n==================================================')
     util.trace('debug', 'query:', query)
     util.trace('debug', 'sort:', sort)
@@ -213,56 +216,59 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
         return False
 
 
-def test_update(collections, verbose=False):
+def test_update(collection1, collection2, verbose=False):
     okay = True
     for i in range(1, 10):
-        update = gen.random_update(collections[0])
+        exceptionOne = None
+        exceptionTwo = None
+        update = gen.random_update(collection1)
 
         util.trace('debug', '\n========== Update No.', i, '==========')
         util.trace('debug', 'Query:', update['query'])
         util.trace('debug', 'Update:', str(update['update']))
         util.trace('debug', 'Number results from collection: ', gen.count_query_results(
-            collections[0], update['query']))
-        for item in collections[0].find(update['query']):
+            collection1, update['query']))
+        for item in collection1.find(update['query']):
             util.trace('debug', 'Find Result0:', item)
 
-        exception = []
-        exception_msg = []
-        for coll in collections:
-            try:
-                if verbose:
-                    all = [x for x in coll.find(dict())]
-                    for item in coll.find(update['query']):
-                        print 'Before update doc:', item
-                    print 'Before update coll size: ', len(all)
+        try:
+            if verbose:
+                all = [x for x in collection1.find(dict())]
+                for item in collection1.find(update['query']):
+                    print 'Before update doc:\n', pprint.pprint(item)
+                print 'Before update collection1 size: ', len(all)
+            collection1.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
+        except pymongo.errors.OperationFailure as e:
+            exceptionOne = e
+        except MongoModelException as e:
+            exceptionOne = e
+        try:
+            if verbose:
+                all = [x for x in collection2.find(dict())]
+                for item in collection2.find(update['query']):
+                    print 'Before update doc:\n', pprint.pprint(item)
+                print 'Before update collection2 size: ', len(all)
+            collection2.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
+        except pymongo.errors.OperationFailure as e:
+            exceptionTwo = e
+        except MongoModelException as e:
+            exceptionTwo = e
 
-                coll.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
+        if ((exceptionOne is None and exceptionTwo is None)
+            or (exceptionOne is not None and exceptionTwo is not None)):
+            # or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
+            # TODO re-enable the exact error check.
+            pass
+        else:
+            print 'Unmatched result: '
+            print type(exceptionOne), ': ', str(exceptionOne)
+            print type(exceptionTwo), ': ', str(exceptionTwo)
+            okay = False
+            ignored_exception_check(exceptionOne)
+            ignored_exception_check(exceptionTwo)
+        return okay
 
-                if verbose:
-                    all = [x for x in coll.find(dict())]
-                    for item in coll.find(update['query']):
-                        print 'After update doc:', item
-                    print 'After update coll size: ', len(all)
-
-            except pymongo.errors.OperationFailure as e:
-                exception.append(e)
-                exception_msg.append(
-                    util.join_n('Caught PyMongo error while attempting update: %s' % e[0],
-                                'Query: %s' % update['query'], 'Update: %s' % update['update'],
-                                'Upsert: {0}, Multi: {1}'.format(update['upsert'], update['multi'])))
-            except MongoModelException as e:
-                exception.append(e)
-                exception_msg.append(
-                    util.join_n('Caught MongoModel error. Offending update(', str(update['query']),
-                                str(update['update']), str(update['upsert']), str(update['multi']), ')'))
-
-        if len(exception_msg) == 1:
-            print 'Update: ' + str(update['update'])
-            print '\033[91m', exception[0], '\033[0m'
-            print '\033[91m', exception_msg[0], '\033[0m'
-            return False
-
-        if not check_query(dict(), collections[0], collections[1]):
+        if not check_query(dict(), collection1, collection2):
             print 'Update: ' + str(update['update'])
             return False
 
@@ -393,8 +399,9 @@ def one_iteration(collection1, collection2, ns, seed):
         if not okay:
             return (okay, fname, None)
 
-        if update_tests_enabled:
-            if not test_update([collection1, collection2], verbose):
+        # if update_tests_enabled:
+        if True:
+            if not test_update(collection1, collection2, verbose):
                 okay = False
                 return (okay, fname, None)
 

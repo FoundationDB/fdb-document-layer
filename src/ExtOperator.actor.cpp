@@ -413,7 +413,7 @@ ACTOR static Future<Void> getValueAndMultiply(Reference<IReadWriteContext> cx,
 	if (valueInDatabase.present()) {
 		DataValue actualValue = valueInDatabase.get();
 		if (actualValue.getSortType() != DVTypeCode::NUMBER)
-			throw inc_applied_to_non_number();
+			throw mul_applied_to_non_number();
 		cx->set(path,
 		        doubleDispatchArithmetic(actualValue, valueToMultiply, [](LongDouble a, LongDouble b) { return a * b; })
 		            .encode_value());
@@ -608,7 +608,7 @@ ACTOR static Future<Void> doPullActor(Reference<IReadWriteContext> cx,
                                       std::set<DataValue> uniques) {
 	state int length = wait(isArray(cx, path.toString()));
 	if (length == -1)
-		throw push_non_array();
+		throw pull_non_array();
 	else if (length == -2)
 		return Void();
 
