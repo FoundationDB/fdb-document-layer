@@ -25,6 +25,10 @@
 
 using namespace FDB;
 
+std::string fullCollNameToString(Namespace const& ns) {
+	return ns.first + "." + (ns.second.empty() ? "$cmd" : ns.second);
+}
+
 Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<DirectorySubspace> metadataDirectory) {
 	std::string versionKey = metadataDirectory->key().toString() +
 	                         DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part();
@@ -157,6 +161,9 @@ ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>> co
 		// collectionName.c_str(), printable(tcollectionDirectory->key()).c_str(),
 		// printable(tmetadataDirectory->key()).c_str(), "");
 		tcx->bindCollectionContext(tr)->bumpMetadataVersion(); // We start at version 1.
+		TraceEvent(SevInfo, "BumpMetadataVersion")
+		    .detail("reason", "createCollection")
+		    .detail("ns", fullCollNameToString(ns));
 
 		return std::make_pair(tcx, -1); // So we don't pollute the cache in case this transaction never commits
 	}
@@ -179,6 +186,9 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 		// Here and below don't pollute the cache if we just created the directory, since this transaction might
 		// not commit.
 		if (unboundPair.second != -1) {
+			TraceEvent(SevInfo, "MetadataCacheAdd")
+			    .detail("ns", fullCollNameToString(ns))
+			    .detail("version", unboundPair.second);
 			auto insert_result = self->contexts.insert(std::make_pair(ns, unboundPair));
 			// Somebody else may have done the lookup and finished ahead of us. Either way, replace it with ours (can no
 			// longer optimize this by only replacing if ours is newer, because the directory may have moved or
@@ -199,14 +209,16 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
 				// Create the iterator again instead of making the previous value state, because the map could have
 				// changed during the previous wait. Either way, replace it with ours (can no longer optimize this by
 				// only replacing if ours is newer, because the directory may have moved or vanished.
-				// std::map<std::pair<std::string, std::string>, std::pair<Reference<UnboundCollectionContext>,
-				// uint64_t>>::iterator match = self->contexts.find(ns);
 				auto match = self->contexts.find(ns);
-
 				if (match != self->contexts.end())
 					match->second = unboundPair;
 				else
 					self->contexts.insert(std::make_pair(ns, unboundPair));
+
+				TraceEvent(SevInfo, "MetadataCacheUpdate")
+				    .detail("ns", fullCollNameToString(ns))
+				    .detail("oldVersion", oldVersion)
+				    .detail("newVersion", unboundPair.second);
 			}
 			return unboundPair.first;
 		} else {

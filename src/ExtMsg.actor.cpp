@@ -63,10 +63,6 @@ Namespace getDBCollectionPair(const char* ns, std::pair<std::string, std::string
 	return std::make_pair(std::string(ns, dotPtr - ns), std::string(dotPtr + 1));
 }
 
-std::string fullCollNameToString(Namespace const& ns) {
-	return ns.first + "." + (ns.second.empty() ? "$cmd" : ns.second);
-}
-
 /**
  * query := { $bool_op : [ query* ],   *          (a predicate)
  * 			  path : literal_match,    *

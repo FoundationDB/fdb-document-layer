@@ -1418,6 +1418,10 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 
 		Reference<IReadWriteContext> doc = wait(indexInsert->insert(unbound->bindCollectionContext(tr)));
 		mcx->bindCollectionContext(tr)->bumpMetadataVersion();
+		TraceEvent(SevInfo, "BumpMetadataVersion")
+		    .detail("reason", "createIndex")
+		    .detail("ns", fullCollNameToString(ns))
+		    .detail("index", indexObj.toString());
 		output.send(ref(new ScanReturnedContext(doc, -1, Key())));
 		throw end_of_stream();
 	} catch (Error& e) {
@@ -1590,6 +1594,11 @@ ACTOR static Future<Void> updateIndexStatus(PlanCheckpoint* checkpoint,
 			    DataValue(DocLayerConstants::CURRENTLY_PROCESSING_DOC_FIELD, DVTypeCode::STRING).encode_key_part());
 			indexDoc->clear(DataValue(DocLayerConstants::BUILD_ID_FIELD, DVTypeCode::STRING).encode_key_part());
 			mcx->bumpMetadataVersion();
+			TraceEvent(SevInfo, "BumpMetadataVersion")
+			    .detail("reason", "updateIndexStatus")
+			    .detail("ns", fullCollNameToString(ns))
+			    .detail("indexID", printable(encodedIndexId))
+			    .detail("status", newStatus);
 			output.send(ref(new ScanReturnedContext(indexDoc, -1, Key())));
 			throw end_of_stream();
 		} else {

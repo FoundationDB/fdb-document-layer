@@ -31,6 +31,8 @@
 
 using Namespace = std::pair<std::string, std::string>;
 
+std::string fullCollNameToString(Namespace const& ns);
+
 struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	explicit MetadataManager(struct DocumentLayer* docLayer) : docLayer(docLayer) {}
 	~MetadataManager() = default;

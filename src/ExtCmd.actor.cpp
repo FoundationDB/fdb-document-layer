@@ -50,6 +50,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 	state std::vector<bson::BSONObj> indexes = wait(getIndexesTransactionally(indexesPlan, tr));
 	state int count = 0;
 	state bool any = false;
+	state bson::BSONObj matchingIndexObj;
 	state Reference<QueryContext> matchingIndex;
 	state std::string matchingName;
 
@@ -63,6 +64,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 		if (value.getBSONType() == bson::BSONType::String) {
 			if (value.getString() == indexObj.getStringField(field.c_str())) {
 				any = true;
+				matchingIndexObj = indexObj;
 				matchingIndex = indexesCollection->bindCollectionContext(tr)->cx->getSubContext(
 				    DataValue(indexObj.getField(DocLayerConstants::ID_FIELD)).encode_key_part());
 				matchingName = std::string(indexObj.getStringField(DocLayerConstants::NAME_FIELD));
@@ -70,6 +72,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 		} else if (value.getBSONType() == bson::BSONType::Object) {
 			if (value.getPackedObject().woCompare(indexObj.getObjectField(field.c_str())) == 0) {
 				any = true;
+				matchingIndexObj = indexObj;
 				matchingIndex = indexesCollection->bindCollectionContext(tr)->cx->getSubContext(
 				    DataValue(indexObj.getField(DocLayerConstants::ID_FIELD)).encode_key_part());
 				matchingName = std::string(indexObj.getStringField(DocLayerConstants::NAME_FIELD));
@@ -81,6 +84,11 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 
 	matchingIndex->clearDescendants();
 	matchingIndex->clearRoot();
+
+	TraceEvent(SevInfo, "BumpMetadataVersion")
+	    .detail("reason", "dropIndex")
+	    .detail("ns", fullCollNameToString(ns))
+	    .detail("index", matchingIndexObj.toString());
 
 	Void _ = wait(matchingIndex->commitChanges());
 
@@ -356,6 +364,9 @@ ACTOR static Future<int> internal_doDropIndexesActor(Reference<DocTransaction> t
 	Key indexes = unbound->getIndexesSubspace();
 	tr->tr->clear(FDB::KeyRangeRef(indexes, strinc(indexes)));
 	unbound->bindCollectionContext(tr)->bumpMetadataVersion();
+	TraceEvent(SevInfo, "BumpMetadataVersion")
+	    .detail("reason", "dropAllIndexes")
+	    .detail("ns", fullCollNameToString(ns));
 
 	return count;
 }
