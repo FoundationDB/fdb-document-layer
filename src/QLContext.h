@@ -372,14 +372,24 @@ struct IndexComparator {
 };
 
 struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, FastAllocated<UnboundCollectionContext> {
-	UnboundCollectionContext(Reference<DirectorySubspace> collectionDirectory,
+	UnboundCollectionContext(uint64_t metadataVersion,
+	                         Reference<DirectorySubspace> collectionDirectory,
 	                         Reference<DirectorySubspace> metadataDirectory)
-	    : collectionDirectory(collectionDirectory), metadataDirectory(metadataDirectory) {
+	    : metadataVersion(metadataVersion),
+	      collectionDirectory(collectionDirectory),
+	      metadataDirectory(metadataDirectory) {
 		cx = Reference<UnboundQueryContext>(new UnboundQueryContext())->getSubContext(collectionDirectory->key());
 	}
 
+	UnboundCollectionContext(Reference<DirectorySubspace> collectionDirectory,
+	                         Reference<DirectorySubspace> metadataDirectory)
+	    : UnboundCollectionContext(DocLayerConstants::METADATA_INVALID_VERSION,
+	                               collectionDirectory,
+	                               metadataDirectory) {}
+
 	UnboundCollectionContext(const UnboundCollectionContext& other)
-	    : collectionDirectory(other.collectionDirectory),
+	    : metadataVersion(other.metadataVersion),
+	      collectionDirectory(other.collectionDirectory),
 	      metadataDirectory(other.metadataDirectory),
 	      simpleIndexMap(other.simpleIndexMap),
 	      knownIndexes(other.knownIndexes),
@@ -399,6 +409,8 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	std::string databaseName();
 	std::string collectionName();
 
+	bool isVersioned() { return metadataVersion != DocLayerConstants::METADATA_INVALID_VERSION; }
+
 	Reference<DirectorySubspace> collectionDirectory;
 	Reference<DirectorySubspace> metadataDirectory;
 
@@ -410,6 +422,8 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	// This holds all indexes that will be loaded as plugins (i.e. for sets and clears), and should
 	// include indexes that are still building
 	std::vector<IndexInfo> knownIndexes;
+
+	const uint64_t metadataVersion;
 
 private:
 	std::set<std::string> bannedFieldNames;
