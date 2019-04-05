@@ -36,6 +36,7 @@ extern const uint64_t FDB_VALUE_LENGTH_LIMIT;
 
 // Size of metadata cache in entries, number of collections
 extern const uint64_t METADATA_CACHE_SIZE;
+extern const uint64_t METADATA_INVALID_VERSION;
 
 // KVS DocLayer internal keys
 extern const std::string METADATA;

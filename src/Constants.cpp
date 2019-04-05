@@ -28,6 +28,7 @@ const uint64_t FDB_KEY_LENGTH_LIMIT = (uint64_t)1e4;
 const uint64_t FDB_VALUE_LENGTH_LIMIT = (uint64_t)1e5;
 
 const uint64_t METADATA_CACHE_SIZE = (uint64_t)100;
+const uint64_t METADATA_INVALID_VERSION = (uint64_t)-1;
 
 const std::string METADATA = "metadata";
 const std::string VERSION_KEY = "version";

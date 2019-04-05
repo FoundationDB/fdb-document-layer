@@ -86,8 +86,10 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 	}
 }
 
-ACTOR static Future<std::pair<Reference<UnboundCollectionContext>, uint64_t>>
-constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docLayer, bool createCollectionIfAbsent) {
+ACTOR static Future<Reference<UnboundCollectionContext>> constructContext(Namespace ns,
+                                                                          Reference<DocTransaction> tr,
+                                                                          DocumentLayer* docLayer,
+                                                                          bool createCollectionIfAbsent) {
 	try {
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
@@ -105,13 +107,14 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 		state Future<uint64_t> fv = getMetadataVersion(tr, metadataDirectory);
 		state Reference<DirectorySubspace> collectionDirectory = wait(fcollectionDirectory);
 		state Reference<DirectorySubspace> indexDirectory = wait(findexDirectory);
-		state Reference<UnboundCollectionContext> cx =
-		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(collectionDirectory, metadataDirectory));
-
 		state Reference<UnboundCollectionContext> indexCx = Reference<UnboundCollectionContext>(
 		    new UnboundCollectionContext(indexDirectory, Reference<DirectorySubspace>()));
 		state Reference<Plan> indexesPlan = getIndexesForCollectionPlan(indexCx, ns);
-		std::vector<bson::BSONObj> allIndexes = wait(getIndexesTransactionally(indexesPlan, tr));
+		state std::vector<bson::BSONObj> allIndexes = wait(getIndexesTransactionally(indexesPlan, tr));
+
+		uint64_t version = wait(fv);
+		state Reference<UnboundCollectionContext> cx = Reference<UnboundCollectionContext>(
+		    new UnboundCollectionContext(version, collectionDirectory, metadataDirectory));
 
 		for (const auto& indexObj : allIndexes) {
 			IndexInfo index = MetadataManager::indexInfoFromObj(indexObj, cx);
@@ -119,12 +122,7 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 				cx->addIndex(index);
 			}
 		}
-
-		// fprintf(stderr, "%s.%s Reading: Collection dir: %s Metadata dir:%s Caller:%s\n", dbName.c_str(),
-		// collectionName.c_str(), printable(collectionDirectory->key()).c_str(),
-		// printable(metadataDirectory->key()).c_str(), "");
-		uint64_t version = wait(fv);
-		return std::make_pair(cx, version);
+		return cx;
 	} catch (Error& e) {
 		if (e.code() != error_code_directory_does_not_exist && e.code() != error_code_parent_directory_does_not_exist)
 			throw;
@@ -148,15 +146,13 @@ constructContext(Namespace ns, Reference<DocTransaction> tr, DocumentLayer* docL
 		    tr->tr, {StringRef(ns.first), StringRef(ns.second), StringRef(DocLayerConstants::METADATA)}));
 		state Reference<UnboundCollectionContext> tcx =
 		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(tcollectionDirectory, tmetadataDirectory));
-		// fprintf(stderr, "%s.%s Creating: Collection dir: %s Metadata dir:%s Caller:%s\n", dbName.c_str(),
-		// collectionName.c_str(), printable(tcollectionDirectory->key()).c_str(),
-		// printable(tmetadataDirectory->key()).c_str(), "");
+
 		tcx->bindCollectionContext(tr)->bumpMetadataVersion(); // We start at version 1.
 		TraceEvent(SevInfo, "BumpMetadataVersion")
 		    .detail("reason", "createCollection")
 		    .detail("ns", fullCollNameToString(ns));
 
-		return std::make_pair(tcx, -1); // So we don't pollute the cache in case this transaction never commits
+		return tcx;
 	}
 }
 
@@ -164,53 +160,57 @@ ACTOR static Future<Reference<UnboundCollectionContext>> assembleCollectionConte
                                                                                    Namespace ns,
                                                                                    Reference<MetadataManager> self,
                                                                                    bool createCollectionIfAbsent) {
-	if (self->contexts.size() > DocLayerConstants::METADATA_CACHE_SIZE)
-		self->contexts.clear();
+	if (self->metadataCache.size() > DocLayerConstants::METADATA_CACHE_SIZE)
+		self->metadataCache.clear();
 
-	auto match = self->contexts.find(ns);
+	auto match = self->metadataCache.find(ns);
 
-	if (match == self->contexts.end()) {
-		std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
+	if (match == self->metadataCache.end()) {
+		Reference<UnboundCollectionContext> cx =
 		    wait(constructContext(ns, tr, self->docLayer, createCollectionIfAbsent));
 
 		// Here and below don't pollute the cache if we just created the directory, since this transaction might
 		// not commit.
-		if (unboundPair.second != -1) {
+		if (cx->isVersioned()) {
 			TraceEvent(SevInfo, "MetadataCacheAdd")
 			    .detail("ns", fullCollNameToString(ns))
-			    .detail("version", unboundPair.second);
-			auto insert_result = self->contexts.insert(std::make_pair(ns, unboundPair));
+			    .detail("version", cx->metadataVersion);
+			auto insert_result = self->metadataCache.insert(std::make_pair(ns, cx));
 			// Somebody else may have done the lookup and finished ahead of us. Either way, replace it with ours (can no
 			// longer optimize this by only replacing if ours is newer, because the directory may have moved or
 			// vanished.
 			if (!insert_result.second) {
-				insert_result.first->second = unboundPair;
+				insert_result.first->second = cx;
 			}
 		}
-		return unboundPair.first;
+		return cx;
 	} else {
-		state uint64_t oldVersion = (*match).second.second;
-		state Reference<UnboundCollectionContext> oldUnbound = (*match).second.first;
+		state Reference<UnboundCollectionContext> oldUnbound = (*match).second;
+		state uint64_t oldVersion = oldUnbound->metadataVersion;
+
+		// We would never cache a collection without valid version
+		ASSERT(oldUnbound->isVersioned());
+
 		uint64_t version = wait(getMetadataVersion(tr, oldUnbound->metadataDirectory));
 		if (version != oldVersion) {
-			std::pair<Reference<UnboundCollectionContext>, uint64_t> unboundPair =
+			Reference<UnboundCollectionContext> cx =
 			    wait(constructContext(ns, tr, self->docLayer, createCollectionIfAbsent));
-			if (unboundPair.second != -1) {
+			if (cx->isVersioned()) {
 				// Create the iterator again instead of making the previous value state, because the map could have
 				// changed during the previous wait. Either way, replace it with ours (can no longer optimize this by
 				// only replacing if ours is newer, because the directory may have moved or vanished.
-				auto match = self->contexts.find(ns);
-				if (match != self->contexts.end())
-					match->second = unboundPair;
+				auto it = self->metadataCache.find(ns);
+				if (it != self->metadataCache.end())
+					it->second = cx;
 				else
-					self->contexts.insert(std::make_pair(ns, unboundPair));
+					self->metadataCache.insert(std::make_pair(ns, cx));
 
 				TraceEvent(SevInfo, "MetadataCacheUpdate")
 				    .detail("ns", fullCollNameToString(ns))
 				    .detail("oldVersion", oldVersion)
-				    .detail("newVersion", unboundPair.second);
+				    .detail("newVersion", cx->metadataVersion);
 			}
-			return unboundPair.first;
+			return cx;
 		} else {
 			return oldUnbound;
 		}

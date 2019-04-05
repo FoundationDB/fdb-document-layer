@@ -57,7 +57,7 @@ struct MetadataManager : ReferenceCounted<MetadataManager>, NonCopyable {
 	                               UID build_id);
 	static IndexInfo indexInfoFromObj(const bson::BSONObj& indexObj, Reference<UnboundCollectionContext> cx);
 
-	std::map<Namespace, std::pair<Reference<UnboundCollectionContext>, uint64_t>> contexts;
+	std::map<Namespace, Reference<UnboundCollectionContext>> metadataCache;
 	DocumentLayer* docLayer;
 };
 
