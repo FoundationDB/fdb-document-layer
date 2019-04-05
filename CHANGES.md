@@ -1,5 +1,16 @@
 ## Release notes
 
+### 1.6.4
+
+* [#84](https://github.com/FoundationDB/fdb-document-layer/issues/84) Fix for `getIndexes()`
+* [#99](https://github.com/FoundationDB/fdb-document-layer/issues/99) Fix for segfault on bulk insert errors
+* [#106](https://github.com/FoundationDB/fdb-document-layer/issues/106) Fix for deadlock in unique index rebuild
+* [#107](https://github.com/FoundationDB/fdb-document-layer/pull/107) Index rebuild `background` information persisted with index info
+* [#115](https://github.com/FoundationDB/fdb-document-layer/pull/115) Fix `versionArray` in `buildInfo`
+* [#117](https://github.com/FoundationDB/fdb-document-layer/issues/117) Added support to provide FDB data center to connect to
+* [#124](https://github.com/FoundationDB/fdb-document-layer/pull/124) Fix for create index from mongo shell
+* [#138](https://github.com/FoundationDB/fdb-document-layer/issues/138) Fix for metadata cache inconsistency, causing missing indexes
+
 ### 1.6.3
 
 * [#38](https://github.com/FoundationDB/fdb-document-layer/issues/38) Fix for compound index selection in query planner
