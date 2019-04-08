@@ -1425,3 +1425,23 @@ struct GetDistinctCmd {
 	}
 };
 REGISTER_CMD(GetDistinctCmd, "distinct");
+
+struct ConnectionStatusCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
+	                                           Reference<ExtMsgQuery> query,
+	                                           Reference<ExtMsgReply> reply) {
+		const bool showPrivileges = query->query.getBoolField("showPrivileges");
+
+		bson::BSONObjBuilder authInfo;
+		authInfo.append("authenticatedUsers", std::vector<std::string>());
+		authInfo.append("authenticatedUserRoles", std::vector<std::string>());
+		if (showPrivileges) {
+			authInfo.append("authenticatedUserPrivileges", std::vector<std::string>());
+		}
+		reply->addDocument(BSON("authInfo" << authInfo.obj() << "ok" << 1));
+
+		return reply;
+	}
+};
+REGISTER_CMD(ConnectionStatusCmd, "connectionstatus");
