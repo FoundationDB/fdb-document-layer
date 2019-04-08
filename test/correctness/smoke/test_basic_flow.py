@@ -60,3 +60,18 @@ def test_simple_coll_index(fixture_collection):
     returned = collection.find({'a': {'$gt': 10, '$lt': 21}}).count()
     assert returned == 10, "Expected: 10, Received: {}".format(returned)
 
+
+def test_connection_status(fixture_db):
+    db = fixture_db
+    status = db.command("connectionStatus", showPrivileges=True)
+    assert status['authInfo']['authenticatedUsers'] == list()
+    assert status['authInfo']['authenticatedUserRoles'] == list()
+    assert status['authInfo']['authenticatedUserPrivileges'] == list()
+    assert status['ok'] == 1
+
+    status = db.command("connectionStatus", showPrivileges=False)
+    assert status['authInfo']['authenticatedUsers'] == list()
+    assert status['authInfo']['authenticatedUserRoles'] == list()
+    assert 'authenticatedUserPrivileges' not in status['authInfo']
+    assert status['ok'] == 1
+
