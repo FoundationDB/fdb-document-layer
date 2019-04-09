@@ -353,7 +353,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			}
 
 			if (num_new_values > DOCLAYER_KNOBS->MULTI_MULTIKEY_INDEX_MAX) {
-				self->error_state = true;
 				throw multikey_index_cartesian_explosion();
 			}
 
@@ -520,7 +519,6 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 						    existing_index_entries.front().arena());
 						if (existingDocId.compare(documentPath[documentPath.size() - 1])) {
 							// existing index points to a different doc id that has the same value, abort.
-							self->error_state = true;
 							throw duplicated_key_field();
 						}
 					}
