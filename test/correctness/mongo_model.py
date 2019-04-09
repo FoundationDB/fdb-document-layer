@@ -38,7 +38,7 @@ operators = {
 
 
 def elem_match_pred(value, query, options):
-    if type(value) is list:
+    if isinstance(value, list):
         if False not in [k.startswith("$") for k in query["$elemMatch"]]:
             for i in value:
                 okay = True
@@ -76,6 +76,7 @@ def elem_match_pred(value, query, options):
     return False
 
 
+# Assumes the `document` passed in is a type of, or subtype of `OrderedDict`
 def expand(field, document, check_last_array, expand_array, add_last_array, check_none_at_all, check_none_next, debug):
     ret = []
 
@@ -150,9 +151,9 @@ def evaluate(field, query, document, options, debug=False):
     if type(query) != dict:
 
         def pred(value, query, options):
-            if type(value) == OrderedDict:
+            if isinstance(value, OrderedDict):
                 value = dict(value)
-            if type(query) == OrderedDict:
+            if isinstance(value, OrderedDict):
                 query = dict(query)
             return value == query
     elif '$ne' in query:
@@ -355,13 +356,13 @@ def include_in_projection(projection, k, v, node):
     return node.sub(k).included or (not is_simple(v) and node.sub(k).fields)
 
 
-def project(document, projection_fields):
+def project(documents, projection_fields):
     projection = Projection(projection_fields)
     projected_results = []
-    for values in document:
+    for document in documents:
         results = {}
-        # print "Projecting %r with %r" % (values, projection_fields)
-        for k, v in values.items():
+        # print "Projecting %r with %r" % (document, projection_fields)
+        for k, v in document.items():
             # print "Checking %r => %r with %s" % (k, v, projection.root)
             if k == '_id':
                 if projection.include_id:
@@ -431,14 +432,13 @@ def getTypeCode(value):
         return "20"
     elif isinstance(value, (long, float, int)):
         return "30"
+    elif isinstance(value, binary.Binary):
+        # this needs to come before basestring because `bson.binary.Binary` is also a subtype of `basestring`
+        return "70"
     elif isinstance(value, basestring):
         return "40"
     elif isinstance(value, OrderedDict):
         return "51"
-    elif isinstance(value, (list, tuple)):
-        return "60"
-    elif isinstance(value, binary.Binary):
-        return "70"
     elif isinstance(value, ObjectId):
         return "80"
     elif isinstance(value, datetime.datetime):
@@ -455,6 +455,7 @@ class SortedDict(OrderedDict):
         items = super(SortedDict, self).items()
         # group them together first
         tmp = OrderedDict()
+        tmp["20"] = []
         tmp["30"] = []
         tmp["40"] = []
         tmp["51"] = []
@@ -469,6 +470,8 @@ class SortedDict(OrderedDict):
         for typeCode, kvs in tmp.items():
             if typeCode == "51":
                 sortedItems.extend(sorted(kvs, key=lambda kv: bson.BSON.encode(SortedDict.fromOrderedDict(kv[0]))))
+            elif typeCode == "70":
+                sortedItems.extend(sorted(kvs, key=lambda kv: str(len(kv[0][:-1])) + str(kv[0].subtype) + kv[0][:-1]))
             else:
                 sortedItems.extend(sorted(kvs))
         # print str(sortedItems)
@@ -525,13 +528,13 @@ class MongoCollection(object):
     def insert(self, input):
         oldData = deepcopy(self.data)
         try:
-            if type(input) is OrderedDict:
+            if isinstance(input, OrderedDict):
                 self._insert(input)
-            elif type(input) is list:
+            elif isinstance(input, list):
                 all_ids = set()
                 for i in input:
                     if '_id' in i:
-                        if not self.options.object_field_order_matters and type(i['_id']) is HashableOrderedDict:
+                        if not self.options.object_field_order_matters and isinstance(i['_id'], HashableOrderedDict):
                             i['_id'] = HashableOrderedDict(sorted(i['_id'].items(), key=lambda (key, value): key))
                         if i['_id'] in all_ids:
                             # print i['_id']
@@ -831,8 +834,18 @@ class MongoCollection(object):
                     raise MongoModelException("Cannot apply $pullAll to a non-array field.", code=10142)
 
     def evaluate(self, query, document):
-        field = query.keys()[0]
-        return evaluate(field, query[field], document, self.options, True)
+        if len(query) == 0:
+            return True # match empty query, since coll.find({}) returns all docs
+        acc = True
+        for field in query.keys():
+            if field == '_id':
+                tmp = OrderedDict()
+                for k,v in sorted(query[field].items(), key= lambda i: i[0]):
+                    tmp[k] = v
+                acc = acc and evaluate(field, tmp, document, self.options, True)
+            else:
+                acc = acc and evaluate(field, query[field], document, self.options, True)
+        return acc
 
     def process_update_operator_pull(self, key, update_expression):
         # print "Update Operator: $pull ", update
@@ -848,10 +861,10 @@ class MongoCollection(object):
                                     if self.evaluate(v, item):
                                         # print "item match0!, remove: ", item
                                         self.data[key][k].remove(item)
-                                elif isinstance(v, list):
-                                    if item in v:
-                                        # print "item match1!, remove: ", item
-                                        self.data[key][k].remove(item)
+                        elif isinstance(v, list):
+                            if item in v:
+                                # print "item match1!, remove: ", item
+                                self.data[key][k].remove(item)
                         else:
                             self.data[key][k] = [x for x in self.data[key][k] if x != v]
                 else:
@@ -956,9 +969,6 @@ class MongoCollection(object):
                         self.mapUpdateOperator[k](key, update[k])
             else:
                 self.replace(key, update)
-            for index in self.indexes:
-                if not index.inError:
-                    index.validate_and_build_entry(self.data.values())
         except MongoModelException as e:
             self.data[key] = old_data
             raise e
@@ -1136,6 +1146,7 @@ class MongoCollection(object):
                     if not index.inError:
                         index.validate_and_build_entry(self.data.values())
         except MongoModelException as e:
+            # print "*********************** Reseting update due to {}".format(e)
             self.data = old_data
             raise e
 
@@ -1225,11 +1236,11 @@ class MongoIndex(object):
             raise MongoModelException("No index name specified", code=29967)
 
     def build(self, documents):
-        self.validate_and_build_entry(documents)
+        self.validate_and_build_entry(documents, first_build=True)
 
     # Validate the entry(ies) that will be built on this particular document for the following invariants:
     #    - If it's compund index, the cartesian product of all index values cannot exceed 1000
-    def validate_and_build_entry(self, documents):
+    def validate_and_build_entry(self, documents, first_build=False):
         for document in documents:
             nValues = 1
             for key in self.keys:
@@ -1244,7 +1255,7 @@ class MongoIndex(object):
                     debug=False)
                 nValues * len(values)
             if nValues > 1000 and not self.isSimple:
-                self.inError = True
+                self.inError = first_build
                 raise MongoModelException("Multi-multikey index size exceeds maximum value.", code=0)
 
 class MongoUniqueIndex(MongoIndex):
@@ -1252,12 +1263,12 @@ class MongoUniqueIndex(MongoIndex):
         super(MongoUniqueIndex, self).__init__(indexKeys, kwargs)
 
     def build(self, documents):
-        super(MongoUniqueIndex, self).validate_and_build_entry(documents)
-        self.validate_and_build_entry(documents)
+        super(MongoUniqueIndex, self).validate_and_build_entry(documents, first_build=True)
+        self.validate_and_build_entry(documents, first_build=True)
 
     # Validate the entry(ies) that will be built on this particular document for the following invariants:
     #    - No duplicates
-    def validate_and_build_entry(self, documents):
+    def validate_and_build_entry(self, documents, first_build=False):
         seen = set()
         for document in documents:
             entry = ""
@@ -1279,7 +1290,7 @@ class MongoUniqueIndex(MongoIndex):
                 # import pprint
                 # print "Violation doc"
                 # pprint.pprint(dict(document))
-                self.inError = True
+                self.inError = first_build
                 raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
             else:
                 # print "Inserting {} for key {}".format(entry, key)
