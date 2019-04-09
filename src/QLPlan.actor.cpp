@@ -347,7 +347,7 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
 			throw;
 		}
 		if (e.code() != error_code_end_of_stream)
-			TraceEvent(SevError, "BD_toDocInfo_error").detail("error", e.what());
+			TraceEvent(SevError, "BD_toDocInfo_error").error(e);
 		dis.sendError(e);
 		throw;
 	}
@@ -1516,7 +1516,7 @@ ACTOR static Future<Void> doSort(PlanCheckpoint* outerCheckpoint,
 			if (e.code() == error_code_end_of_stream) {
 				break;
 			}
-			TraceEvent(SevError, "BD_runQuery2").detail("error", e.what());
+			TraceEvent(SevError, "BD_runQuery2").error(e);
 			throw;
 		}
 	}
@@ -1535,7 +1535,7 @@ ACTOR static Future<Void> doSort(PlanCheckpoint* outerCheckpoint,
 			    ref(new BsonContext(returnProjections[i].getObjectField("doc").getOwned(), false)), -1, Key())));
 		}
 	} catch (Error& e) {
-		TraceEvent(SevError, "BD_runQuery2").detail("error", e.what());
+		TraceEvent(SevError, "BD_runQuery2").error(e);
 		throw;
 	}
 	innerCheckpoint->stop();
