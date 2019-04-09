@@ -331,17 +331,15 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 
 	while (!numberToReturn || remaining) {
 		try {
-
 			if ((returned <= DOCLAYER_KNOBS->MAX_RETURNABLE_DOCUMENTS ||
 			     returnedSize <= DOCLAYER_KNOBS->DEFAULT_RETURNABLE_DATA_SIZE) &&
 			    returnedSize <= DOCLAYER_KNOBS->MAX_RETURNABLE_DATA_SIZE) {
+
 				Reference<ScanReturnedContext> doc = waitNext(cursor->docs);
-				bson::BSONObj obj =
-				    doc->toDataValue()
-				        .get()
-				        .getPackedObject()
-				        .getOwned(); // Note that this call to get() is safe here but not in general, because we know
-				                     // that doc is wrapping a BsonContext, which means toDataValue() is synchronous.
+
+				// Note that this call to get() is safe here but not in general, because we know
+				// that doc is wrapping a BsonContext, which means toDataValue() is synchronous.
+				bson::BSONObj obj = doc->toDataValue().get().getPackedObject().getOwned();
 				cursor->checkpoint->getDocumentFinishedLock()->release();
 				reply->addDocument(obj);
 
@@ -361,7 +359,7 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 				stop = false;
 				break;
 			}
-			TraceEvent(SevError, "BD_runQuery2").detail("error", e.what());
+			TraceEvent(SevError, "BD_runQuery2").error(e);
 			throw;
 		}
 	}
@@ -469,7 +467,7 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 			}
 
 			// If EXHAUST not set OR it is but we got <=0 results, stop.
-			if (!(msg->flags & EXHAUST) || returned <= 0)
+			if (!exhaust || returned <= 0)
 				break;
 
 			++replies;

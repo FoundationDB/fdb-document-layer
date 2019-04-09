@@ -155,7 +155,7 @@ Future<Void> processRequest(Reference<ExtConnection> ec,
 			fprintf(stderr, "C -> S: %s\n\n", msg->toString().c_str());
 		return msg->run(ec);
 	} catch (Error& e) {
-		TraceEvent(SevWarnAlways, "BD_processRequest").detail("errorUnknownOpCode", header->opCode);
+		TraceEvent(SevWarnAlways, "BD_processRequest").detail("opcode", header->opCode).error(e);
 		return Void();
 	}
 }
@@ -473,7 +473,7 @@ ACTOR void setup(NetworkAddress na,
 				state Reference<Transaction> tr3(new Transaction(db));
 				Optional<FDB::FDBStandalone<StringRef>> clusterFilePath =
 				    wait(tr3->get(LiteralStringRef("\xff\xff/cluster_file_path")));
-				TraceEvent("StartupConfig").detail("clusterfile", clusterFilePath.get().toString());
+				TraceEvent("StartupConfig").detail("clusterFile", clusterFilePath.get().toString());
 			} catch (Error& e) {
 				if (e.code() != error_code_key_outside_legal_range) // KV-store 2.0
 					throw;
@@ -505,6 +505,7 @@ ACTOR void setup(NetworkAddress na,
 				try {
 					Void _ = wait(tr2->onError(e));
 				} catch (Error& e) {
+					TraceEvent(SevError, "ConnectionFailure").error(e);
 					fprintf(stderr, "Failed to connect to FDB connection! Error: %s\n", e.what());
 					_exit(FDB_EXIT_ERROR);
 				}
@@ -954,6 +955,9 @@ int main(int argc, char** argv) {
 	}
 #endif
 	if (metricPluginPath && metricPluginPath[0]) {
+		TraceEvent(SevInfo, "MetricsInit")
+		    .detail("pluginPath", metricPluginPath)
+		    .detail("config", metricReporterConfig);
 		DocumentLayer::metricReporter = IMetricReporter::init(metricPluginPath, metricReporterConfig.c_str());
 	} else {
 		// default to use `ConsoleMetric` plugin

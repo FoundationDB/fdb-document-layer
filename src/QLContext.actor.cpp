@@ -144,10 +144,6 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 	state std::string end = std::move(prefix);
 	end += relEnd;
 
-	// if (verboseLogging)
-	// TraceEvent("BD_getDescendents").detail("from", printable(StringRef(begin)).c_str()).detail("to",
-	// printable(StringRef(end)).c_str());
-
 	try {
 		state GetRangeLimits limit(GetRangeLimits::ROW_LIMIT_UNLIMITED, 80000);
 		state Future<FDBStandalone<RangeResultRef>> nextRead = tr->tr->getRange(KeyRangeRef(begin, end), limit);
@@ -178,7 +174,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 		throw end_of_stream();
 	} catch (Error& e) {
 		if (e.code() != error_code_end_of_stream && e.code() != error_code_operation_cancelled)
-			TraceEvent(SevError, "BD_getDescendants").detail("error", e.what());
+			TraceEvent(SevError, "BD_getDescendants").error(e);
 		if (e.code() != error_code_operation_cancelled)
 			output.sendError(e);
 		throw;
@@ -325,8 +321,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 		state Future<Void> writes_finished = dd->writes_finished.getFuture();
 
 		try {
-			// TraceEvent("BD_doIndexUpdateStart");
-
 			dd->snapshotLock.use();
 
 			std::vector<Future<std::vector<DataValue>>> f_old_values;
@@ -433,7 +427,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			}
 
 		} catch (Error& e) {
-			TraceEvent(SevError, "BD_doIndexUpdate").detail("error", e.what());
+			TraceEvent(SevError, "BD_doIndexUpdate").error(e);
 			throw;
 		}
 
@@ -475,8 +469,6 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 		state Reference<QueryContext> doc(new QueryContext(self->next, tr, documentPath));
 		state Future<Void> writes_finished = dd->writes_finished.getFuture();
 		try {
-			// TraceEvent("BD_doIndexUpdateStart");
-
 			dd->snapshotLock.use();
 
 			state std::vector<DataValue> old_values =
@@ -536,14 +528,12 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 			}
 			// clear any existing index entries
 			for (DataValue& v : old_values) {
-				// fprintf(stderr, "Old value: %s\n", printable(StringRef(v.encode_key_part())).c_str());
 				DataKey old_key(self->indexPath);
 				old_key.append(v.encode_key_part()).append(documentPath[documentPath.size() - 1]);
 				tr->tr->clear(getFDBKey(old_key));
 			}
 			// write the new/updated index entries
 			for (DataValue& v : new_values) {
-				// fprintf(stderr, "New value: %s\n", printable(StringRef(v.encode_key_part())).c_str());
 				DataKey new_key(self->indexPath);
 				new_key.append(v.encode_key_part()).append(documentPath[documentPath.size() - 1]);
 				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
@@ -555,7 +545,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				tr->tr->set(getFDBKey(new_key), StringRef());
 			}
 		} catch (Error& e) {
-			TraceEvent(SevError, "BD_doIndexUpdate").detail("error", e.what());
+			TraceEvent(SevError, "BD_doIndexUpdate").error(e);
 			throw;
 		}
 

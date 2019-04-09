@@ -105,7 +105,7 @@ ACTOR Future<bson::BSONObj> projectDocument_impl(Reference<IReadContext> doc, Re
 		return currentPath[0].build().getOwned();
 	} catch (Error& e) {
 		if (e.code() != error_code_actor_cancelled)
-			TraceEvent(SevError, "BD_projectDocument").detail("error", e.what());
+			TraceEvent(SevError, "BD_projectDocument").error(e);
 		throw;
 	}
 }
