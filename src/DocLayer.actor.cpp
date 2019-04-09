@@ -955,7 +955,9 @@ int main(int argc, char** argv) {
 	}
 #endif
 	if (metricPluginPath && metricPluginPath[0]) {
-		TraceEvent(SevInfo, "MetricsInit").detail("pluginPath", metricPluginPath).detail("config", metricReporterConfig);
+		TraceEvent(SevInfo, "MetricsInit")
+		    .detail("pluginPath", metricPluginPath)
+		    .detail("config", metricReporterConfig);
 		DocumentLayer::metricReporter = IMetricReporter::init(metricPluginPath, metricReporterConfig.c_str());
 	} else {
 		// default to use `ConsoleMetric` plugin
