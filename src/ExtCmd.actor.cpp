@@ -111,19 +111,13 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
                                                            Reference<ExtMsgQuery> query,
                                                            Reference<ExtMsgReply> reply) {
 	try {
-		// No need to wait on lastWrite in either case. If it's an explicit transaction, the transaction object is per
-		// connection, and all operations in such a transaction block the connection until they complete, so we can't
-		// have concurrent modification of a document. If it isn't an explicit transaction, the ranges we write ensure
-		// that this will conflict with anything it needs to conflict with.
-		if (ec->explicitTransaction) {
-			Void _ = wait(Internal_doDropDatabase(ec->tr, query, ec->docLayer->rootDirectory));
-		} else {
-			Void _ = wait(runRYWTransaction(ec->docLayer->database,
-			                                [=](Reference<DocTransaction> tr) {
-				                                return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
-			                                },
-			                                ec->options.retryLimit, ec->options.timeoutMillies));
-		}
+		// No need to wait on lastWrite. The ranges we write ensure that this will conflict with anything it needs to
+		// conflict with.
+		Void _ = wait(runRYWTransaction(ec->docLayer->database,
+		                                [=](Reference<DocTransaction> tr) {
+			                                return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
+		                                },
+		                                ec->options.retryLimit, ec->options.timeoutMillies));
 
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
@@ -384,18 +378,12 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropCollection(Reference<ExtConnec
                                                              Reference<ExtMsgQuery> query,
                                                              Reference<ExtMsgReply> reply) {
 	try {
-		// No need to wait on lastWrite in either case. If it's an explicit transaction, the transaction object is per
-		// connection, and all operations in such a transaction block the connection until they complete, so we can't
-		// have concurrent modification of a document. If it isn't an explicit transaction, the ranges we write ensure
-		// that this will conflict with anything it needs to conflict with.
-		if (ec->explicitTransaction) {
-			Void _ = wait(Internal_doDropCollection(ec->tr, query, ec->mm));
-		} else {
-			Void _ = wait(runRYWTransaction(
-			    ec->docLayer->database,
-			    [=](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
-			    ec->options.retryLimit, ec->options.timeoutMillies));
-		}
+		// No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict with
+		// anything it needs to conflict with.
+		Void _ = wait(runRYWTransaction(
+		    ec->docLayer->database,
+		    [=](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
+		    ec->options.retryLimit, ec->options.timeoutMillies));
 
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
@@ -424,15 +412,13 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnecti
 		Reference<Plan> plan = planQuery(cx, query->query.getObjectField(DocLayerConstants::QUERY_FIELD));
 		plan = ec->wrapOperationPlan(plan, true, cx);
 
-		// fprintf(stderr, "Plan: %s\n", plan->describe().toString().c_str());
-
 		// Rather than use a SkipPlan, we subtract "skipped" documents from the final count (and add them to any limit)
 		state int64_t skip = query->query.hasField("skip") ? query->query.getField("skip").numberLong() : 0;
 		state int64_t limitPlusSkip = query->query.hasField("limit")
 		                                  ? skip + query->query.getField("limit").numberLong()
 		                                  : std::numeric_limits<int64_t>::max();
-		int64_t count = wait(executeUntilCompletionTransactionally(
-		    plan, dtr)); // SOMEDAY: We can optimize this by only counting the first limitPlusSkip documents
+		// SOMEDAY: We can optimize this by only counting the first limitPlusSkip documents
+		int64_t count = wait(executeUntilCompletionTransactionally(plan, dtr));
 
 		reply->addDocument(BSON("n" << (double)std::max<int64_t>(count - skip, 0) << "ok" << 1.0));
 		return reply;
@@ -510,11 +496,8 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		}
 
 		state Reference<Plan> plan = planQuery(ucx, selector);
-		if (ec->explicitTransaction)
-			plan = ref(new ProjectAndUpdatePlan(plan, updater, upserter, projection, ordering, isnew, ucx));
-		else
-			plan = ref(new FindAndModifyPlan(plan, updater, upserter, projection, ordering, isnew, ucx,
-			                                 ec->docLayer->database, ec->mm));
+		plan = ref(new FindAndModifyPlan(plan, updater, upserter, projection, ordering, isnew, ucx,
+		                                 ec->docLayer->database, ec->mm));
 
 		state std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 		    wait(executeUntilCompletionAndReturnLastTransactionally(plan, tr));
@@ -579,63 +562,41 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 			bson::BSONElement el = query->query.getField("index");
 			if (el.type() == bson::BSONType::String) {
 				if (el.String() == "*") {
-					// No need to wait on lastWrite in either case. If it's an explicit transaction, the transaction
-					// object is per connection, and all operations in such a transaction block the connection until
-					// they complete, so we can't have concurrent modification of a document. If it isn't an explicit
-					// transaction, the ranges we write ensure that this will conflict with anything it needs to
-					// conflict with.
-					if (ec->explicitTransaction) {
-						int result = wait(internal_doDropIndexesActor(ec->tr, query->ns, ec->mm));
-						dropped = result;
-					} else {
-						int result =
-						    wait(runRYWTransaction(ec->docLayer->database,
-						                           [=](Reference<DocTransaction> tr) {
-							                           return internal_doDropIndexesActor(tr, query->ns, ec->mm);
-						                           },
-						                           ec->options.retryLimit, ec->options.timeoutMillies));
-						dropped = result;
-					}
+					// No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict
+					// with anything it needs to conflict with.
+					int result = wait(runRYWTransaction(ec->docLayer->database,
+					                                    [=](Reference<DocTransaction> tr) {
+						                                    return internal_doDropIndexesActor(tr, query->ns, ec->mm);
+					                                    },
+					                                    ec->options.retryLimit, ec->options.timeoutMillies));
+					dropped = result;
 
 					reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "msg"
 					                                      << "non-_id indexes dropped for collection"
 					                                      << "ok" << 1.0));
 					return reply;
 				} else {
-					if (ec->explicitTransaction) {
-						std::pair<int, int> result =
-						    wait(dropIndexMatching(ec->tr, query->ns, DocLayerConstants::NAME_FIELD,
-						                           DataValue(el.String(), DVTypeCode::STRING), ec->mm));
-						dropped = result.first;
-					} else {
-						std::pair<int, int> result = wait(runRYWTransaction(
-						    ec->docLayer->database,
-						    [=](Reference<DocTransaction> tr) {
-							    return dropIndexMatching(tr, query->ns, DocLayerConstants::NAME_FIELD,
-							                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
-						    },
-						    ec->options.retryLimit, ec->options.timeoutMillies));
-						dropped = result.first;
-					}
+					std::pair<int, int> result = wait(runRYWTransaction(
+					    ec->docLayer->database,
+					    [=](Reference<DocTransaction> tr) {
+						    return dropIndexMatching(tr, query->ns, DocLayerConstants::NAME_FIELD,
+						                             DataValue(el.String(), DVTypeCode::STRING), ec->mm);
+					    },
+					    ec->options.retryLimit, ec->options.timeoutMillies));
+					dropped = result.first;
 
 					reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "ok" << 1.0));
 					return reply;
 				}
 			} else if (el.type() == bson::BSONType::Object) {
-				if (ec->explicitTransaction) {
-					std::pair<int, int> result = wait(dropIndexMatching(ec->tr, query->ns, DocLayerConstants::KEY_FIELD,
-					                                                    DataValue(el.Obj()), ec->mm));
-					dropped = result.first;
-				} else {
-					std::pair<int, int> result =
-					    wait(runRYWTransaction(ec->docLayer->database,
-					                           [=](Reference<DocTransaction> tr) {
-						                           return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD,
-						                                                    DataValue(el.Obj()), ec->mm);
-					                           },
-					                           ec->options.retryLimit, ec->options.timeoutMillies));
-					dropped = result.first;
-				}
+				std::pair<int, int> result =
+				    wait(runRYWTransaction(ec->docLayer->database,
+				                           [=](Reference<DocTransaction> tr) {
+					                           return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD,
+					                                                    DataValue(el.Obj()), ec->mm);
+				                           },
+				                           ec->options.retryLimit, ec->options.timeoutMillies));
+				dropped = result.first;
 
 				reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "ok" << 1.0));
 				return reply;
@@ -644,16 +605,11 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				return reply;
 			}
 		} else {
-			if (ec->explicitTransaction) {
-				int result = wait(internal_doDropIndexesActor(ec->tr, query->ns, ec->mm));
-				dropped = result;
-			} else {
-				int result = wait(runRYWTransaction(
-				    ec->docLayer->database,
-				    [=](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
-				    ec->options.retryLimit, ec->options.timeoutMillies));
-				dropped = result;
-			}
+			int result = wait(runRYWTransaction(
+			    ec->docLayer->database,
+			    [=](Reference<DocTransaction> tr) { return internal_doDropIndexesActor(tr, query->ns, ec->mm); },
+			    ec->options.retryLimit, ec->options.timeoutMillies));
+			dropped = result;
 
 			// clang-format off
 			reply->addDocument(BSON("nIndexesWas" << dropped + 1 <<
@@ -844,14 +800,10 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
 			throw unsupported_cmd_option();
 		}
 
-		if (ec->explicitTransaction) {
-			Void _ = wait(Internal_doCreateCollection(ec->tr, query, ec->mm));
-		} else {
-			Void _ = wait(runRYWTransaction(
-			    ec->docLayer->database,
-			    [=](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
-			    ec->options.retryLimit, ec->options.timeoutMillies));
-		}
+		Void _ = wait(runRYWTransaction(
+		    ec->docLayer->database,
+		    [=](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
+		    ec->options.retryLimit, ec->options.timeoutMillies));
 
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
@@ -870,107 +822,6 @@ struct CreateCollectionCmd {
 	}
 };
 REGISTER_CMD(CreateCollectionCmd, "create");
-
-ACTOR static Future<Reference<ExtMsgReply>> doBeginActor(Reference<ExtConnection> ec,
-                                                         Reference<ExtMsgQuery> query,
-                                                         Reference<ExtMsgReply> reply) {
-	state bool retry = query->query.hasField("retry") && query->query.getField("retry").trueValue();
-	try {
-		try {
-			WriteResult _ = wait(ec->lastWrite);
-			if (retry)
-				Void _ = wait(ec->trError);
-		} catch (Error& e) {
-			if (retry) {
-				Void _ = wait(ec->tr->tr->onError(e));
-			}
-		}
-	} catch (Error& e) {
-		ec->explicitTransaction = false;
-		ec->lastWrite = WriteResult();
-		ec->trError = Void();
-		ec->tr->tr->reset();
-		reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
-		return reply;
-	}
-
-	ec->explicitTransaction = true;
-	ec->lastWrite = WriteResult();
-	ec->trError = Void();
-	if (!retry)
-		ec->tr = DocTransaction::create(Reference<Transaction>(new Transaction(ec->docLayer->database)));
-	ec->tr->tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
-	ec->tr->tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&(ec->options.timeoutMillies), sizeof(int64_t)));
-	ec->tr->tr->setOption(FDB_TR_OPTION_RETRY_LIMIT, StringRef((uint8_t*)&(ec->options.retryLimit), sizeof(int64_t)));
-
-	reply->addDocument(BSON("ok" << 1.0));
-	return reply;
-}
-
-struct BeginTransactionCmd {
-	static const char* name;
-	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
-	                                           Reference<ExtMsgQuery> query,
-	                                           Reference<ExtMsgReply> reply) {
-		return doBeginActor(ec, query, reply);
-	}
-};
-REGISTER_CMD(BeginTransactionCmd, "begintransaction");
-
-struct RollbackTransactionCmd {
-	static const char* name;
-	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
-	                                           Reference<ExtMsgQuery> query,
-	                                           Reference<ExtMsgReply> reply) {
-		if (ec->explicitTransaction) {
-			ec->tr->tr->reset();
-			ec->explicitTransaction = false;
-			ec->lastWrite = WriteResult();
-			ec->trError = Void();
-			reply->addDocument(BSON("ok" << 1.0));
-		} else {
-			Error e = no_transaction_in_progress();
-			reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
-		}
-		return reply;
-	}
-};
-REGISTER_CMD(RollbackTransactionCmd, "rollbacktransaction");
-
-ACTOR static Future<Reference<ExtMsgReply>> doCommitActor(Reference<ExtConnection> ec, Reference<ExtMsgReply> reply) {
-	if (ec->explicitTransaction) {
-		try {
-			WriteResult res = wait(ec->lastWrite);
-		} catch (Error& e) { // Eat this error. If the client wanted to see it, he or she should have called
-			                 // getLastError before trying to commit.
-		}
-		try {
-			Void _ = wait(ec->tr->tr->commit());
-			ec->lastWrite = WriteResult();
-			ec->trError = Void();
-			reply->addDocument(BSON("ok" << 1.0));
-		} catch (Error& e) {
-			ec->lastWrite = e;
-			ec->trError = e;
-			reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
-		}
-	} else {
-		Error e = no_transaction_in_progress();
-		reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
-	}
-	ec->explicitTransaction = false;
-	return reply;
-}
-
-struct CommitTransactionCmd {
-	static const char* name;
-	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
-	                                           Reference<ExtMsgQuery> query,
-	                                           Reference<ExtMsgReply> reply) {
-		return doCommitActor(ec, reply);
-	}
-};
-REGISTER_CMD(CommitTransactionCmd, "committransaction");
 
 ACTOR static Future<Reference<ExtMsgReply>> doGetKVStatusActor(Reference<ExtConnection> ec,
                                                                Reference<ExtMsgReply> reply) {

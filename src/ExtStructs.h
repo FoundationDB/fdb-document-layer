@@ -117,23 +117,10 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Future<Void> beforeWrite(int desiredPermits = 1);
 	Future<Void> afterWrite(Future<WriteResult> result, int releasePermits = 1);
 
-	// someday these next two should probably become private
-	bool explicitTransaction;
-	Reference<DocTransaction> tr;
-
-	/**
-	 * If inside an explicit transaction, this variable holds more or less the equivalent
-	 * of success(lastWrite). However, unlike lastWrite this is not cleared on each call
-	 * to getLastError, so can be used to direct retries.
-	 */
-	Future<Void> trError;
-
 	ExtConnection(Reference<DocumentLayer> docLayer, Reference<BufferedConnection> bc, int64_t connectionId)
 	    : docLayer(docLayer),
 	      bc(bc),
 	      lastWrite(WriteResult()),
-	      explicitTransaction(false),
-	      trError(Void()),
 	      options(docLayer->defaultConnectionOptions),
 	      lock(Reference<FlowLock>(new FlowLock(DOCLAYER_KNOBS->CONNECTION_MAX_PIPELINE_DEPTH))),
 	      cursors(),

@@ -66,8 +66,7 @@ future release, we expect this limit to become configurable.
 
 ## Unimplemented features
 
-Document Layer's feature set is focused on CRUD operations, indexes and
-transactions. Some of the important features missing are listed here.
+Document Layer's feature set is focused on CRUD operations and indexes. Some of the important features missing are listed here.
 
 #### Aggregation framework
 The Document Layer does not implement the MongoDB® aggregation

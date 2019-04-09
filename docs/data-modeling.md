@@ -13,26 +13,7 @@ transactions, see [transactions](transactions.md).
 The Document Layer implements a subset of the MongoDB® API (v 3.0.0)
 with a few [known differences](known-differences.md). As a result,
 most of the data modeling techniques used with MongoDB® are
-applicable to the Document Layer as well. However, the Document
-Layer adds transactions in a way that differs from the way transactions
-were added to the MongoDB® v 4.0 API, which means that client code
-written to use multi-document transactions may need to be modified
-to work with the Document Layer.
-
-Transactions are a tool for concurrency control that allows multiple
-clients to read and write data with strong guarantees about how the
-clients can affect each other. Transactions provide new capabilities for
-data modeling because they can operate on multiple documents with full
-[ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) guarantees.
-
-Note that regardless of whether or not the user specifies an explicit
-transaction, all Document Layer operations must occur within the context
-of some transaction of the underlying FoundationDB Key-Value Store. If
-the user does not supply one explicitly, then the Document Layer will
-create one transaction per operation. This means that there is very
-little overhead for using a multi-document transaction compared to a
-single-document operation. As a result, the Document Layer is very
-amenable to data models that require such transactions.
+applicable to the Document Layer as well.
 
 ## Embedding data
 
@@ -144,88 +125,3 @@ to) a given task as follows:
     def find_members(db, task_id):
         return db.tasks.find_one({'_id': ObjectId(task_id)}, {'members': 1})
 ```
-
-## Transactions for multi-document operations
-
-The `find_members` function is a simple example that reads from only a
-*single* document. In order to change a task assignment, you'll need to
-update *two* documents, one for the person and one for the task. The
-Document Layer's transactions make it easy to perform multi-document
-operations in an atomic and isolated manner.
-
-Here are a few examples using the [@transactional](transactions.md#retry-loops)
-decorator with PyMongo. You can add a new member to a task as follows:
-
-```python
-    @transactional
-    def add_member(db, person_id, task_id):
-        db.persons.update({u'_id': ObjectId(person_id)},
-                          {'$addToSet': {u'tasks': ObjectId(task_id)}})
-        db.tasks.update({u'_id': ObjectId(task_id)},
-                        {'$addToSet': {u'members': ObjectId(person_id)}}) 
-```
-
-The `@transactional` decorator implements a retry loop, which may, on
-occasion, execute the transaction more than once. You should therefore
-check that this transactional function is [idempotent](transactions.md#idempotence),
-producing the same result if executed multiple times as if executed once.
-
-In this case, the idempotence of `add_member()` is guaranteed by the
-`$addToSet` operator, which never adds more than a single copy of an
-element to an array. It would therefore be a bug to use the `$push`
-operator in this function instead of `$addToSet`, as `$push` may add
-redundant copies of an element.
-
-Removing a member from a task is similar:
-
-```python
-    @transactional
-    def remove_member(db, person_id, task_id):
-        db.persons.update({u'_id': ObjectId(person_id)},
-                          {'$pullAll': {u'tasks': [ObjectId(task_id)]}})
-        db.tasks.update({u'_id': ObjectId(task_id)},
-                        {'$pullAll': {u'members': [ObjectId(person_id)]}})
-```
-
-Here, idempotence is guaranteed because an element can only be removed
-from an array once. `$pullAll` will simply have no effect on a
-subsequent execution.
-
-Finally, you can wholesale reassign a task by removing and adding lists
-of persons, all in a single transaction:
-
-```python
-    @transactional
-    def reassign_task(db, task_id, old_person_ids, new_person_ids):
-    
-        # get lists of the object ids
-        remove_objects = map(ObjectId, old_person_ids)
-        add_objects = map(ObjectId, new_person_ids)
-    
-        # remove task from old persons
-        db.persons.update({u'_id': {'$in': remove_objects}},
-                          {'$pullAll': {u'tasks': [ObjectId(task_id)]}},
-                          multi=True)
-    
-        # add task to new persons
-        db.persons.update({u'_id': {'$in': add_objects}},
-                          {'$addToSet': {u'tasks': ObjectId(task_id)}},
-                          multi=True)
-    
-        # remove old persons from task
-        db.tasks.update({u'_id': ObjectId(task_id)},
-                        {'$pullAll': {u'members': remove_objects}})
-    
-        # add new persons to task
-        db.tasks.update({u'_id': ObjectId(task_id)},
-                        {'$addToSet': {u'members': add_objects}})
-```
-
-This transactional function is idempotent for the same reasons as
-`add_member()` and `remove_member()`.
-
-In summary, all data modeling techniques available in MongoDB® remain
-available in the Document Layer. However, transactions provide a new
-capability by coordinating operations across multiple documents with
-guarantees of atomicity and isolation. This capability makes the use of
-references between documents much safer.
