@@ -310,18 +310,22 @@ def one_iteration(collection1, collection2, ns, seed):
         try:
             func1(*args1, **kwargs1)
         except pymongo.errors.OperationFailure as e:
-            print "Failed func1 with " + str(e)
+            if verbose:
+                print "Failed func1 with " + str(e)
             exceptionOne = e
         except MongoModelException as e:
-            print "Failed func1 with " + str(e)
+            if verbose:
+                print "Failed func1 with " + str(e)
             exceptionOne = e
         try:
             func2(*args2, **kwargs2)
         except pymongo.errors.OperationFailure as e:
-            print "Failed func2 with " + str(e)
+            if verbose:
+                print "Failed func2 with " + str(e)
             exceptionTwo = e
         except MongoModelException as e:
-            print "Failed func2 with " + str(e)
+            if verbose:
+                print "Failed func2 with " + str(e)
             exceptionTwo = e
 
         if ((exceptionOne is None and exceptionTwo is None)
