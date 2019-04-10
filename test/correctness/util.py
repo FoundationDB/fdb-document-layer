@@ -408,7 +408,7 @@ def mongo_sort_list_by_fields_list(array, field_name_list):
     return mongo_sort_list_by_fields(array, field_name_map)
 
 def sorte_id_field(doc):
-    if isinstance(doc['_id'], dict):
+    if '_id' in doc.keys() and isinstance(doc['_id'], dict):
         od = HashableOrderedDict()
         for k,v in sorted(doc['_id'].items(), key=lambda kv: kv[0]):
             od[k] = v
