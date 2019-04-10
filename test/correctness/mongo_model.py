@@ -529,9 +529,10 @@ class MongoCollection(object):
         oldData = deepcopy(self.data)
         try:
             if isinstance(input, OrderedDict):
-                self._insert(input)
+                self._insert(sorte_id_field(input))
             elif isinstance(input, list):
                 all_ids = set()
+                input = map(sorte_id_field, input)
                 for i in input:
                     if '_id' in i:
                         if not self.options.object_field_order_matters and isinstance(i['_id'], HashableOrderedDict):
@@ -824,7 +825,7 @@ class MongoCollection(object):
     def process_update_operator_pull_all(self, key, update_expression):
         # print "Update Operator: $pullAll ", update_operator, update
         for k, v in update_expression.iteritems():
-            # print "Inc: key: ", k, " value: ", v
+            # print "pullAll: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):
                     if len(self.data[key][k]) > 0:
@@ -835,7 +836,9 @@ class MongoCollection(object):
 
     def evaluate(self, query, document):
         if len(query) == 0:
-            return True # match empty query, since coll.find({}) returns all docs
+            # If we made it here, the evaluate function must NOT be called from the `find` function, and thus
+            # we can return false. Note in find() function, an empty query means maches all documents.
+            return False
         acc = True
         for field in query.keys():
             if field == '_id':
@@ -861,10 +864,10 @@ class MongoCollection(object):
                                     if self.evaluate(v, item):
                                         # print "item match0!, remove: ", item
                                         self.data[key][k].remove(item)
-                        elif isinstance(v, list):
-                            if item in v:
-                                # print "item match1!, remove: ", item
-                                self.data[key][k].remove(item)
+                                elif isinstance(v, list):
+                                    if item in v:
+                                        # print "item match1!, remove: ", item
+                                        self.data[key][k].remove(item)
                         else:
                             self.data[key][k] = [x for x in self.data[key][k] if x != v]
                 else:
@@ -1146,10 +1149,8 @@ class MongoCollection(object):
                     if not index.inError:
                         index.validate_and_build_entry(self.data.values())
         except MongoModelException as e:
-            # print "*********************** Reseting update due to {}".format(e)
             self.data = old_data
             raise e
-
         # need to create a new doc
         if upsert and not any:
             n += 1
