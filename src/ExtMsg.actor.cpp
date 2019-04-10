@@ -820,7 +820,7 @@ ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj indexObj,
 		Standalone<StringRef> id =
 		    wait(pair.second->getKeyEncodedId()); // FIXME: Is this actually transactional? Safe? Maybe project it?
 
-		if (background && !ec->explicitTransaction)
+		if (background)
 			ec->docLayer->backgroundTasks.add(wrapError(MetadataManager::buildIndex(indexObj, ns, id, ec, build_id)));
 		else
 			Void _ = wait(MetadataManager::buildIndex(indexObj, ns, id, ec, build_id));

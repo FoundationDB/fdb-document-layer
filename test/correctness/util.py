@@ -1100,7 +1100,6 @@ def weaken_tests_for_mongo(ns):
     gen.generator_options.allow_long_ids = False
     gen.generator_options.allow_id_elemmatch = False
     gen.generator_options.allow_general_nots = False
-    gen.generator_options.use_transactions = False
     # gen.generator_options.index_parallel_arrays = False
     # gen.generator_options.allow_long_fields = False
     ns['no_indexes'] = False

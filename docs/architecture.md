@@ -45,8 +45,7 @@ FoundationDB.
 
 As the application sees the instance pool through load balancer, reconnection
 to the same IP could go to different instance. This makes it hard to depend on
-any server state. In this setup, the Document Layer transactions do not provide
-correct consistency guarantees. Transactions should not be used in this model.
+any server state.
 
 **Note:** Cursors work properly as cursor requests come with an ID, which is used
 to fail the request that went to wrong server.

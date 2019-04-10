@@ -22,16 +22,13 @@
 #include "QLPlan.h"
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {
-	return explicitTransaction ? tr : NonIsolatedPlan::newTransaction(docLayer->database);
+	return NonIsolatedPlan::newTransaction(docLayer->database);
 }
 
 Reference<Plan> ExtConnection::wrapOperationPlan(Reference<Plan> plan,
                                                  bool isReadOnly,
                                                  Reference<UnboundCollectionContext> cx) {
-	if (!explicitTransaction)
-		return Reference<Plan>(new NonIsolatedPlan(plan, isReadOnly, cx, docLayer->database, mm));
-	else
-		return flushChanges(plan);
+	return Reference<Plan>(new NonIsolatedPlan(plan, isReadOnly, cx, docLayer->database, mm));
 }
 
 Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan) {
@@ -39,10 +36,7 @@ Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan) {
 }
 
 Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan, int64_t timeout, int64_t retryLimit) {
-	if (!explicitTransaction)
-		return Reference<Plan>(new RetryPlan(plan, timeout, retryLimit, docLayer->database));
-	else
-		return flushChanges(plan);
+	return Reference<Plan>(new RetryPlan(plan, timeout, retryLimit, docLayer->database));
 }
 
 ACTOR Future<Void> housekeeping_impl(Reference<ExtConnection> ec) {
@@ -82,8 +76,6 @@ ACTOR Future<WriteResult> lastErrorOrLastResult(Future<WriteResult> previous,
  * afterWrite() uses.
  */
 Future<Void> ExtConnection::beforeWrite(int desiredPermits) {
-	if (explicitTransaction)
-		return ready(lastWrite);
 	if (options.pipelineCompatMode)
 		return ready(lastWrite);
 	// printf("beforeWrite: lock %d, requested %d\n", lock.activePermits(), desiredPermits);
@@ -97,11 +89,6 @@ Future<Void> ExtConnection::beforeWrite(int desiredPermits) {
  * called).
  */
 Future<Void> ExtConnection::afterWrite(Future<WriteResult> writeResult, int releasePermits) {
-	if (explicitTransaction) {
-		lastWrite = writeResult;
-		trError = success(writeResult);
-		return ready(writeResult);
-	}
 	if (options.pipelineCompatMode) {
 		lastWrite = writeResult;
 		return ready(lastWrite);
