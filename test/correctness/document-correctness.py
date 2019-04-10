@@ -30,7 +30,6 @@ import sys
 import pymongo
 
 import gen
-import transactional_shim
 import util
 from mongo_model import MongoCollection
 from mongo_model import MongoModel
@@ -60,8 +59,8 @@ def get_clients_and_collections(ns):
     db2 = client2['test']
     collection1 = db1['correctness' + instance]
     collection2 = db2['correctness' + instance]
-    transactional_shim.remove(collection1)
-    transactional_shim.remove(collection2)
+    collection1.drop()
+    collection2.drop()
     return (client1, client2, collection1, collection2)
 
 
@@ -72,7 +71,10 @@ def get_collections(ns):
 
 def get_result(query, collection, projection, sort, limit, skip, exception_msg):
     try:
-        cur = transactional_shim.find(collection, query, projection)
+        if gen.global_prng.random() < 0.10:
+            cur = collection.find(query, projection, batch_size=gen.global_prng.randint(2, 10))
+        else:
+            cur = collection.find(query, projection)
 
         if sort is None:
             ret = [util.deep_convert_to_unordered(i) for i in cur]
@@ -221,7 +223,7 @@ def test_update(collections, verbose=False):
         util.trace('debug', 'Update:', str(update['update']))
         util.trace('debug', 'Number results from collection: ', gen.count_query_results(
             collections[0], update['query']))
-        for item in transactional_shim.find(collections[0], update['query']):
+        for item in collections[0].find(update['query']):
             util.trace('debug', 'Find Result0:', item)
 
         exception = []
@@ -230,12 +232,11 @@ def test_update(collections, verbose=False):
             try:
                 if verbose:
                     all = [x for x in coll.find(dict())]
-                    for item in transactional_shim.find(coll, update['query']):
+                    for item in coll.find(update['query']):
                         print 'Before update doc:', item
                     print 'Before update coll size: ', len(all)
 
-                transactional_shim.update(
-                    coll, update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
+                coll.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
 
                 if verbose:
                     all = [x for x in coll.find(dict())]
@@ -296,14 +297,18 @@ def one_iteration(collection1, collection2, ns, seed):
         try:
             func1(*args1, **kwargs1)
         except pymongo.errors.OperationFailure as e:
+            print "Failed func1 with " + str(e)
             exceptionOne = e
         except MongoModelException as e:
+            print "Failed func1 with " + str(e)
             exceptionOne = e
         try:
-            func1(*args2, **kwargs2)
+            func2(*args2, **kwargs2)
         except pymongo.errors.OperationFailure as e:
+            print "Failed func2 with " + str(e)
             exceptionTwo = e
         except MongoModelException as e:
+            print "Failed func2 with " + str(e)
             exceptionTwo = e
 
         if ((exceptionOne is None and exceptionTwo is None)
@@ -326,14 +331,11 @@ def one_iteration(collection1, collection2, ns, seed):
 
         fname = util.save_cmd_line(util.command_line_str(ns, seed))
 
-        if indexes_enabled:
-            transactional_shim.drop_indexes(collection1)
-            transactional_shim.drop_indexes(collection2)
-        transactional_shim.remove(collection1)
-        transactional_shim.remove(collection2)
+        collection1.drop()
+        collection2.drop()
 
         indexes = []
-        num_of_indexes = 5;
+        num_of_indexes = 5
         indexes_first = gen.global_prng.choice([True, False])
         if indexes_enabled:
             for i in range(0, num_of_indexes):
@@ -352,9 +354,9 @@ def one_iteration(collection1, collection2, ns, seed):
                 else:
                     uniqueIndex = False
                 okay = _run_operation_(
-                    (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
-                    (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
-                    )
+                    (collection1.ensure_index, (i,), {"unique": uniqueIndex}),
+                    (collection2.ensure_index, (i,), {"unique": uniqueIndex})
+                )
                 if not okay:
                     return (okay, fname, None)
                 ii += 1
@@ -364,9 +366,9 @@ def one_iteration(collection1, collection2, ns, seed):
             docs.append(doc)
 
         okay = _run_operation_(
-            (transactional_shim.insert, (collection1, docs), {}),
-            (transactional_shim.insert, (collection2, docs), {})
-            )
+            (collection1.insert, (docs,), {}),
+            (collection2.insert, (docs,), {})
+        )
         if not okay:
             print "Failed when doing inserts"
             return (okay, fname, None)
@@ -379,8 +381,8 @@ def one_iteration(collection1, collection2, ns, seed):
                 else:
                     uniqueIndex = False
                 okay = _run_operation_(
-                    (transactional_shim.ensure_index, (collection1, i), {"unique":uniqueIndex}),
-                    (transactional_shim.ensure_index, (collection2, i), {"unique":uniqueIndex})
+                    (collection1.ensure_index, (i,), {"unique": uniqueIndex}),
+                    (collection2.ensure_index, (i,), {"unique": uniqueIndex})
                     )
                 if not okay:
                     print "Failed when adding index after insert"

@@ -495,7 +495,7 @@ class MongoCollection(object):
     def insert_many(self, list):
         self.insert(list)
 
-    def find(self, query, fields=None):
+    def find(self, query, fields=None, batch_size=None):
         if len(query) == 0:
             results = self.data.values()
         else:
@@ -530,6 +530,10 @@ class MongoCollection(object):
         _id = self.data[key]['_id']
         self.data[key] = deepcopy(new_value)
         self.data[key]['_id'] = _id
+
+    def drop(self):
+        self.drop_indexes()
+        self.remove()
 
     # So that we can use PyMongo and MongoModel implementations of a "collection" interchangeably
     def drop_indexes(self):

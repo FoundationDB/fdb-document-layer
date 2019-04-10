@@ -54,7 +54,6 @@ class generator_options:
     allow_sorts = True
     multi_updates = True
     nested_elemmatch = True
-    use_transactions = True
 
 
 def random_string(length):
