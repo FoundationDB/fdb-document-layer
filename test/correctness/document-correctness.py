@@ -34,6 +34,8 @@ import gen
 import util
 from mongo_model import MongoCollection
 from mongo_model import MongoModel
+from mongo_model import SortedDict
+from gen import HashableOrderedDict
 from util import MongoModelException
 
 
@@ -152,9 +154,8 @@ total_queries = 0
 
 
 def check_query(query, collection1, collection2, projection=None, sort=None, limit=0, skip=0):
-    # if projection:
-    #     projection['_id'] = True
     util.trace('debug', '\n==================================================')
+    util.trace('debug', 'checking consistency bettwen the two collections...')
     util.trace('debug', 'query:', query)
     util.trace('debug', 'sort:', sort)
     util.trace('debug', 'limit:', limit)
@@ -218,24 +219,27 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
 
 def test_update(collection1, collection2, verbose=False):
     okay = True
+    skip_current_iteration = False
     for i in range(1, 10):
         exceptionOne = None
         exceptionTwo = None
         update = gen.random_update(collection1)
 
-        util.trace('debug', '\n========== Update No.', i, '==========')
-        util.trace('debug', 'Query:', update['query'])
-        util.trace('debug', 'Update:', str(update['update']))
-        util.trace('debug', 'Number results from collection: ', gen.count_query_results(
+        util.trace('error', '\n========== Update No.', i, '==========')
+        util.trace('error', 'Query:', update['query'])
+        util.trace('error', 'Update:', str(update['update']))
+        util.trace('error', 'Number results from collection: ', gen.count_query_results(
             collection1, update['query']))
         for item in collection1.find(update['query']):
-            util.trace('debug', 'Find Result0:', item)
+            util.trace('error', 'Find Result1:', item)
+        for item in collection2.find(update['query']):
+            util.trace('error', 'Find Result2:', item)
 
         try:
             if verbose:
                 all = [x for x in collection1.find(dict())]
                 for item in collection1.find(update['query']):
-                    print 'Before update doc:\n', pprint.pprint(item)
+                    print '[{}] Before update doc:{}'.format(type(collection1), item)
                 print 'Before update collection1 size: ', len(all)
             collection1.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
         except pymongo.errors.OperationFailure as e:
@@ -246,7 +250,7 @@ def test_update(collection1, collection2, verbose=False):
             if verbose:
                 all = [x for x in collection2.find(dict())]
                 for item in collection2.find(update['query']):
-                    print 'Before update doc:\n', pprint.pprint(item)
+                    print '[{}]Before update doc:{}'.format(type(collection2), item)
                 print 'Before update collection2 size: ', len(all)
             collection2.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
         except pymongo.errors.OperationFailure as e:
@@ -254,11 +258,15 @@ def test_update(collection1, collection2, verbose=False):
         except MongoModelException as e:
             exceptionTwo = e
 
-        if ((exceptionOne is None and exceptionTwo is None)
-            or (exceptionOne is not None and exceptionTwo is not None)):
+        if (exceptionOne is None and exceptionTwo is None):
+            # happy case, proceed to consistency check
+            pass
+        elif exceptionOne is not None and exceptionTwo is not None:
             # or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
             # TODO re-enable the exact error check.
-            pass
+            # TODO re-enable consistency check when failure happened
+            skip_current_iteration = True
+            return (True, skip_current_iteration)
         else:
             print 'Unmatched result: '
             print type(exceptionOne), ': ', str(exceptionOne)
@@ -266,13 +274,12 @@ def test_update(collection1, collection2, verbose=False):
             okay = False
             ignored_exception_check(exceptionOne)
             ignored_exception_check(exceptionTwo)
-        return okay
+            return (okay, skip_current_iteration)
 
         if not check_query(dict(), collection1, collection2):
-            print 'Update: ' + str(update['update'])
-            return False
+            return (False, skip_current_iteration)
 
-    return okay
+    return (okay, skip_current_iteration)
 
 
 class IgnoredException(Exception):
@@ -399,10 +406,13 @@ def one_iteration(collection1, collection2, ns, seed):
         if not okay:
             return (okay, fname, None)
 
-        # if update_tests_enabled:
-        if True:
-            if not test_update(collection1, collection2, verbose):
-                okay = False
+        if update_tests_enabled:
+            okay, skip_current_iteration = test_update(collection1, collection2, verbose)
+            if skip_current_iteration:
+                if verbose:
+                    print "Skipping current iteration due to the failure from update."
+                return (True, fname, None)
+            if not okay:
                 return (okay, fname, None)
 
         for ii in range(1, 30):
