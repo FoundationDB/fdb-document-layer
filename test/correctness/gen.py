@@ -183,9 +183,10 @@ def random_id_value():
 def random_value():
     r = global_prng.random()
     while True:
-        if (r < 0.1) and generator_options.test_nulls:
-            val = None
-        elif (r < 0.2):
+        # TODO re-enable None value generating
+        # if (r < 0.1) and generator_options.test_nulls:
+        #     val = None
+        if (r < 0.2):
             val = random_float()
         elif (r < 0.4):
             val = random_string(global_prng.randint(1, 8))
