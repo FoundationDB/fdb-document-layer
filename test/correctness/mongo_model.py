@@ -529,10 +529,10 @@ class MongoCollection(object):
         oldData = deepcopy(self.data)
         try:
             if isinstance(input, OrderedDict):
-                self._insert(sorte_id_field(input))
+                self._insert(sort_id_field(input))
             elif isinstance(input, list):
                 all_ids = set()
-                input = map(sorte_id_field, input)
+                input = map(sort_id_field, input)
                 for i in input:
                     if '_id' in i:
                         if not self.options.object_field_order_matters and isinstance(i['_id'], HashableOrderedDict):

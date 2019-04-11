@@ -218,22 +218,20 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
 
 
 def test_update(collection1, collection2, verbose=False):
-    okay = True
-    skip_current_iteration = False
     for i in range(1, 10):
         exceptionOne = None
         exceptionTwo = None
         update = gen.random_update(collection1)
 
-        util.trace('error', '\n========== Update No.', i, '==========')
-        util.trace('error', 'Query:', update['query'])
-        util.trace('error', 'Update:', str(update['update']))
-        util.trace('error', 'Number results from collection: ', gen.count_query_results(
+        util.trace('debug', '\n========== Update No.', i, '==========')
+        util.trace('debug', 'Query:', update['query'])
+        util.trace('debug', 'Update:', str(update['update']))
+        util.trace('debug', 'Number results from collection: ', gen.count_query_results(
             collection1, update['query']))
         for item in collection1.find(update['query']):
-            util.trace('error', 'Find Result1:', item)
+            util.trace('debug', 'Find Result1:', item)
         for item in collection2.find(update['query']):
-            util.trace('error', 'Find Result2:', item)
+            util.trace('debug', 'Find Result2:', item)
 
         try:
             if verbose:
@@ -265,21 +263,19 @@ def test_update(collection1, collection2, verbose=False):
             # or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
             # TODO re-enable the exact error check.
             # TODO re-enable consistency check when failure happened
-            skip_current_iteration = True
-            return (True, skip_current_iteration)
+            return (True, True)
         else:
             print 'Unmatched result: '
             print type(exceptionOne), ': ', str(exceptionOne)
             print type(exceptionTwo), ': ', str(exceptionTwo)
-            okay = False
             ignored_exception_check(exceptionOne)
             ignored_exception_check(exceptionTwo)
-            return (okay, skip_current_iteration)
+            return (False, False)
 
         if not check_query(dict(), collection1, collection2):
-            return (False, skip_current_iteration)
+            return (False, False)
 
-    return (okay, skip_current_iteration)
+    return (True, False)
 
 
 class IgnoredException(Exception):
