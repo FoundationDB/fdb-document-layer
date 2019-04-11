@@ -554,9 +554,7 @@ ACTOR static Future<Void> doPopActor(Reference<IReadWriteContext> cx,
 					scx->getSubContext(kp)->clearDescendants();
 					scx->clear(kp);
 					if (oldNumber > 0) {
-						if (next.getSortType() == DVTypeCode::NULL_ELEMENT) {
-							// no-op, so our sparse arrays stay sparse
-						} else if (next.isSimpleType()) {
+						if (next.isSimpleType()) {
 							scx->set(DataValue(oldNumber - 1).encode_key_part(), next.encode_value());
 						} else if (next.getSortType() == DVTypeCode::PACKED_OBJECT) {
 							insertElementRecursive(oldNumber - 1, next.getPackedObject(), scx);
@@ -633,9 +631,7 @@ ACTOR static Future<Void> doPullActor(Reference<IReadWriteContext> cx,
 				if (pulled > 0) {
 					scx->getSubContext(kp)->clearDescendants();
 					scx->clear(kp);
-					if (dontwrite || next.getSortType() == DVTypeCode::NULL_ELEMENT) {
-						// no-op, so our sparse arrays stay sparse
-					} else if (next.isSimpleType()) {
+					if (next.isSimpleType()) {
 						scx->set(DataValue(oldNumber - pulled).encode_key_part(), next.encode_value());
 					} else if (next.getSortType() == DVTypeCode::PACKED_OBJECT) {
 						insertElementRecursive(oldNumber - pulled, next.getPackedObject(), scx);
@@ -810,9 +806,7 @@ ACTOR static Future<Void> doPushActor(Reference<IReadWriteContext> cx,
 								scx->getSubContext(kp)->clearDescendants();
 								scx->clear(kp);
 								if (oldNumber >= skip) {
-									if (next.getSortType() == DVTypeCode::NULL_ELEMENT) {
-										// no-op, so our sparse arrays stay sparse
-									} else if (next.isSimpleType()) {
+									if (next.isSimpleType()) {
 										scx->set(DataValue(oldNumber - skip).encode_key_part(), next.encode_value());
 									} else if (next.getSortType() == DVTypeCode::PACKED_OBJECT) {
 										insertElementRecursive(oldNumber - skip, next.getPackedObject(), scx);
