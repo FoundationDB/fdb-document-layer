@@ -440,6 +440,7 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 			p.send(DataValue(bson::BSONArray(bobs[0].build().getOwned())));
 		else
 			p.send(DataValue(bobs[0].build().getOwned()));
+		currentLoc++;
 	}
 
 	for (; currentLoc < n; ++currentLoc) {
