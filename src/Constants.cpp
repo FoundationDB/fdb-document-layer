@@ -65,4 +65,16 @@ const char* INDEX_STATUS_READY = "ready";
 const char* INDEX_STATUS_BUILDING = "building";
 const char* INDEX_STATUS_ERROR = "error";
 
+const char* MT_GUAGE_ACTIVE_CONNECTIONS = "dl_active_connections";
+const char* MT_GUAGE_ACTIVE_CURSORS = "dl_active_cursors";
+const char* MT_HIST_MESSAGE_SZ = "dl_message_size_bytes";
+const char* MT_TIME_QUERY_LATENCY_US = "dl_query_latency_useconds";
+const char* MT_HIST_KEYS_PER_DOCUMENT = "dl_keys_per_doc";
+const char* MT_HIST_DOCUMENT_SZ = "dl_doc_size_bytes";
+const char* MT_HIST_DOCS_PER_INSERT = "dl_docs_per_insert";
+const char* MT_TIME_INSERT_LATENCY_US = "dl_insert_latency_useconds";
+const char* MT_HIST_INSERT_SZ = "dl_insert_size_bytes";
+const char* MT_HIST_TR_PER_REQUEST = "dl_tr_per_request";
+const char* MT_RATE_IDX_REBUILD = "dl_index_rebuild_rate";
+
 } // namespace DocLayerConstants

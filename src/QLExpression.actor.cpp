@@ -35,7 +35,7 @@ ACTOR Future<Optional<std::pair<Standalone<StringRef>, DataValue>>> getArrayAnce
 		futures.push_back(cx->get(dk.bytes()));
 	}
 
-	if (futures.size()) {
+	if (!futures.empty()) {
 		std::vector<Optional<DataValue>> results = wait(getAll(futures));
 
 		for (int i = 0; i < (checkLast ? results.size() - 1 : results.size()); ++i) {

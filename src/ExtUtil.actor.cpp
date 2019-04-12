@@ -73,86 +73,106 @@ std::string encodeMaybeDotted(std::string fieldname) {
 	return path;
 }
 
-void insertElementRecursive(std::string fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(std::string fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
 	std::string kp = encodeMaybeDotted(fn);
+
+	int nrFDBKeys = 1;
 	cx->set(kp, DataValue::subObject().encode_value());
+
 	auto scx = cx->getSubContext(kp);
 	for (auto i = obj.begin(); i.more();) {
 		auto e = i.next();
-		insertElementRecursive(e, scx);
+		nrFDBKeys += insertElementRecursive(e, scx);
 	}
+
+	return nrFDBKeys;
 }
 
-void insertElementRecursive(std::string fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(std::string fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx) {
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
+
 	std::string kp = encodeMaybeDotted(fn);
+	int nrFDBKeys = 1;
+
 	cx->set(kp, DataValue::arrayOfLength(arr.nFields()).encode_value());
+
 	auto scx = cx->getSubContext(kp);
 	for (auto i = arr.begin(); i.more();) {
 		bson::BSONElement e = i.next();
-		insertElementRecursive(e, scx);
+		nrFDBKeys += insertElementRecursive(e, scx);
 	}
+
+	return nrFDBKeys;
 }
 
-void insertElementRecursive(std::string fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(std::string fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
+
 	std::string kp = encodeMaybeDotted(fn);
 	if (!elem.isABSONObj()) {
 		cx->set(kp, DataValue(elem).encode_value());
-	} else {
-		if (elem.type() == bson::BSONType::Array) {
-			insertElementRecursive(fn, bson::BSONArray(elem.Obj()), cx);
-		} else {
-			insertElementRecursive(fn, elem.Obj(), cx);
-		}
+		return 1;
 	}
+
+	if (elem.type() == bson::BSONType::Array)
+		return insertElementRecursive(fn, bson::BSONArray(elem.Obj()), cx);
+
+	return insertElementRecursive(fn, elem.Obj(), cx);
 }
 
-void insertElementRecursive(bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
 	std::string fn = elem.fieldName();
 	if (std::all_of(fn.begin(), fn.end(), ::isdigit)) {
 		const char* c_fn = fn.c_str();
-		insertElementRecursive(atoi(c_fn), elem, cx);
-	} else {
-		insertElementRecursive(fn, elem, cx);
+		return insertElementRecursive(atoi(c_fn), elem, cx);
 	}
+
+	return insertElementRecursive(fn, elem, cx);
 }
 
-void insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
 	std::string kp = DataValue(fn).encode_key_part();
 	if (!elem.isABSONObj()) {
 		cx->set(kp, DataValue(elem).encode_value());
-	} else {
-		if (elem.type() == bson::BSONType::Array) {
-			insertElementRecursive(fn, bson::BSONArray(elem.Obj()), cx);
-		} else {
-			insertElementRecursive(fn, elem.Obj(), cx);
-		}
+		return 1;
 	}
+
+	if (elem.type() == bson::BSONType::Array)
+		return insertElementRecursive(fn, bson::BSONArray(elem.Obj()), cx);
+
+	return insertElementRecursive(fn, elem.Obj(), cx);
 }
 
-void insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
 	std::string kp = DataValue(fn).encode_key_part();
+	int nrFDBKeys = 1;
+
 	cx->set(kp, DataValue::subObject().encode_value());
+
 	auto scx = cx->getSubContext(kp);
 	for (auto i = obj.begin(); i.more();) {
 		auto e = i.next();
-		insertElementRecursive(e, scx);
+		nrFDBKeys += insertElementRecursive(e, scx);
 	}
+	return nrFDBKeys;
 }
 
-void insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx) {
+int insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx) {
 	std::string kp = DataValue(fn).encode_key_part();
+	int nrFDBKeys = 1;
+
 	cx->set(kp, DataValue::arrayOfLength(arr.nFields()).encode_value());
+
 	auto scx = cx->getSubContext(kp);
 	for (auto i = arr.begin(); i.more();) {
 		bson::BSONElement e = i.next();
-		insertElementRecursive(e, scx);
+		nrFDBKeys += insertElementRecursive(e, scx);
 	}
+	return nrFDBKeys;
 }
 
 ACTOR Future<Void> ensureValidObject(Reference<IReadWriteContext> cx,

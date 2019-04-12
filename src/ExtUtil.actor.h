@@ -80,19 +80,19 @@ std::string encodeMaybeDotted(std::string fieldname);
 /**
  * The usual way of inserting an element
  */
-void insertElementRecursive(const bson::BSONElement& elem, Reference<IReadWriteContext> cx);
+int insertElementRecursive(const bson::BSONElement& elem, Reference<IReadWriteContext> cx);
 
 /**
  * An overload that is used only in bizarre cases involving upserting things with compound ids.
  */
-void insertElementRecursive(std::string fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx);
+int insertElementRecursive(std::string fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx);
 
 /**
  * Utility overloads used by some of the array update operators
  */
-void insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx);
-void insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx);
-void insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx);
+int insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx);
+int insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx);
+int insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx);
 
 Future<Void> ensureValidObject(const Reference<IReadWriteContext>& cx,
                                const std::string& objectRoot,

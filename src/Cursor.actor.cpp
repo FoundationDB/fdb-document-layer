@@ -19,6 +19,7 @@
  */
 
 #include "Cursor.h"
+#include "DocLayer.h"
 #include "Knobs.h"
 
 int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors) {
@@ -33,7 +34,7 @@ int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors) {
 		++it;
 	}
 
-	for (auto i : to_be_pruned) {
+	for (const auto& i : to_be_pruned) {
 		(void)pluck(i);
 		pruned++;
 	}
@@ -45,13 +46,14 @@ void Cursor::pluck(Reference<Cursor> cursor) {
 	if (cursor) {
 		cursor->siblings->erase(cursor->id);
 		cursor->checkpoint->stop();
+		DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CURSORS,
+		                                            cursor->siblings->size());
 	}
 }
 
 Reference<Cursor> Cursor::add(std::map<int64_t, Reference<Cursor>>& siblings, Reference<Cursor> cursor) {
 	cursor->siblings = &siblings;
-
-	// FIXME: limit the number of allowed cursors?
-
-	return siblings[cursor->id] = cursor;
+	siblings[cursor->id] = cursor;
+	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CURSORS, siblings.size());
+	return cursor;
 }

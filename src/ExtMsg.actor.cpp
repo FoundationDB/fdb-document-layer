@@ -490,7 +490,6 @@ ACTOR static Future<Void> doRun(Reference<ExtMsgQuery> query, Reference<ExtConne
 	state Future<Void> x;
 	state uint64_t startTime = timer_int();
 
-	DocumentLayer::metricReporter->captureMeter("queryRate", 1);
 	if (query->isCmd) {
 		// It's a command
 		x = runCommand(ec, query, replyStream);
@@ -513,7 +512,8 @@ ACTOR static Future<Void> doRun(Reference<ExtMsgQuery> query, Reference<ExtConne
 		}
 	}
 
-	DocumentLayer::metricReporter->captureTime("queryLatency_us", (timer_int() - startTime) / 1000);
+	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_QUERY_LATENCY_US,
+	                                           (timer_int() - startTime) / 1000);
 
 	return Void();
 }
@@ -647,10 +647,13 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 
 	dcx->set(LiteralStringRef(""), DataValue::subObject().encode_value());
 
+	int nrFDBKeys = 0;
 	for (auto i = d.begin(); i.more();) {
 		auto e = i.next();
-		insertElementRecursive(e, dcx);
+		nrFDBKeys += insertElementRecursive(e, dcx);
 	}
+	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_KEYS_PER_DOCUMENT, nrFDBKeys);
+	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_DOCUMENT_SZ, d.objsize());
 
 	if (idObj.present())
 		insertElementRecursive(DocLayerConstants::ID_FIELD, idObj.get(), dcx);
@@ -835,6 +838,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
                                          std::list<bson::BSONObj>* documents,
                                          Reference<ExtConnection> ec) {
 	state Reference<DocTransaction> tr = ec->getOperationTransaction();
+	state uint64_t startTime = timer_int();
 
 	if (ns.second == DocLayerConstants::SYSTEM_INDEXES) {
 		if (verboseLogging)
@@ -847,11 +851,15 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 		const char* collnsStr = firstDoc.getField(DocLayerConstants::NS_FIELD).String().c_str();
 		const auto collns = getDBCollectionPair(collnsStr, std::make_pair("msg", "Bad coll name in index insert"));
 		WriteCmdResult result = wait(attemptIndexInsertion(firstDoc.getOwned(), ec, tr, collns));
+
+		DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_INSERT_LATENCY_US,
+		                                           (timer_int() - startTime) / 1000);
 		return result;
 	}
 
 	std::vector<Reference<IInsertOp>> inserts;
 	std::set<std::string> ids;
+	int insertSize = 0;
 	for (const auto& d : *documents) {
 		const bson::BSONObj& obj = d;
 		Optional<IdInfo> encodedIds = extractEncodedIds(obj);
@@ -861,10 +869,16 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 			}
 		}
 		inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
+		insertSize += obj.objsize();
 	}
+	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_INSERT_SZ, insertSize);
+	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_DOCS_PER_INSERT, documents->size());
 
 	Reference<Plan> plan = ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, ns)));
 	int64_t i = wait(executeUntilCompletionTransactionally(plan, tr));
+
+	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_INSERT_LATENCY_US,
+	                                           (timer_int() - startTime) / 1000);
 	return WriteCmdResult(i);
 }
 
@@ -1273,9 +1287,10 @@ std::string ExtMsgKillCursors::toString() {
 
 Future<Void> doKillCursorsRun(Reference<ExtMsgKillCursors> msg, Reference<ExtConnection> ec) {
 	int64_t* ptr = msg->cursorIDs;
-	int32_t numberOfCursorIDs =
-	    msg->numberOfCursorIDs; // FIXME: I'm not quite sure what the contract around the memory owned by
-	                            // BufferedConnection is. So do this copy for now to be conservative.
+
+	// FIXME: I'm not quite sure what the contract around the memory owned by
+	// BufferedConnection is. So do this copy for now to be conservative.
+	int32_t numberOfCursorIDs = msg->numberOfCursorIDs;
 
 	while (numberOfCursorIDs--) {
 		Cursor::pluck(ec->cursors[*ptr++]);
