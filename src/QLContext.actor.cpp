@@ -248,7 +248,7 @@ struct IndexPlugin : ITDoc {
 
 	std::pair<bool, Reference<DocumentDeferred>> shouldDoUpdate(Reference<DocTransaction> tr,
 	                                                            DataKey const& documentKey) {
-		if (!error_state && documentKey.startsWith(collectionPath) && documentKey.size() > collectionPath.size()) {
+		if (documentKey.startsWith(collectionPath) && documentKey.size() > collectionPath.size()) {
 			std::string documentPrefix = documentKey.toString();
 			auto info = tr->infos.find(documentPrefix);
 			if (info == tr->infos.end())
@@ -292,7 +292,6 @@ struct IndexPlugin : ITDoc {
 	DataKey collectionPath;
 	DataKey indexPath;
 	std::string indexName;
-	bool error_state;
 	bool multikey;
 	bool isUniqueIndex;
 	Optional<Reference<FlowLock>> flowControlLock;
@@ -301,7 +300,6 @@ struct IndexPlugin : ITDoc {
 	    : collectionPath(collectionPath),
 	      indexPath(indexInfo.indexCx->getPrefix()), // dbName+collectionName+"metadata"+"indices"+indexName
 	      ITDoc(next),
-	      error_state(false),
 	      multikey(indexInfo.multikey),
 	      isUniqueIndex(indexInfo.isUniqueIndex),
 	      indexName(indexInfo.indexName),
@@ -353,7 +351,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			}
 
 			if (num_new_values > DOCLAYER_KNOBS->MULTI_MULTIKEY_INDEX_MAX) {
-				self->error_state = true;
 				throw multikey_index_cartesian_explosion();
 			}
 
@@ -520,7 +517,6 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 						    existing_index_entries.front().arena());
 						if (existingDocId.compare(documentPath[documentPath.size() - 1])) {
 							// existing index points to a different doc id that has the same value, abort.
-							self->error_state = true;
 							throw duplicated_key_field();
 						}
 					}
