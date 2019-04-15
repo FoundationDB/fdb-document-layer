@@ -727,11 +727,11 @@ class MongoCollection(object):
     def process_update_operator_set_on_insert(self, key, update_expression, new_doc=False):
         # print "Update Operator: $setOnInsert ", key, update_expression
         if new_doc:
-            self.data[key] = OrderedDict(self.data[key].items() + update_expression.items())
+            self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
 
     def process_update_operator_set(self, key, update_expression):
         # print "Update Operator: $set ", update
-        self.data[key] = OrderedDict(self.data[key].items() + update_expression.items())
+        self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
 
     def process_update_operator_unset(self, key, update_expression):
         # print "Update Operator: $unset ", update
