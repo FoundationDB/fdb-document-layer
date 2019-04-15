@@ -25,7 +25,6 @@ from collections import OrderedDict
 import pytest
 
 
-@pytest.mark.xfail
 def test_update_array_containing_none_value(fixture_collection):
     collection = fixture_collection
 

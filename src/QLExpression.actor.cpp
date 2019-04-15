@@ -98,6 +98,10 @@ ACTOR static Future<Void> doPathExpansionIfNotArray(PromiseStream<Reference<IRea
  *  - Case 3: Component after array root is numeric and treating it as field name. Ex: a.b.1.c, b is array
  *  of size 3 and treating "1" as field name. This can be expanded to a.b.0.1.c, a.b.1.1.c and a.b.2.1.c. As
  *  Doc Layer serializes numeric field name and array index same way, we have to pass this information.
+ *
+ * NOTE: MongoDB does NOT do nested array expansion. For exmaple if the query is a.c and a happens to be an array of
+ * size 2, the query will be expanded into a.0.c and a.1.c. Then if a[0] is again an array, it will NOT do the expansion
+ * again. That's why in case 3 we call doPathExpansionIfNotArray(), instead of the normal doPathExpansion().
  */
 ACTOR static Future<Void> doArrayExpansion(PromiseStream<Reference<IReadContext>> promises,
                                            Standalone<StringRef> queryPath,
@@ -126,6 +130,7 @@ ACTOR static Future<Void> doArrayExpansion(PromiseStream<Reference<IReadContext>
 
 		// Case 3 - Treat next component as field name.
 		if (nextComponentIsNumeric) {
+			// Do not do array expansion again.
 			futures.push_back(doPathExpansionIfNotArray(promises, StringRef(newPath), arrayElementPath, document,
 			                                            expandLastArray, imputeNulls));
 		} else { // Case 1
@@ -169,6 +174,12 @@ ACTOR static Future<Void> doPathExpansion(PromiseStream<Reference<IReadContext>>
 		// expansion. So we also need to check that if the "most recent existing ancestor" is a primitive value, then
 		// its direct parent is also not an array. If the MREA is an object, then no check is necessary, since MongoDB
 		// switches back into null-imputing mode if that happens (even if we expanded an array right before).
+
+		// NOTE: since arrays are stored as sparse arrays, i.e. null values in the array will not be persisted at all
+		// it has to impute a null if:
+		//    - last part of the path is numeric
+		//    - it's immediate parent is an array
+		//    - it's within the length of the array
 		if (imputeNulls && !v.present() && !arrayAncestor.present()) {
 			std::vector<Future<Optional<DataValue>>> futureAncestors;
 			futureAncestors.push_back(document->get(StringRef()));
@@ -177,14 +188,19 @@ ACTOR static Future<Void> doPathExpansion(PromiseStream<Reference<IReadContext>>
 
 			std::vector<Optional<DataValue>> ancestors = wait(getAll(futureAncestors));
 
-			for (auto j = ancestors.rbegin();
-			     !(j == ancestors.rend()) /* yes, it can be !=, but MSVC has a bug, hence !(==)*/; ++j) {
-				if (j->present()) {
-					DVTypeCode type = j->get().getSortType();
+			for (int j = ancestors.size() - 1; j >= 0; --j) {
+				if (ancestors[j].present()) {
+					DVTypeCode type = ancestors[j].get().getSortType();
 					if (type == DVTypeCode::OBJECT ||
 					    (type != DVTypeCode::ARRAY &&
-					     (j + 1 == ancestors.rend() || (j + 1)->get().getSortType() != DVTypeCode::ARRAY))) {
+					     (j == 0 || ancestors[j - 1].get().getSortType() != DVTypeCode::ARRAY))) {
 						promises.send(Reference<NullContext>(new NullContext()));
+					} else if (j == ancestors.size() - 2 && dk[dk.size() - 1][0] == (uint8_t)DVTypeCode::NUMBER &&
+					           type == DVTypeCode::ARRAY) {
+						DataValue dv = DataValue::decode_key_part(dk[dk.size() - 1]);
+						if (dv.getDouble() < ancestors[j].get().getArraysize()) {
+							promises.send(Reference<NullContext>(new NullContext()));
+						}
 					}
 					break;
 				}
