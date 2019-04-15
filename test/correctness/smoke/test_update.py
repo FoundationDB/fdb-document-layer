@@ -24,19 +24,21 @@
 from collections import OrderedDict
 import pytest
 
+
 @pytest.mark.xfail
 def test_update_array_containing_none_value(fixture_collection):
     collection = fixture_collection
 
-    collection.insert({'A': [1, None]})
+    collection.insert_one({'A': [1, None]})
 
     docCount = collection.find( {'A': {'$in': [ None]}}).count()
     assert docCount == 1, "Expect 1 documents before the update but got {}".format(docCount)
 
-    collection.update({'A': {'$size': 2}} ,  OrderedDict([('$pop', {'A': -1})]))
+    collection.update_one({'A': {'$size': 2}} ,  OrderedDict([('$pop', {'A': -1})]))
 
     docCount = collection.find( {'A': {'$in': [ None]}}).count()
     assert docCount == 1, "Expect 1 documents after the update but got {}".format(docCount)
+
 
 def test_addToSet_with_none_value(fixture_collection):
     collection = fixture_collection

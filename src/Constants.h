@@ -77,6 +77,19 @@ extern const char* INDEX_STATUS_READY;
 extern const char* INDEX_STATUS_BUILDING;
 extern const char* INDEX_STATUS_ERROR;
 
+// Metrics
+extern const char* MT_GUAGE_ACTIVE_CONNECTIONS;
+extern const char* MT_GUAGE_ACTIVE_CURSORS;
+extern const char* MT_HIST_MESSAGE_SZ;
+extern const char* MT_TIME_QUERY_LATENCY_US;
+extern const char* MT_HIST_KEYS_PER_DOCUMENT;
+extern const char* MT_HIST_DOCUMENT_SZ;
+extern const char* MT_HIST_DOCS_PER_INSERT;
+extern const char* MT_TIME_INSERT_LATENCY_US;
+extern const char* MT_HIST_INSERT_SZ;
+extern const char* MT_HIST_TR_PER_REQUEST;
+extern const char* MT_RATE_IDX_REBUILD;
+
 } // namespace DocLayerConstants
 
 #endif // FDB_DOC_LAYER_CONSTANTS_H

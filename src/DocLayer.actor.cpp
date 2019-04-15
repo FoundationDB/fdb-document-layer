@@ -182,7 +182,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
 
-	DocumentLayer::metricReporter->captureGauge("activeConnections", ++docLayer->nrConnections);
+	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
+	                                            ++docLayer->nrConnections);
 	try {
 		ec->startHousekeeping();
 
@@ -205,8 +206,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 					Void _ = wait(ec->bc->onBytesAvailable(header->messageLength));
 					auto messageBytes = ec->bc->peekExact(header->messageLength);
 
-					DocumentLayer::metricReporter->captureHistogram("messageLength", header->messageLength);
-					DocumentLayer::metricReporter->captureMeter("messageRate", 1);
+					DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
+					                                                header->messageLength);
 
 					/* We don't use hdr in this call because the second peek may
 					   have triggered a copy that the first did not, but it's nice
@@ -222,7 +223,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 			}
 		}
 	} catch (Error& e) {
-		DocumentLayer::metricReporter->captureGauge("activeConnections", --docLayer->nrConnections);
+		DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
+		                                            --docLayer->nrConnections);
 		return Void();
 	}
 }

@@ -698,7 +698,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 		dtr = self->newTransaction();
 	state double startt = now();
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
-	state int64_t nTransactions = 0;
+	state int nTransactions = 1;
 	state int64_t nResults = 0;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	try {
@@ -749,8 +749,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 			++nTransactions;
 		}
 	} catch (Error& e) {
-		// printf("NonIsolatedRO: %d transactions, %d results, %0.1f sec, %s\n", nTransactions, nResults, now() -
-		// startt, e.what());
+		DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_TR_PER_REQUEST, nTransactions);
 		innerCheckpoint->stop();
 		output.sendError(e);
 		throw;
@@ -769,12 +768,10 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state int oCount = 0;
+	state int nTransactions = 1;
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
 		loop {
-			// printf("Trying nonIsolatedRW with %d outputs and checkpoint '%s'-'%s'\n", oCount,
-			// printable(innerCheckpoint->getBounds(0).begin).c_str(),
-			// printable(innerCheckpoint->getBounds(0).end).c_str());
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
 			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
@@ -846,8 +843,8 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 				// except that code is structured in a way makes it hard to use any other transaction.
 				dtr->tr = self->newTransaction()->tr;
 
-				innerCheckpoint = next_checkpoint; // Since commit succeeded, we can do the next part next instead of
-				                                   // redoing this part
+				// Since commit succeeded, we can do the next part next instead of redoing this part
+				innerCheckpoint = next_checkpoint;
 
 				while (!bufferedDocs.empty()) {
 					Void _ = wait(outerLock->take(1));
@@ -878,8 +875,10 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 					throw metadata_changed_nonisolated();
 				}
 			}
+			nTransactions++;
 		}
 	} catch (Error& e) {
+		DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_TR_PER_REQUEST, nTransactions);
 		innerCheckpoint->stop();
 		output.sendError(e);
 		throw;
@@ -1164,7 +1163,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 		dtr = NonIsolatedPlan::newTransaction(database);
 	state double startt = now();
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
-	state int64_t nTransactions = 0;
+	state int nTransactions = 1;
 	state int64_t nResults = 0;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> firstDoc;
@@ -1257,14 +1256,12 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 
 		Void _ = wait(outerLock->take());
 
-		// fprintf(stderr, "any: %d projectNew %d upsertOp %d\n", any, projectNew, (bool)upsertOp);
-
 		if (any || (projectNew && upsertOp))
 			output.send(ref(
 			    new ScanReturnedContext(ref(new BsonContext(proj, false)), firstDoc->scanId(), firstDoc->scanKey())));
 		throw end_of_stream();
 	} catch (Error& e) {
-		// fprintf(stderr, "findAndModify error: %s\n", e.what());
+		DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_TR_PER_REQUEST, nTransactions);
 		innerCheckpoint->stop();
 		output.sendError(e);
 		throw;
@@ -1696,19 +1693,29 @@ ACTOR static Future<Void> scanAndBuildIndex(PlanCheckpoint* checkpoint,
 			}
 			Void _ = wait(indexDoc->commitChanges());
 		}
+		state int nrDocs = 0;
 		try {
 			loop choose {
 				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {
 					futures.push_back(std::make_pair(doc, buildIndexEntry(doc, index)));
+					nrDocs++;
 				}
 				when(Void _ = wait(futures.empty() ? Never() : futures.front().second)) {
 					output.send(futures.front().first);
 					futures.pop_front();
 				}
+				when(Void _ = wait(delay(0.1))) {
+					DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_IDX_REBUILD, nrDocs);
+					nrDocs = 0;
+				}
 			}
 		} catch (Error& e) {
 			if (e.code() != error_code_end_of_stream)
 				throw;
+		}
+
+		if (nrDocs) {
+			DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_IDX_REBUILD, nrDocs);
 		}
 
 		while (!futures.empty()) {
