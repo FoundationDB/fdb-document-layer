@@ -41,6 +41,7 @@ fdbdoc-trace.*
 tags
 *~
 .idea/*
+.vscode/*
 
 smoke_tests/nodejs/node_modules/
 smoke_tests/**/target/
