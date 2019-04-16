@@ -1276,7 +1276,11 @@ class MongoUniqueIndex(MongoIndex):
                     check_none_at_all=True,
                     check_none_next=True,
                     debug=False)
-                entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "")
+                if len(_values) == 0:
+                    # empty array
+                    entry = entry + '[]'
+                else:
+                    entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "")
             if entry in seen:
                 # print "[{}] in {} ? {}".format(entry, seen, entry in seen)
                 # print "Violating keys " + str(key)
