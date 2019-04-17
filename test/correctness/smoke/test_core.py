@@ -165,6 +165,9 @@ def test_array13(fixture_collection):
 def test_array14(fixture_collection):
     run_and_match(fixture_collection, ({'E': [2, 2, []]}, [{'E': {'$ne': []}}]))
 
+def test_array15(fixture_collection):
+    run_and_match(fixture_collection, ({'E': [2, 2, [1]]}, [{'E': {'$eq': []}}]))
+
 
 def test_array16(fixture_collection):
     run_and_match(fixture_collection, ({'E': [2, 2, [1]]}, [{'E': [1]}]))
