@@ -185,22 +185,20 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 	void addref() override { ReferenceCounted<FDBPlugin>::addref(); }
 	void delref() override { ReferenceCounted<FDBPlugin>::delref(); }
 
-	std::pair<bool, Reference<DocumentDeferred>> findOrCreate(Reference<DocTransaction> tr, DataKey const& key) {
-		if (key.size() > 1) {
-			std::string documentPrefix = key.keyPrefix(2).toString();
-			auto info = tr->infos.find(documentPrefix);
-			if (info == tr->infos.end())
-				info = tr->infos
-				           .insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
-				           .first;
-			return std::make_pair(true, (*info).second);
-		}
-		return std::make_pair(false, Reference<DocumentDeferred>());
+	Reference<DocumentDeferred> findOrCreate(Reference<DocTransaction> tr, DataKey const& key) {
+		ASSERT(key.size() > 1);
+		std::string documentPrefix = key.keyPrefix(2).toString();
+		auto info = tr->infos.find(documentPrefix);
+		if (info == tr->infos.end())
+			info = tr->infos.insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
+			           .first;
+		return (*info).second;
 	}
 
 	Future<Optional<DataValue>> get(Reference<DocTransaction> tr, DataKey key) override {
 		return FDBPlugin_get(key, tr);
 	}
+
 	GenFutureStream<KeyValue> getDescendants(Reference<DocTransaction> tr,
 	                                         DataKey key,
 	                                         StringRef begin,
@@ -211,33 +209,34 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 		r.actor = FDBPlugin_getDescendants(key, tr, begin, end, p, flowControlLock);
 		return r;
 	}
+
 	void set(Reference<DocTransaction> tr, DataKey key, ValueRef value) override {
 		std::string k = getFDBKey(key);
 		Value v = value;
-		auto pair = findOrCreate(tr, key);
-		if (pair.first)
-			pair.second->deferred.emplace_back([k, v](Reference<DocTransaction> tr) {
-				if (k.size() > DocLayerConstants::FDB_KEY_LENGTH_LIMIT)
-					throw key_too_large();
-				if (v.size() > DocLayerConstants::FDB_VALUE_LENGTH_LIMIT)
-					throw value_too_large();
-				tr->tr->set(k, v);
-			});
+		auto docDeferred = findOrCreate(tr, key);
+		docDeferred->deferred.emplace_back([k, v](Reference<DocTransaction> tr) {
+			if (k.size() > DocLayerConstants::FDB_KEY_LENGTH_LIMIT)
+				throw key_too_large();
+			if (v.size() > DocLayerConstants::FDB_VALUE_LENGTH_LIMIT)
+				throw value_too_large();
+			tr->tr->set(k, v);
+		});
 	}
+
 	void clearDescendants(Reference<DocTransaction> tr, DataKey key) override {
 		std::string _key = getFDBKey(key);
 
 		KeyRange kr = KeyRangeRef(_key + '\x00', _key + '\xFF');
-		auto pair = findOrCreate(tr, key);
-		if (pair.first)
-			pair.second->deferred.emplace_back([kr](Reference<DocTransaction> tr) { tr->tr->clear(kr); });
+		auto docDeferred = findOrCreate(tr, key);
+		docDeferred->deferred.emplace_back([kr](Reference<DocTransaction> tr) { tr->tr->clear(kr); });
 	}
+
 	void clear(Reference<DocTransaction> tr, DataKey key) override {
 		std::string k = getFDBKey(key);
-		auto pair = findOrCreate(tr, key);
-		if (pair.first)
-			pair.second->deferred.emplace_back([k](Reference<DocTransaction> tr) { tr->tr->clear(k); });
+		auto docDeferred = findOrCreate(tr, key);
+		docDeferred->deferred.emplace_back([k](Reference<DocTransaction> tr) { tr->tr->clear(k); });
 	}
+
 	std::string toString() override { return "FDBPlugin"; }
 };
 
@@ -246,25 +245,21 @@ struct IndexPlugin : ITDoc {
 	                                   Reference<DocumentDeferred> dd,
 	                                   DataKey documentPath) = 0;
 
-	std::pair<bool, Reference<DocumentDeferred>> shouldDoUpdate(Reference<DocTransaction> tr,
-	                                                            DataKey const& documentKey) {
-		if (documentKey.startsWith(collectionPath) && documentKey.size() > collectionPath.size()) {
-			std::string documentPrefix = documentKey.toString();
-			auto info = tr->infos.find(documentPrefix);
-			if (info == tr->infos.end())
-				info = tr->infos
-				           .insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
-				           .first;
-			return std::make_pair(true, (*info).second);
-		}
-		return std::make_pair(false, Reference<DocumentDeferred>());
+	Reference<DocumentDeferred> shouldDoUpdate(Reference<DocTransaction> tr, DataKey const& documentKey) {
+		ASSERT(documentKey.startsWith(collectionPath) && documentKey.size() > collectionPath.size());
+		std::string documentPrefix = documentKey.toString();
+		auto info = tr->infos.find(documentPrefix);
+		if (info == tr->infos.end())
+			info = tr->infos.insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
+			           .first;
+		return (*info).second;
 	}
 
 	void set(Reference<DocTransaction> tr, DataKey key, ValueRef value) override {
 		DataKey documentPrefix = key.keyPrefix(collectionPath.size() + 1);
-		auto pair = shouldDoUpdate(tr, documentPrefix);
-		if (pair.first && pair.second->dirty.insert(this).second) {
-			pair.second->index_update_actors.push_back(doIndexUpdate(tr, pair.second, documentPrefix));
+		auto docDeferred = shouldDoUpdate(tr, documentPrefix);
+		if (docDeferred->dirty.insert(this).second) {
+			docDeferred->index_update_actors.push_back(doIndexUpdate(tr, docDeferred, documentPrefix));
 		}
 
 		next->set(tr, key, value);
@@ -272,9 +267,9 @@ struct IndexPlugin : ITDoc {
 
 	void clear(Reference<DocTransaction> tr, DataKey key) override {
 		DataKey documentPrefix = key.keyPrefix(collectionPath.size() + 1);
-		auto pair = shouldDoUpdate(tr, documentPrefix);
-		if (pair.first && pair.second->dirty.insert(this).second) {
-			pair.second->index_update_actors.push_back(doIndexUpdate(tr, pair.second, documentPrefix));
+		auto docDeferred = shouldDoUpdate(tr, documentPrefix);
+		if (docDeferred->dirty.insert(this).second) {
+			docDeferred->index_update_actors.push_back(doIndexUpdate(tr, docDeferred, documentPrefix));
 		}
 
 		next->clear(tr, key);
@@ -282,9 +277,9 @@ struct IndexPlugin : ITDoc {
 
 	void clearDescendants(Reference<DocTransaction> tr, DataKey key) override {
 		DataKey documentPrefix = key.keyPrefix(collectionPath.size() + 1);
-		auto pair = shouldDoUpdate(tr, documentPrefix);
-		if (pair.first && pair.second->dirty.insert(this).second) {
-			pair.second->index_update_actors.push_back(doIndexUpdate(tr, pair.second, documentPrefix));
+		auto docDeferred = shouldDoUpdate(tr, documentPrefix);
+		if (docDeferred->dirty.insert(this).second) {
+			docDeferred->index_update_actors.push_back(doIndexUpdate(tr, docDeferred, documentPrefix));
 		}
 		next->clearDescendants(tr, key);
 	}
