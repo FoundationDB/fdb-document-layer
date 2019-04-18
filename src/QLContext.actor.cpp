@@ -35,10 +35,10 @@ Future<DataValue> IReadContext::toDataValue() {
 }
 
 ACTOR Future<Void> DocTransaction::commitChanges(Reference<DocTransaction> self, std::string docPrefix) {
-	auto info = self->infos.find(docPrefix);
-	if (info == self->infos.end())
+	auto deferredDocument = self->deferredDocuments.find(docPrefix);
+	if (deferredDocument == self->deferredDocuments.end())
 		return Void();
-	Void _ = wait(info->second->commitChanges(self));
+	Void _ = wait(deferredDocument->second->commitChanges(self));
 	return Void();
 }
 
@@ -60,13 +60,13 @@ ACTOR Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr,
  */
 Future<Void> DocTransaction::onError(Error const& e) {
 	cancel_ongoing_index_reads();
-	infos.clear();
+	deferredDocuments.clear();
 	return tr->onError(e);
 }
 
 void DocTransaction::cancel_ongoing_index_reads() {
-	for (auto it : infos) {
-		for (auto actor : it.second->index_update_actors)
+	for (auto deferredDocument : deferredDocuments) {
+		for (auto actor : deferredDocument.second->index_update_actors)
 			actor.cancel();
 	}
 }
@@ -188,11 +188,13 @@ struct FDBPlugin : ITDoc, ReferenceCounted<FDBPlugin>, FastAllocated<FDBPlugin> 
 	Reference<DocumentDeferred> findOrCreate(Reference<DocTransaction> tr, DataKey const& key) {
 		ASSERT(key.size() > 1);
 		std::string documentPrefix = key.keyPrefix(2).toString();
-		auto info = tr->infos.find(documentPrefix);
-		if (info == tr->infos.end())
-			info = tr->infos.insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
-			           .first;
-		return (*info).second;
+		auto deferredDocument = tr->deferredDocuments.find(documentPrefix);
+		if (deferredDocument == tr->deferredDocuments.end())
+			deferredDocument =
+			    tr->deferredDocuments
+			        .insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
+			        .first;
+		return (*deferredDocument).second;
 	}
 
 	Future<Optional<DataValue>> get(Reference<DocTransaction> tr, DataKey key) override {
@@ -248,11 +250,13 @@ struct IndexPlugin : ITDoc {
 	Reference<DocumentDeferred> shouldDoUpdate(Reference<DocTransaction> tr, DataKey const& documentKey) {
 		ASSERT(documentKey.startsWith(collectionPath) && documentKey.size() > collectionPath.size());
 		std::string documentPrefix = documentKey.toString();
-		auto info = tr->infos.find(documentPrefix);
-		if (info == tr->infos.end())
-			info = tr->infos.insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
-			           .first;
-		return (*info).second;
+		auto deferredDocument = tr->deferredDocuments.find(documentPrefix);
+		if (deferredDocument == tr->deferredDocuments.end())
+			deferredDocument =
+			    tr->deferredDocuments
+			        .insert(std::make_pair(documentPrefix, Reference<DocumentDeferred>(new DocumentDeferred())))
+			        .first;
+		return (*deferredDocument).second;
 	}
 
 	void set(Reference<DocTransaction> tr, DataKey key, ValueRef value) override {
