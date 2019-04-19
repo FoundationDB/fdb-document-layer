@@ -1007,9 +1007,11 @@ ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnecti
 		for (auto& writeError : ret.writeErrors) {
 			arrayBuilder << writeError;
 		}
-		reply->addDocument(BSON("ok" << 1 << "n"
-		                             << "0"
-		                             << "writeErrors" << arrayBuilder.arr()));
+		// clang-format off
+		reply->addDocument(BSON("ok" << 1 <<
+		                        "n"  << 0 <<
+		                        "writeErrors" << arrayBuilder.arr()));
+		// clang-format on
 	}
 	return reply;
 }
