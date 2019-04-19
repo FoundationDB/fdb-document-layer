@@ -249,8 +249,10 @@ ACTOR Future<Void> runCommand(Reference<ExtConnection> nmc,
 
 		if (e.code() == error_code_bad_dispatch) {
 			bob.append("errmsg", format("no such cmd: %s", cmd.c_str()));
+			bob.append("$err", format("no such cmd: %s", cmd.c_str()));
 		} else {
 			bob.append("errmsg", format("command [%s] failed with err: %s", cmd.c_str(), e.what()));
+			bob.append("$err", format("command [%s] failed with err: %s", cmd.c_str(), e.what()));
 		}
 		bob.append("bad cmd", query->query.toString());
 		bob.append("ok", 0);
