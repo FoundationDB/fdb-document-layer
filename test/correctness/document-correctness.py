@@ -277,6 +277,62 @@ def test_update(collection1, collection2, verbose=False):
 
     return (True, False)
 
+def test_delete_many(collection1, collection2, verbose=False):
+    for i in range(1, 10):
+        exceptionOne = None
+        exceptionTwo = None
+        query = gen.random_query(gen.global_prng.random())
+
+        util.trace('debug', '\n========== Delete_many No.', i, '==========')
+        util.trace('debug', 'Query:', query)
+        util.trace('debug', 'Number results from collection: ', gen.count_query_results(
+            collection1, query))
+        for item in collection1.find(query):
+            util.trace('debug', 'Find Result1:', item)
+        for item in collection2.find(query):
+            util.trace('debug', 'Find Result2:', item)
+
+        try:
+            if verbose:
+                all = [x for x in collection1.find(dict())]
+                for item in collection1.find(query):
+                    print '[{}] Before delete doc:{}'.format(type(collection1), item)
+                print 'Before delete collection1 size: ', len(all)
+            collection1.delete_many(query)
+        except pymongo.errors.OperationFailure as e:
+            exceptionOne = e
+        except MongoModelException as e:
+            exceptionOne = e
+        try:
+            if verbose:
+                all = [x for x in collection2.find(dict())]
+                for item in collection2.find(query):
+                    print '[{}]Before delete doc:{}'.format(type(collection2), item)
+                print 'Before delete collection2 size: ', len(all)
+            collection2.delete_many(query)
+        except pymongo.errors.OperationFailure as e:
+            exceptionTwo = e
+        except MongoModelException as e:
+            exceptionTwo = e
+
+        if (exceptionOne is None and exceptionTwo is None):
+            # happy case, proceed to consistency check
+            pass
+        elif exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code:
+            # TODO re-enable consistency check when failure happened
+            return (True, True)
+        else:
+            print 'Unmatched result: '
+            print type(exceptionOne), ': ', str(exceptionOne)
+            print type(exceptionTwo), ': ', str(exceptionTwo)
+            ignored_exception_check(exceptionOne)
+            ignored_exception_check(exceptionTwo)
+            return (False, False)
+
+        if not check_query(dict(), collection1, collection2):
+            return (False, False)
+
+    return (True, False)
 
 class IgnoredException(Exception):
     def __init__(self, message):
@@ -289,10 +345,11 @@ def ignored_exception_check(e):
 
 
 def one_iteration(collection1, collection2, ns, seed):
-    update_tests_enabled = ns['no_updates']
+    update_tests_enabled = not ns['no_updates']
+    delete_many_tests_enabled = not ns['no_delete_many']
     sorting_tests_enabled = gen.generator_options.allow_sorts
-    indexes_enabled = ns['no_indexes']
-    projections_enabled = ns['no_projections']
+    indexes_enabled = not ns['no_indexes']
+    projections_enabled = not ns['no_projections']
     verbose = ns['verbose']
     num_doc = ns['num_doc']
     fname = "unknown"
@@ -406,6 +463,15 @@ def one_iteration(collection1, collection2, ns, seed):
         if not okay:
             return (okay, fname, None)
 
+        if delete_many_tests_enabled:
+            okay, skip_current_iteration = test_delete_many(collection1, collection2, verbose)
+            if skip_current_iteration:
+                if verbose:
+                    print "Skipping current iteration due to the failure from update."
+                return (True, fname, None)
+            if not okay:
+                return (okay, fname, None)
+
         if update_tests_enabled:
             okay, skip_current_iteration = test_update(collection1, collection2, verbose)
             if skip_current_iteration:
@@ -507,10 +573,10 @@ def test_forever(ns):
 
 
 def start_forever_test(ns):
-    gen.generator_options.test_nulls = ns['no_nulls']
-    gen.generator_options.upserts_enabled = ns['no_upserts']
-    gen.generator_options.numeric_fieldnames = ns['no_numeric_fieldnames']
-    gen.generator_options.allow_sorts = ns['no_sort']
+    gen.generator_options.test_nulls = not ns['no_nulls']
+    gen.generator_options.upserts_enabled = not ns['no_upserts']
+    gen.generator_options.numeric_fieldnames = not ns['no_numeric_fieldnames']
+    gen.generator_options.allow_sorts = not ns['no_sort']
 
     util.weaken_tests(ns)
 
@@ -540,6 +606,7 @@ def start_self_test(ns):
             collection2=c2,
             seed=random.random(),
             update_tests_enabled=True,
+            delete_many_tests_enabled=True,
             sorting_tests_enabled=True,
             indexes_enabled=False,
             projections_enabled=True,
@@ -598,22 +665,23 @@ if __name__ == '__main__':
     parser_forever.add_argument('2', choices=['mongo', 'mm', 'doclayer'], help='second tester')
     parser_forever.add_argument(
         '-s', '--seed', type=int, default=random.randint(0, sys.maxint), help='random seed to use')
-    parser_forever.add_argument('--no-updates', default=True, action='store_false', help='disable update tests')
+    parser_forever.add_argument('--no-updates', default=False, action='store_true', help='disable update tests')
+    parser_forever.add_argument('--no-delete-many', default=False, action='store_true', help='disable delete_many tests')
     parser_forever.add_argument(
-        '--no-sort', default=True, action='store_false', help='disable non-deterministic sort tests')
+        '--no-sort', default=False, action='store_true', help='disable non-deterministic sort tests')
     parser_forever.add_argument(
         '--no-numeric-fieldnames',
-        default=True,
-        action='store_false',
+        default=False,
+        action='store_true',
         help='disable use of numeric fieldnames in subobjects')
     parser_forever.add_argument(
-        '--no-nulls', default=True, action='store_false', help='disable generation of null values')
+        '--no-nulls', default=False, action='store_true', help='disable generation of null values')
     parser_forever.add_argument(
-        '--no-upserts', default=True, action='store_false', help='disable operator-operator upserts in update tests')
+        '--no-upserts', default=False, action='store_true', help='disable operator-operator upserts in update tests')
     parser_forever.add_argument(
-        '--no-indexes', default=True, action='store_false', help='disable generation of random indexes')
+        '--no-indexes', default=False, action='store_true', help='disable generation of random indexes')
     parser_forever.add_argument(
-        '--no-projections', default=True, action='store_false', help='disable generation of random query projections')
+        '--no-projections', default=False, action='store_true', help='disable generation of random query projections')
     parser_forever.add_argument('--num-doc', type=int, default=300, help='number of documents in the collection')
     parser_forever.add_argument('--buggify', default=False, action='store_true', help='enable buggification')
     parser_forever.add_argument('--num-iter', type=int, default=0, help='number of iterations of this type of test')
