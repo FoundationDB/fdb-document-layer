@@ -1096,7 +1096,12 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 			}
 		} catch (Error& e) {
 			TraceEvent(SevError, "ExtMsgUpdateFailure").error(e);
-			cmdResult.writeErrors.push_back(BSON("index" << idx << "code" << e.code() << "errmsg" << e.what()));
+			// clang-format off
+			cmdResult.writeErrors.push_back(BSON("index" << idx <<
+			                                     "code" << e.code() <<
+			                                     "$err" << e.what() <<
+			                                     "errmsg" << e.what()));
+			// clang-format on
 			if (ordered)
 				break;
 		}
@@ -1240,7 +1245,12 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				nrDeletedRecords += deletedRecords;
 			} catch (Error& e) {
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
-				writeErrors.push_back(BSON("index" << idx << "code" << e.code() << "errmsg" << e.what()));
+				// clang-format off
+				writeErrors.push_back(BSON("index" << idx <<
+				                           "code" << e.code() <<
+				                           "$err" << e.what() <<
+				                           "errmsg" << e.what()));
+				// clang-format on
 				if (ordered)
 					break;
 			}

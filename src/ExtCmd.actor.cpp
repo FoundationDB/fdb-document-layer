@@ -230,7 +230,8 @@ struct GetLogCmd {
 		if (query->ns.first != "admin") {
 			// clang-format off
 			reply->addDocument((bob << "ok" << 0.0 <<
-			                           "errmsg" << "access denied; use admin db").obj());
+			                           "errmsg" << "access denied; use admin db" <<
+			                           "$err" << "access denied; use admin db").obj());
 			// clang-format on
 			return reply;
 		}
@@ -286,6 +287,7 @@ struct ReplSetGetStatusCmd {
 		// FIXME: what do we really want to report here?
 		bob.append("ok", 0.0);
 		bob.append("errmsg", "not really talking to mongodb");
+		bob.append("$err", "not really talking to mongodb");
 
 		reply->addDocument(bob.obj());
 
@@ -536,7 +538,12 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		bson::BSONObj replyObj = bob.obj().getOwned();
 		reply->addDocument(replyObj);
 	} catch (Error& e) {
-		reply->addDocument(BSON("errmsg" << e.what() << "code" << e.code() << "ok" << 1.0));
+		// clang-format off
+		reply->addDocument(BSON("errmsg" << e.what() <<
+		                        "$err" << e.what() <<
+		                        "code" << e.code() <<
+		                        "ok" << 1.0));
+		// clang-format on
 	}
 
 	return reply;
@@ -662,7 +669,12 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateIndexes(Reference<ExtConnect
 		Void _ = wait(waitForAll(f));
 		reply->addDocument(BSON("ok" << 1.0));
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
+		// clang-format off
+		reply->addDocument(BSON("ok" << 0.0 <<
+		                        "$err" << e.what() <<
+		                        "errmsg" << e.what() <<
+		                        "code" << e.code()));
+		// clang-format on
 	}
 	return reply;
 }
@@ -954,7 +966,12 @@ ACTOR static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnecti
 		// one FDB transaction.
 		bson::BSONArrayBuilder arrayBuilder;
 		for (int i = 0; i < docs.size(); i++) {
-			arrayBuilder << BSON("index" << i << "code" << e.code() << "errmsg" << e.what());
+			// clang-format off
+			arrayBuilder << BSON("index" << i <<
+			                     "code" << e.code() <<
+			                     "$err" << e.what() <<
+			                     "errmsg" << e.what());
+			// clang-format on
 		}
 		reply->addDocument(BSON("ok" << 1 << "n" << 0 << "writeErrors" << arrayBuilder.arr()));
 	}

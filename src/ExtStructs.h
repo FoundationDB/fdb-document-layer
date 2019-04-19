@@ -61,7 +61,7 @@ struct WriteCmdResult {
 	std::vector<Standalone<StringRef>> upsertedOIDList;
 
 	/**
-	 * Array of write errors. Each entry has fields - 'index', 'code' and 'errmsg'. 'index'
+	 * Array of write errors. Each entry has fields - 'index', 'code' '$err' and 'errmsg'. 'index'
 	 * points to write command in the request. So, separate write error for each write failed.
 	 */
 	std::vector<bson::BSONObj> writeErrors;
