@@ -133,6 +133,8 @@ def evaluate(field, query, document, options, debug=False):
     if type(query) == dict:
         if '$not' in query:
             return not evaluate(field, query['$not'], document, options)
+        elif '$eq' in query:
+            return evaluate(field, query['$eq'], document, options)
         elif '$ne' in query:
             return not evaluate(field, query['$ne'], document, options)
         elif '$nin' in query:

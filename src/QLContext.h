@@ -87,7 +87,7 @@ struct DocTransaction : ReferenceCounted<DocTransaction> {
 	// in general. Look at the comments in doNonIsolatedRW() for more on what it's for.
 	void cancel_ongoing_index_reads();
 
-	std::map<std::string, Reference<DocumentDeferred>> infos;
+	std::map<std::string, Reference<DocumentDeferred>> deferredDocuments;
 };
 
 template <class T>
