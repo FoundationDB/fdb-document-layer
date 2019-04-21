@@ -44,6 +44,7 @@ DocLayerKnobs::DocLayerKnobs(bool enable) {
 	init(MAX_RETURNABLE_DATA_SIZE, (1 << 20) * 16);
 	init(CURSOR_EXPIRY, 60 * 10); /* seconds */
 	init(DEFAULT_RETURNABLE_DATA_SIZE, (1 << 20) * 4);
+	init(SLOW_QUERY_THRESHOLD_MICRO_SECONDS, 10 * 1000 * 1000);
 }
 
 bson::BSONObj DocLayerKnobs::dumpKnobs() const {

@@ -76,6 +76,5 @@ const char* MT_TIME_INSERT_LATENCY_US = "dl_insert_latency_useconds";
 const char* MT_HIST_INSERT_SZ = "dl_insert_size_bytes";
 const char* MT_HIST_TR_PER_REQUEST = "dl_tr_per_request";
 const char* MT_RATE_IDX_REBUILD = "dl_index_rebuild_rate";
-const uint64_t SLOW_QUERY_THRESHOLD_MICRO_SECONDS = 10000;
 
 } // namespace DocLayerConstants
