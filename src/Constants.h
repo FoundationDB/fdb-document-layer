@@ -89,6 +89,8 @@ extern const char* MT_TIME_INSERT_LATENCY_US;
 extern const char* MT_HIST_INSERT_SZ;
 extern const char* MT_HIST_TR_PER_REQUEST;
 extern const char* MT_RATE_IDX_REBUILD;
+// TODO: make this part of the knob/options instead of constants?
+extern const uint64_t SLOW_QUERY_THRESHOLD_SECONDS;
 
 } // namespace DocLayerConstants
 
