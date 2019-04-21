@@ -514,13 +514,13 @@ ACTOR static Future<Void> doRun(Reference<ExtMsgQuery> query, Reference<ExtConne
 		}
 	}
 
-	uint64_t queryLatencySeconds = (timer_int() - startTime) / 1000;
-	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_QUERY_LATENCY_US, queryLatencySeconds);
+	uint64_t queryLatencyMicroSeconds = (timer_int() - startTime) / 1000;
+	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_QUERY_LATENCY_US, queryLatencyMicroSeconds);
 
-	if (slowQueryLogging && queryLatencySeconds >= DocLayerConstants::SLOW_QUERY_THRESHOLD_SECONDS) {
-		TraceEvent("SlowQuery")
-		    .detail("Threshold", DocLayerConstants::SLOW_QUERY_THRESHOLD_SECONDS)
-		    .detail("Duration", queryLatencySeconds)
+	if (slowQueryLogging && queryLatencyMicroSeconds >= DocLayerConstants::SLOW_QUERY_THRESHOLD_MICRO_SECONDS) {
+		TraceEvent(SevWarn, "SlowQuery")
+		    .detail("ThresholdMicroSeconds", DocLayerConstants::SLOW_QUERY_THRESHOLD_MICRO_SECONDS)
+		    .detail("DurationMicroSeconds", queryLatencyMicroSeconds)
 		    .detail("Query", query->toString());
 	}
 
