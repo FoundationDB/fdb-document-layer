@@ -37,6 +37,7 @@ public:
 	int MAX_RETURNABLE_DATA_SIZE;
 	int CURSOR_EXPIRY;
 	int DEFAULT_RETURNABLE_DATA_SIZE;
+	int SLOW_QUERY_THRESHOLD_MICRO_SECONDS;
 
 	explicit DocLayerKnobs(bool randomize = false);
 
