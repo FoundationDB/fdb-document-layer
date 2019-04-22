@@ -1176,13 +1176,14 @@ def command_line_str(ns, seed):
     cmd_line = cmd_line + " --seed " + str(seed)
     cmd_line = cmd_line + " --num-doc " + str(ns['num_doc'])
     cmd_line = cmd_line + " --num-iter " + str(ns['num_iter'])
-    cmd_line = cmd_line + ("" if ns['no_updates'] else " --no-update")
+    cmd_line = cmd_line + (" --no-update" if ns['no_updates'] else "")
     cmd_line = cmd_line + ("" if gen.generator_options.allow_sorts else " --no-sort")
     cmd_line = cmd_line + ("" if gen.generator_options.numeric_fieldnames else " --no-numeric-fieldnames")
     cmd_line = cmd_line + ("" if gen.generator_options.test_nulls else " --no-nulls")
     cmd_line = cmd_line + ("" if gen.generator_options.upserts_enabled else " --no-upserts")
-    cmd_line = cmd_line + ("" if ns['no_indexes'] else " --no-indexes")
-    cmd_line = cmd_line + ("" if ns['no_projections'] else " --no-projections")
+    cmd_line = cmd_line + (" --no-indexes" if ns['no_indexes'] else "")
+    cmd_line = cmd_line + (" --no-projections" if ns['no_projections'] else "")
+    cmd_line = cmd_line + (" --no-delete-many" if ns['no_delete_many'] else "")
     cmd_line = cmd_line + ("" if instance_id == 0 else " --instance-id " + str(instance_id))
 
     return cmd_line + '\n'
