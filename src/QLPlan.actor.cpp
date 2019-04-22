@@ -520,7 +520,7 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
 		if (x >= scanBounds.begin && x < scanBounds.end) {
 			Optional<DataValue> odv = wait(cx->cx->get(x));
 			if (odv.present()) {
-				Void _ = wait(flowControlLock->take(1));
+				Void _ = wait(flowControlLock->take());
 				dis.send(Reference<ScanReturnedContext>(new ScanReturnedContext(
 				    cx->cx->getSubContext(begin.encode_key_part()), scanID, StringRef(begin.encode_key_part()))));
 			}
@@ -549,7 +549,7 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
 			if (curPK.compare(lastPK)) {
 				lastPK = Standalone<StringRef>(curPK, kv.arena());
 				// We are adding a brand new document, so
-				Void _ = wait(outputLock->take(1));
+				Void _ = wait(outputLock->take());
 				output.send(Reference<ScanReturnedContext>(
 				    new ScanReturnedContext(cx->cx->getSubContext(lastPK), scanID, Key(kv.key, kv.arena()))));
 			}
@@ -715,7 +715,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 			loop choose {
 				when(state Reference<ScanReturnedContext> doc =
 				         waitNext(docs)) { // throws end_of_stream when totally finished
-					Void _ = wait(outerLock->take(1));
+					Void _ = wait(outerLock->take());
 					innerLock->release();
 					output.send(doc);
 					++nResults;
@@ -800,7 +800,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 							when(Void _ = wait(committingDocs.empty() ? Never() : committingDocs.front().second)) {
 								bufferedDocs.push_back(committingDocs.front().first);
 								committingDocs.pop_front();
-								innerLock->release(1);
+								innerLock->release();
 							}
 							when(Void _ = wait(timeout)) { break; }
 						}
@@ -847,7 +847,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 				innerCheckpoint = next_checkpoint;
 
 				while (!bufferedDocs.empty()) {
-					Void _ = wait(outerLock->take(1));
+					Void _ = wait(outerLock->take());
 					Reference<ScanReturnedContext> finishedDoc = bufferedDocs.front();
 					output.send(finishedDoc);
 					++oCount;
@@ -947,7 +947,7 @@ ACTOR static Future<Void> doRetry(Reference<Plan> subPlan,
 				state Reference<ScanReturnedContext> r;
 				for (const Reference<ScanReturnedContext>& loopThing : ret) {
 					r = loopThing;
-					Void _ = wait(outerLock->take(1));
+					Void _ = wait(outerLock->take());
 					output.send(r);
 				}
 				throw end_of_stream();
@@ -1390,7 +1390,7 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
                                         Reference<MetadataManager> mm) {
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
-		Void _ = wait(flowControlLock->take(1));
+		Void _ = wait(flowControlLock->take());
 		state Reference<UnboundCollectionContext> mcx = wait(mm->getUnboundCollectionContext(tr, ns));
 		state Reference<UnboundCollectionContext> unbound = wait(mm->indexesCollection(tr, ns.first));
 		state Reference<Plan> getIndexesPlan = getIndexesForCollectionPlan(unbound, ns);
