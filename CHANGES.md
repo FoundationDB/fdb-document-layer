@@ -1,5 +1,18 @@
 ## Release notes
 
+### 1.7.0
+
+* [#49](https://github.com/FoundationDB/fdb-document-layer/issues/49) Slow query logging
+* [#145](https://github.com/FoundationDB/fdb-document-layer/pull/145) Added `connectionStatus` command
+* [#150](https://github.com/FoundationDB/fdb-document-layer/pull/150) Removed explicit transactions. They will be added back with MongoDB v4.0 compatibility
+* [#151](https://github.com/FoundationDB/fdb-document-layer/issues/151) Fixed `$addToSet` update operator to return `None` values properly with arrays
+* [#154](https://github.com/FoundationDB/fdb-document-layer/pull/154) Better `update` command testing
+* [#161](https://github.com/FoundationDB/fdb-document-layer/pull/161) Added more metrics
+* [#165](https://github.com/FoundationDB/fdb-document-layer/pull/165) Fix `FlowLock` usage, which is causing transaction timeouts.
+* [#168](https://github.com/FoundationDB/fdb-document-layer/pull/168) Deleted document count returned with correct type, `int` instead of `string`
+* [#169](https://github.com/FoundationDB/fdb-document-layer/pull/169) DocLayer now returns error as `$err` as the drivers except
+
+
 ### 1.6.4
 
 * [#84](https://github.com/FoundationDB/fdb-document-layer/issues/84) Fix for `getIndexes()`
