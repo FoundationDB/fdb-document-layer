@@ -729,11 +729,11 @@ class MongoCollection(object):
     def process_update_operator_set_on_insert(self, key, update_expression, new_doc=False):
         # print "Update Operator: $setOnInsert ", key, update_expression
         if new_doc:
-            self.data[key] = OrderedDict(self.data[key].items() + update_expression.items())
+            self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
 
     def process_update_operator_set(self, key, update_expression):
         # print "Update Operator: $set ", update
-        self.data[key] = OrderedDict(self.data[key].items() + update_expression.items())
+        self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
 
     def process_update_operator_unset(self, key, update_expression):
         # print "Update Operator: $unset ", update
@@ -837,11 +837,9 @@ class MongoCollection(object):
                     raise MongoModelException("Cannot apply $pullAll to a non-array field.", code=10142)
 
     def evaluate(self, query, document):
-        if len(query) == 0:
-            # If we made it here, the evaluate function must NOT be called from the `find` function, and thus
-            # we can return false. Note in find() function, an empty query means maches all documents.
-            return False
         acc = True
+        if len(query) == 0:
+            return len(document) == 0
         for field in query.keys():
             if field == '_id':
                 tmp = OrderedDict()
@@ -962,21 +960,15 @@ class MongoCollection(object):
 
     def process_update_operator(self, key, update, new_doc=False):
         op_update = self.has_operator_expressions(update)
-        old_data = None
-
-        try:
-            old_data = deepcopy(self.data[key])
-            if op_update:
-                for k in update:
-                    if k == '$setOnInsert':
-                        self.mapUpdateOperator[k](key, update[k], new_doc=new_doc)
-                    elif k in self.mapUpdateOperator:
-                        self.mapUpdateOperator[k](key, update[k])
-            else:
-                self.replace(key, update)
-        except MongoModelException as e:
-            self.data[key] = old_data
-            raise e
+        old_data = deepcopy(self.data[key])
+        if op_update:
+            for k in update:
+                if k == '$setOnInsert':
+                    self.mapUpdateOperator[k](key, update[k], new_doc=new_doc)
+                elif k in self.mapUpdateOperator:
+                    self.mapUpdateOperator[k](key, update[k])
+        else:
+            self.replace(key, update)
 
     def deep_transform_logical_operators(self, selector=None):
         new_selector = {}
@@ -1126,26 +1118,27 @@ class MongoCollection(object):
             raise MongoModelException('multi update only works with $ operators', code=10158)
         if isOperatorUpdate:
             self.validate_update_object(update)
-        if len(query) == 0:
-            return
-        key = query.keys()[0]
         any = False
         old_data = deepcopy(self.data)
         n = 0
         try:
+            if len(query) == 0:
+                # Update all existing docs. And since the query is empty, do NOT do upsert.
+                any = True
+                for k in self.data.keys():
+                    n +=1
+                    self.process_update_operator(k, update)
+                    if not multi:
+                        break
+            key = query.keys()[0]
             for k, item in self.data.iteritems():
                 if evaluate(key, query[key], item, self.options):
                     any = True
                     n += 1
                     # print "Result: ", item
-                    if len(update) > 0:
-                        self.process_update_operator(k, update)
-                        if not multi:
-                            return
-                    else:
-                        self.replace(k, update)
-                        if not multi:
-                            return
+                    self.process_update_operator(k, update)
+                    if not multi:
+                        break
             if any:
                 for index in self.indexes:
                     if not index.inError:
@@ -1186,7 +1179,7 @@ class MongoCollection(object):
                 if "_id" in query:
                     update["_id"] = query["_id"]
                 self.insert(update)
-        else:
+        elif not any:
             # mongoDB raise an exception for the '$setOnInsert' update operator even if the upsert is False
             if '$setOnInsert' in update.keys() and len(update['$setOnInsert']) == 0:
                 raise MongoModelException(
@@ -1285,7 +1278,11 @@ class MongoUniqueIndex(MongoIndex):
                     check_none_at_all=True,
                     check_none_next=True,
                     debug=False)
-                entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "")
+                if len(_values) == 0:
+                    # empty array
+                    entry = entry + '[]'
+                else:
+                    entry = entry + reduce((lambda acc, x: acc + x), map((lambda x: str(x)), _values), "")
             if entry in seen:
                 # print "[{}] in {} ? {}".format(entry, seen, entry in seen)
                 # print "Violating keys " + str(key)
