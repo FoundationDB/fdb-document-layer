@@ -464,8 +464,6 @@ ignored_exceptions = [
 
 
 def test_forever(ns):
-    (client1, client2, collection1, collection2) = get_clients_and_collections(ns)
-
     seed = ns['seed']
     bgf_enabled = ns['buggify']
     num_iter = ns['num_iter']
@@ -475,6 +473,7 @@ def test_forever(ns):
 
     gen.global_prng = random.Random(seed)
 
+    (client1, client2, instance) = get_clients(ns['1'], ns['2'], ns)
     # this assumes that the database name we use for testing is "test"
     client = client1 if "doclayer" == ns['1'] else (client2 if "doclayer" == ns['2'] else None)
     if client is not None:
@@ -485,8 +484,13 @@ def test_forever(ns):
         if num_iter != 0 and jj > num_iter:
             break
 
+        dbName = 'test-' + instance + '-' + str(gen.global_prng.randint(100000,100000000))
+        collName = 'correctness-' + instance + '-' + str(gen.global_prng.randint(100000,100000000))
+        collection1 = client1[dbName][collName]
+        collection2 = client2[dbName][collName]
+
         print '========================================================'
-        print 'ID : ' + str(os.getpid()) + ' iteration : ' + str(jj)
+        print 'PID : ' + str(os.getpid()) + ' iteration : ' + str(jj) + ' DB : ' + dbName + ' Collection: ' + collName
         print '========================================================'
         (okay, fname, e) = one_iteration(collection1, collection2, ns, seed)
 
