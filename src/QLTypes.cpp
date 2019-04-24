@@ -83,7 +83,7 @@ bson::BSONType DataValue::getBSONType() const {
 		return bson::BSONType::MaxKey;
 	}
 
-	TraceEvent(SevError, "BD_getBSONType_UnknownType");
+	TraceEvent(SevError, "BD_getBSONType_UnknownType").error(internal_error());
 	throw internal_error();
 }
 
@@ -158,7 +158,7 @@ DataValue DataValue::decode_key_part(StringRef key) {
 			return DataValue(key);
 		}
 	} catch (Error& e) {
-		TraceEvent(SevError, "BD_decode_key_part_error").detail("nonNumKey", printable(key));
+		TraceEvent(SevError, "BD_decode_key_part_error").detail("nonNumKey", printable(key)).error(e);
 		throw;
 	}
 }
@@ -175,7 +175,10 @@ DataValue DataValue::decode_key_part(StringRef numKey, bson::BSONType numCode) {
 		}
 	}
 
-	TraceEvent(SevError, "BD_decode_key_part_error").detail("numKey", printable(numKey)).detail("numCode", numCode);
+	TraceEvent(SevError, "BD_decode_key_part_error")
+	    .detail("numKey", printable(numKey))
+	    .detail("numCode", numCode)
+	    .error(internal_error());
 	throw internal_error();
 }
 

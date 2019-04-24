@@ -416,7 +416,8 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
 					TraceEvent(SevError, "CompoundIndexKeyTooLarge")
 					    .detail("OffendingKeySize", new_key.byteSize())
-					    .detail("IndexName", self->indexName);
+					    .detail("IndexName", self->indexName)
+					    .error(index_key_too_large());
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());
@@ -534,7 +535,8 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				if (new_key.byteSize() > DocLayerConstants::INDEX_KEY_LENGTH_LIMIT) {
 					TraceEvent(SevError, "SimpleIndexKeyTooLarge")
 					    .detail("OffendingKeySize", new_key.byteSize())
-					    .detail("IndexName", self->indexName);
+					    .detail("IndexName", self->indexName)
+					    .error(index_key_too_large());
 					throw index_key_too_large();
 				}
 				tr->tr->set(getFDBKey(new_key), StringRef());

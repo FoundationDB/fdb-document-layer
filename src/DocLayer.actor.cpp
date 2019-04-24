@@ -138,7 +138,7 @@ ACTOR Future<Void> wrapError(Future<Void> actorThatCouldThrow) {
 	try {
 		Void _ = wait(actorThatCouldThrow);
 	} catch (Error& e) {
-		TraceEvent(SevError, "BackgroundTask").detail("Error", e.what()).backtrace();
+		TraceEvent(SevError, "BackgroundTask").error(e);
 	}
 	return Void();
 }
@@ -155,7 +155,7 @@ Future<Void> processRequest(Reference<ExtConnection> ec,
 			fprintf(stderr, "C -> S: %s\n\n", msg->toString().c_str());
 		return msg->run(ec);
 	} catch (Error& e) {
-		TraceEvent(SevWarnAlways, "BD_processRequest").detail("opcode", header->opCode).error(e);
+		TraceEvent(SevError, "UnhandledRequestFailure").detail("opcode", header->opCode).error(e);
 		return Void();
 	}
 }
@@ -247,7 +247,7 @@ ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr) {
 			when(Void _ = wait(connections.getResult())) { ASSERT(false); }
 		}
 	} catch (Error& e) {
-		TraceEvent(SevError, "BD_server").detail("fatal_error", e.what());
+		TraceEvent(SevError, "BD_server").error(e);
 		fprintf(stderr, "FdbDocServer: fatal error: %s\n", e.what());
 		g_network->stop();
 		throw;
