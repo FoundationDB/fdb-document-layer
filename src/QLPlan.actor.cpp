@@ -673,7 +673,7 @@ FutureStream<Reference<ScanReturnedContext>> TableScanPlan::execute(PlanCheckpoi
 
 Reference<DocTransaction> NonIsolatedPlan::newTransaction() {
 	Reference<FDB::Transaction> tr = Reference<FDB::Transaction>(new FDB::Transaction(database));
-	int64_t timeoutMS = 5000;
+	int64_t timeoutMS = 4000;
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeoutMS, sizeof(timeoutMS)));
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
 	return DocTransaction::create(tr);
@@ -681,7 +681,7 @@ Reference<DocTransaction> NonIsolatedPlan::newTransaction() {
 
 Reference<DocTransaction> NonIsolatedPlan::newTransaction(Reference<FDB::DatabaseContext> database) {
 	Reference<FDB::Transaction> tr = Reference<FDB::Transaction>(new FDB::Transaction(database));
-	int64_t timeoutMS = 5000;
+	int64_t timeoutMS = 4000;
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeoutMS, sizeof(timeoutMS)));
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
 	return DocTransaction::create(tr);
