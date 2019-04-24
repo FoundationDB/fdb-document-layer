@@ -1161,14 +1161,17 @@ std::string ExtMsgGetMore::toString() {
 
 ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Reference<ExtConnection> ec) {
 	state Reference<ExtMsgReply> reply = Reference<ExtMsgReply>(new ExtMsgReply(getMore->header));
-
 	state Reference<Cursor> cursor = ec->cursors[getMore->cursorID];
 
 	if (cursor) {
-		int32_t returned = wait(addDocumentsFromCursor(cursor, reply, getMore->numberToReturn));
-		reply->replyHeader.startingFrom = cursor->returned - returned;
-		reply->addResponseFlag(8 /*0b1000*/);
-		cursor->refresh();
+		try {
+			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, getMore->numberToReturn));
+			reply->replyHeader.startingFrom = cursor->returned - returned;
+			reply->addResponseFlag(8 /*0b1000*/);
+			cursor->refresh();
+		} catch (Error& e) {
+			reply->setError(e);
+		}
 	} else {
 		reply->addResponseFlag(1 /*0b0001*/);
 	}
