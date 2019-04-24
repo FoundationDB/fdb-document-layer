@@ -608,7 +608,11 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "ok" << 1.0));
 				return reply;
 			} else {
-				reply->addDocument(BSON("ok" << 0.0));
+				// clang-format off
+				reply->addDocument(BSON("ok" << 0.0 <<
+				"$err" << "'index' must be a string or an object" <<
+				"errmsg" << "'index' must be a string or an object"));
+				// clang-format on
 				return reply;
 			}
 		} else {

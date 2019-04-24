@@ -22,6 +22,7 @@
 #
 
 from pymongo.errors import OperationFailure
+from bson.son import SON
 
 def test_error_reply(fixture_db):
     try:
@@ -30,3 +31,13 @@ def test_error_reply(fixture_db):
         serverErrObj = e.details
         assert serverErrObj['$err'] != None
         assert "no such cmd: sometotallyrandomcmd" in serverErrObj['$err']
+
+def test_drop_index_cmd_error_reply(fixture_db):
+    try:
+        fixture_db.command(SON([("dropIndexes", "testcoll"), ("index", 1)]))
+    except Exception as e:
+        assert isinstance(e, OperationFailure)
+        serverErrObj = e.details
+        assert serverErrObj['$err'] != None
+        assert serverErrObj['errmsg'] != None
+
