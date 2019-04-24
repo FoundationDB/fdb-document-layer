@@ -479,12 +479,12 @@ def test_forever(ns):
     if client is not None:
         client.test.command("buggifyknobs", bgf_enabled)
 
+    dbName = 'test-' + instance + '-' + str(gen.global_prng.randint(100000,100000000))
     while okay:
         jj += 1
         if num_iter != 0 and jj > num_iter:
             break
 
-        dbName = 'test-' + instance + '-' + str(gen.global_prng.randint(100000,100000000))
         collName = 'correctness-' + instance + '-' + str(gen.global_prng.randint(100000,100000000))
         collection1 = client1[dbName][collName]
         collection2 = client2[dbName][collName]
@@ -506,6 +506,10 @@ def test_forever(ns):
         # Generate a new seed and start over
         seed = random.randint(0, sys.maxint)
         gen.global_prng = random.Random(seed)
+
+        # house keeping
+        collection1.drop()
+        collection2.drop()
 
     return okay
 
