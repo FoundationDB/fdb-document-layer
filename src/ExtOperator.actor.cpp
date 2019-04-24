@@ -370,7 +370,7 @@ DataValue doubleDispatchArithmetic(DataValue valueInDatabase, DataValue valueToA
 	default:
 		break;
 	}
-	TraceEvent(SevError, "BD_doubleDispatchArithmeticError");
+	TraceEvent(SevError, "BD_doubleDispatchArithmeticError").error(internal_error());
 	throw internal_error();
 }
 
@@ -563,7 +563,9 @@ ACTOR static Future<Void> doPopActor(Reference<IReadWriteContext> cx,
 						} else if (next.getSortType() == DVTypeCode::PACKED_ARRAY) {
 							insertElementRecursive(oldNumber - 1, next.getPackedArray(), scx);
 						} else {
-							TraceEvent(SevError, "BD_doPopActor_error").detail("nextTypecode", (int)next.getSortType());
+							TraceEvent(SevError, "BD_doPopActor_error")
+							    .detail("nextTypecode", (int)next.getSortType())
+							    .error(internal_error());
 							throw internal_error();
 						}
 					}
@@ -642,7 +644,9 @@ ACTOR static Future<Void> doPullActor(Reference<IReadWriteContext> cx,
 					} else if (next.getSortType() == DVTypeCode::PACKED_ARRAY) {
 						insertElementRecursive(oldNumber - pulled, next.getPackedArray(), scx);
 					} else {
-						TraceEvent(SevError, "BD_doPullActor_error").detail("nextTypecode", (int)next.getSortType());
+						TraceEvent(SevError, "BD_doPullActor_error")
+						    .detail("nextTypecode", (int)next.getSortType())
+						    .error(internal_error());
 						throw internal_error();
 					}
 				}
@@ -820,7 +824,8 @@ ACTOR static Future<Void> doPushActor(Reference<IReadWriteContext> cx,
 										insertElementRecursive(oldNumber - skip, next.getPackedArray(), scx);
 									} else {
 										TraceEvent(SevError, "BD_doPushActor_error")
-										    .detail("nextTypecode", (int)next.getSortType());
+										    .detail("nextTypecode", (int)next.getSortType())
+										    .error(internal_error());
 										throw internal_error();
 									}
 								}

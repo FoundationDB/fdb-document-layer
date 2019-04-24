@@ -45,7 +45,7 @@ ACTOR Future<Void> housekeeping_impl(Reference<ExtConnection> ec) {
 		try {
 			Cursor::prune(ec->cursors);
 		} catch (Error& e) {
-			TraceEvent(SevError, "BD_Cursor_housekeeping");
+			TraceEvent(SevError, "BD_Cursor_housekeeping").error(e);
 		}
 	}
 }
