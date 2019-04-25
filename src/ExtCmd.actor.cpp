@@ -876,8 +876,14 @@ struct GetDocLayerVersionCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		reply->addDocument(BSON("package version" << FDB_DOC_VT_VERSION << "source version" << getGitVersion()
-		                                          << "flow source version" << getFlowGitVersion()));
+		// clang-format off
+		reply->addDocument(BSON(
+			"ok" << 1 <<
+			"packageVersion" << FDB_DOC_VT_VERSION <<
+			"sourceVersion" << getGitVersion() <<
+			"flowSourceVersion" << getFlowGitVersion()
+			));
+		// clang-format on
 		return reply;
 	}
 };
