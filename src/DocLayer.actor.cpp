@@ -463,6 +463,11 @@ ACTOR void setup(NetworkAddress na,
 	if (!proxyto.present()) {
 		state Reference<DocumentLayer> docLayer;
 		state Reference<DatabaseContext> db;
+		TraceEvent("StartingServer")
+		    .detail("DocLayerPkgName", FDB_DOC_VT_PACKAGE_NAME)
+		    .detail("DocLayerVersion", FDB_DOC_VT_VERSION)
+		    .detail("DocLayerSourceVersion", getGitVersion())
+		    .detail("FlowSourceVersion", getFlowGitVersion());
 		try {
 			auto cluster = fdb->createCluster(clusterFile);
 			Reference<DatabaseContext> database = cluster->createDatabase();
@@ -607,7 +612,7 @@ void printHelp(const char* name) {
              Runs Document Layer in proxy mode on LISTEN_PORT proxying all commands
              to MongoDB server running on MONGODB_PORT.
   --fdb_datacenter_id DC_ID
-             The id of the preferred datacenter to use when connecting to a FoundationDB cluster 
+             The id of the preferred datacenter to use when connecting to a FoundationDB cluster
              that's run in multi-dc mode
 )HELPTEXT",
 	        name);
