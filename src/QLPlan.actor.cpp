@@ -687,37 +687,57 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
                                           Reference<MetadataManager> mm) {
 	if (!dtr)
 		dtr = self->newTransaction();
-	state double startt = now();
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int nTransactions = 1;
 	state int64_t nResults = 0;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
+	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> bufferedDocs;
+
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
 		loop {
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
 			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
-			state Future<Void> timeout = delay(3.0);
+			state Future<Void> timeout = delay(3.0, TaskMaxPriority);
+			state bool finished = false;
 
-			loop choose {
-				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-					// throws end_of_stream when totally finished
-					Void _ = wait(outerLock->take());
-					innerLock->release();
-					output.send(doc);
-					++nResults;
-					if (first) {
-						timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT);
-						first = false;
+			try {
+				loop choose {
+					when(Reference<ScanReturnedContext> doc = waitNext(docs)) {
+						// throws end_of_stream when totally finished
+						bufferedDocs.push_back(std::make_pair(doc, outerLock->take()));
 					}
+					when(Void _ = wait(bufferedDocs.empty() ? Never() : bufferedDocs.front().second)) {
+						innerLock->release();
+						output.send(bufferedDocs.front().first);
+						bufferedDocs.pop_front();
+						++nResults;
+						if (first) {
+							timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT, TaskMaxPriority);
+							first = false;
+						}
+					}
+					when(Void _ = wait(timeout)) { break; }
 				}
-				when(Void _ = wait(timeout)) { break; }
+				ASSERT(!docs.isReady());
+			} catch (Error& e) {
+				if (e.code() != error_code_end_of_stream)
+					throw e;
+				finished = true;
 			}
 
-			ASSERT(!docs.isReady());
-
 			innerCheckpoint = innerCheckpoint->stopAndCheckpoint();
+
+			while (!bufferedDocs.empty()) {
+				Void _ = wait(bufferedDocs.front().second);
+				output.send(bufferedDocs.front().first);
+				bufferedDocs.pop_front();
+				++nResults;
+			}
+
+			if (finished)
+				throw end_of_stream();
 
 			dtr = self->newTransaction();
 			state uint64_t newMetadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
@@ -763,7 +783,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
 			state bool finished = false;
-			state Future<Void> timeout = delay(3.0);
+			state Future<Void> timeout = delay(3.0, TaskMaxPriority);
 			state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> committingDocs;
 			state Deque<Reference<ScanReturnedContext>> bufferedDocs;
 
@@ -781,7 +801,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 							         waitNext(docs)) { // throws end_of_stream when totally finished
 								committingDocs.push_back(std::make_pair(doc, doc->commitChanges()));
 								if (first) {
-									timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT);
+									timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT, TaskMaxPriority);
 									first = false;
 								}
 							}
@@ -1148,10 +1168,8 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
                                         PromiseStream<Reference<ScanReturnedContext>> output) {
 	if (!dtr)
 		dtr = NonIsolatedPlan::newTransaction(database);
-	state double startt = now();
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int nTransactions = 1;
-	state int64_t nResults = 0;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> firstDoc;
 	state bool any = false;
