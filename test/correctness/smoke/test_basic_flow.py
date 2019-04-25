@@ -75,3 +75,11 @@ def test_connection_status(fixture_db):
     assert 'authenticatedUserPrivileges' not in status['authInfo']
     assert status['ok'] == 1
 
+
+def test_doclayer_info(fixture_db):
+    db = fixture_db
+    info = db.command("getDocLayerVersion")
+    assert 'flowSourceVersion' in info
+    assert 'packageVersion' in info
+    assert 'sourceVersion' in info
+
