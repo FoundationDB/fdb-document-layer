@@ -723,7 +723,7 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 				ASSERT(!docs.isReady());
 			} catch (Error& e) {
 				if (e.code() != error_code_end_of_stream)
-					throw e;
+					throw;
 				finished = true;
 			}
 
