@@ -699,14 +699,14 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 			state FutureStream<Reference<ScanReturnedContext>> docs = subPlan->execute(innerCheckpoint.getPtr(), dtr);
 			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
-			state Future<Void> timeout = delay(3.0, TaskMaxPriority);
+			state Future<Void> timeout = delay(3.0, g_network->getCurrentTask() + 1);
 			state bool finished = false;
 
 			try {
 				loop choose {
 					when(Reference<ScanReturnedContext> doc = waitNext(docs)) {
 						// throws end_of_stream when totally finished
-						bufferedDocs.push_back(std::make_pair(doc, outerLock->take()));
+						bufferedDocs.push_back(std::make_pair(doc, outerLock->take(g_network->getCurrentTask() + 1)));
 					}
 					when(Void _ = wait(bufferedDocs.empty() ? Never() : bufferedDocs.front().second)) {
 						innerLock->release();
@@ -714,7 +714,8 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 						bufferedDocs.pop_front();
 						++nResults;
 						if (first) {
-							timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT, TaskMaxPriority);
+							timeout =
+							    delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT, g_network->getCurrentTask() + 1);
 							first = false;
 						}
 					}
@@ -783,7 +784,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 			state FlowLock* innerLock = innerCheckpoint->getDocumentFinishedLock();
 			state bool first = true;
 			state bool finished = false;
-			state Future<Void> timeout = delay(3.0, TaskMaxPriority);
+			state Future<Void> timeout = delay(3.0, g_network->getCurrentTask() + 1);
 			state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> committingDocs;
 			state Deque<Reference<ScanReturnedContext>> bufferedDocs;
 
@@ -801,7 +802,8 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 							         waitNext(docs)) { // throws end_of_stream when totally finished
 								committingDocs.push_back(std::make_pair(doc, doc->commitChanges()));
 								if (first) {
-									timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT, TaskMaxPriority);
+									timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT,
+									                g_network->getCurrentTask() + 1);
 									first = false;
 								}
 							}
