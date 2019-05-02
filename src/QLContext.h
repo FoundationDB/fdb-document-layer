@@ -368,7 +368,10 @@ struct IndexInfo {
 };
 
 struct IndexComparator {
-	bool operator()(const IndexInfo& lhs, const IndexInfo& rhs) { return lhs.indexKeys.size() < rhs.indexKeys.size(); }
+	bool operator()(const IndexInfo& lhs, const IndexInfo& rhs) {
+		return lhs.indexKeys.size() == rhs.indexKeys.size() ? lhs.indexName < rhs.indexName
+		                                                    : lhs.indexKeys.size() < rhs.indexKeys.size();
+	}
 };
 
 struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, FastAllocated<UnboundCollectionContext> {

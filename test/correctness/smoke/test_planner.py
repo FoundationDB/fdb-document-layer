@@ -375,15 +375,65 @@ def test_compound_index_match_non_contiguous_prefix(fixture_collection):
     fixture_collection.create_index(keys=[('a', 1), ('b', 1), ('c', 1)], name='abc')
     fixture_collection.create_index(keys=[('a', 1), ('b', 1), ('c', 1), ('d', 1), ('e', 1)], name='abcde')
     query = {
-                '$and': [{
-                    'a': 1
-                }, {
-                    'b': 1
-                }, {
-                    'c': 1
-                }, {
-                    'e': 1
-                }]
-            }
+        '$and': [{
+            'a': 1
+        }, {
+            'b': 1
+        }, {
+            'c': 1
+        }, {
+            'e': 1
+        }]
+    }
     ret = fixture_collection.find(query).explain()
     assert Predicates.only_index_named("abc", ret['explanation']) and Predicates.no_table_scan(ret['explanation'])
+
+
+def test_compound_index_multi_match(fixture_collection):
+    fixture_collection.create_index(keys=[('a', 1), ('b', 1), ('c', 1), ('d', 1)], name='abcd')
+    fixture_collection.create_index(keys=[('a', 1), ('e', 1)], name='ae')
+    fixture_collection.create_index(keys=[('a', 1), ('d', 1)], name='ad')
+    fixture_collection.create_index(keys=[('d', 1), ('a', 1)], name='da')
+    fixture_collection.create_index(keys=[('e', 1)], name='e')
+
+    query = {
+        '$and': [{
+            'a': 1
+        }, {
+            'd': 1
+        }]
+    }
+    ret = fixture_collection.find(query).explain()
+    assert Predicates.only_index_named('ad', ret['explanation'])
+    assert Predicates.no_table_scan(ret['explanation'])
+    assert Predicates.no_filter(ret['explanation'])
+
+    query = {
+        '$and': [{
+            'a': 1
+        }, {
+            'd': 1
+        }, {
+            'e': 1
+        }]
+    }
+    ret = fixture_collection.find(query).explain()
+    assert Predicates.only_index_named('ad', ret['explanation'])
+    assert Predicates.no_table_scan(ret['explanation'])
+
+    query = {
+        '$and': [{
+            'd': 1
+        }, {
+            'a': 1
+        }]
+    }
+    ret = fixture_collection.find(query).explain()
+    assert Predicates.only_index_named('da', ret['explanation'])
+    assert Predicates.no_table_scan(ret['explanation'])
+    assert Predicates.no_filter(ret['explanation'])
+
+    query = {'d': 1}
+    ret = fixture_collection.find(query).explain()
+    assert Predicates.only_index_named('da', ret['explanation'])
+    assert Predicates.no_table_scan(ret['explanation'])
