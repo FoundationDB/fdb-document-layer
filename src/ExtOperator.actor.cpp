@@ -279,14 +279,12 @@ ACTOR static Future<Void> doRenameActor(Reference<IReadWriteContext> firstCx,
 	if (optionalValue.present()) {
 		secondCx->clearDescendants();
 		secondCx->set(std::string(""), optionalValue.get().encode_value());
-		// fprintf(stderr, "root: %s\n", optionalValue.get().printable().c_str());
 		DVTypeCode type = optionalValue.get().getSortType();
 		if (type == DVTypeCode::OBJECT || type == DVTypeCode::ARRAY) {
 			state GenFutureStream<KeyValue> descendents = firstCx->getDescendants();
 			loop {
 				try {
 					KeyValue kv = waitNext(descendents);
-					// fprintf(stderr, "%s : %s\n", printable(kv.key).c_str(), printable(kv.value).c_str());
 					secondCx->set(kv.key, kv.value);
 				} catch (Error& e) {
 					if (e.code() == error_code_end_of_stream)
@@ -938,7 +936,7 @@ struct ExtUpdateOperatorCurrentDate {
 	static Future<Void> execute(Reference<IReadWriteContext> cx,
 	                            StringRef const& path,
 	                            bson::BSONElement const& element) {
-		if (element.isBoolean() && element.Bool() == true) {
+		if (element.isBoolean() && element.Bool()) {
 			DataValue dv = DataValue(bson::Date_t(timer() * 1000));
 			cx->getSubContext(path)->clearDescendants();
 			cx->set(path, dv.encode_value());

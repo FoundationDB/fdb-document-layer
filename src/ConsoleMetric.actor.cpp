@@ -131,9 +131,8 @@ MetricStat& MetricStat::captureNewValue(int64_t val) {
 			uint64_t currentTimeNanoSeconds = timer_int();
 			count += 1;
 			sum += val;
-			avg =
-			    (sum * 1e9) / (double)(currentTimeNanoSeconds -
-			                           startTimeNanoSeconds); // calculate running avg rate while keeping the precision
+			// Calculate running avg rate while keeping the precision
+			avg = (sum * 1e9) / (double)(currentTimeNanoSeconds - startTimeNanoSeconds);
 			return *this;
 		}
 		case IMetricType::HISTOGRAMS:

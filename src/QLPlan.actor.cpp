@@ -584,8 +584,8 @@ FutureStream<Reference<ScanReturnedContext>> PrimaryKeyLookupPlan::execute(PlanC
 		                       checkpoint->getBounds(scanID).end));
 
 		GenFutureStream<KeyValue> kvs = bcx->cx->getDescendants(beginKey, endKey, descendantFlowControlLock);
-		checkpoint->addOperation(doPKScan(checkpoint, bcx, scanID, kvs, p, descendantFlowControlLock),
-		                         p); //< descendantFlowControlLock is actually being moved
+		//< descendantFlowControlLock is actually being moved
+		checkpoint->addOperation(doPKScan(checkpoint, bcx, scanID, kvs, p, descendantFlowControlLock), p);
 		return p.getFuture();
 	}
 }
@@ -657,8 +657,8 @@ FutureStream<Reference<ScanReturnedContext>> TableScanPlan::execute(PlanCheckpoi
 	Standalone<StringRef> endKey = std::max<Standalone<StringRef>>(
 	    beginKey, std::min(LiteralStringRef("\xff"), checkpoint->getBounds(scanID).end));
 	GenFutureStream<KeyValue> kvs = bcx->cx->getDescendants(beginKey, endKey, descendantFlowControlLock);
-	checkpoint->addOperation(doPKScan(checkpoint, bcx, scanID, kvs, p, descendantFlowControlLock),
-	                         p); //< descendantFlowControlLock is actually being moved
+	//< descendantFlowControlLock is actually being moved
+	checkpoint->addOperation(doPKScan(checkpoint, bcx, scanID, kvs, p, descendantFlowControlLock), p);
 	return p.getFuture();
 }
 
@@ -1132,7 +1132,8 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 		if (upsertOp && count == 0) {
 			Void _ = wait(flowControlLock->take());
 			Reference<IReadWriteContext> inserted = wait(upsertOp->insert(cx->bindCollectionContext(tr)));
-			output.send(ref(new ScanReturnedContext(inserted, -1, FDB::Key()))); //< Is this choice of scanId etc right?
+			//< Is this choice of scanId etc right?
+			output.send(ref(new ScanReturnedContext(inserted, -1, FDB::Key())));
 		}
 
 		throw end_of_stream();
@@ -1411,9 +1412,10 @@ ACTOR static Future<Void> doIndexInsert(PlanCheckpoint* checkpoint,
 				}
 			}
 		} catch (Error& e) {
+			// For some reason, in this case mongo tells the client that everything went okay. SOMEDAY evaluate whether
+			// we want to handle this differently.
 			if (e.code() == error_code_index_already_exists)
-				throw end_of_stream(); // For some reason, in this case mongo tells the client that everything went
-				                       // okay. SOMEDAY evaluate whether we want to handle this differently.
+				throw end_of_stream();
 			throw;
 		}
 

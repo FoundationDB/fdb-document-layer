@@ -78,9 +78,9 @@ ACTOR Future<bson::BSONObj> projectDocument_impl(Reference<IReadContext> doc, Re
 				DataValue dv = valueItr->get().get();
 				if (!itr.projection()->shouldBeRead) {
 					if (!dv.isSimpleType()) {
-						ASSERT(dv.getBSONType() !=
-						       bson::BSONType::Array); // SOMEDAY: This restriction should be replaced by proper array
-						                               // handling if the code in filterUnneededReads is enabled
+						// SOMEDAY: This restriction should be replaced by proper array handling if the code in
+						// filterUnneededReads is enabled
+						ASSERT(dv.getBSONType() != bson::BSONType::Array);
 						currentPath.emplace_back(-1, itr.path.back());
 					}
 				} else {

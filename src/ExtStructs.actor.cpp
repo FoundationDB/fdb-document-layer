@@ -78,7 +78,6 @@ ACTOR Future<WriteResult> lastErrorOrLastResult(Future<WriteResult> previous,
 Future<Void> ExtConnection::beforeWrite(int desiredPermits) {
 	if (options.pipelineCompatMode)
 		return ready(lastWrite);
-	// printf("beforeWrite: lock %d, requested %d\n", lock.activePermits(), desiredPermits);
 	currentWriteLocked =
 	    lock->take(TaskDefaultYield, std::min(desiredPermits, DOCLAYER_KNOBS->CONNECTION_MAX_PIPELINE_DEPTH / 2));
 	return currentWriteLocked;

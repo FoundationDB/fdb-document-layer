@@ -46,8 +46,8 @@ struct BufferedConnectionData {
 	Reference<IConnection> connection;
 	Future<Void> conn;
 
-	std::list<BCBlock*>
-	    deadlist; // blocks that have been advance()d away but not fully popped.  memory needs to be held, but that's it
+	// Blocks that have been advance()d away but not fully popped.  memory needs to be held, but that's it
+	std::list<BCBlock*> deadlist;
 	int deadlist_begin_offset;
 	std::list<BCBlock*> buffer;
 	int buffer_begin_offset, buffer_end_offset;
@@ -192,10 +192,8 @@ StringRef BufferedConnection::peekExact(int count) {
 			remaining -= BCBlock::DATA_SIZE;
 		}
 
-		/* allocate memory in the arena of the last block from
-		   which we are copying, and copy the requested range into
-		   the newly allocated memory */
-
+		/* Allocate memory in the arena of the last block from which we are copying, and copy the requested range into
+		 * the newly allocated memory */
 		auto* buf = new ((*it)->arena) uint8_t[count];
 
 		self->copyInto(buf, count);

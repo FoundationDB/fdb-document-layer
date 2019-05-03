@@ -456,8 +456,8 @@ void RegExPredicate::calculateRange() {
 		const static std::string sSpecial = ".\\[]()*?+|,${}!="; // define an array with the special chars
 		for (int ii = 0; ii < sValue.length(); ++ii) {
 			if (sSpecial.find(sValue[ii]) != std::string::npos) {
-				const int oneLess =
-				    (sValue[ii] == '?' || sValue[ii] == '*') ? 1 : 0; // We need to take special care for ? and * cases
+				// We need to take special care for ? and * cases
+				const int oneLess = (sValue[ii] == '?' || sValue[ii] == '*') ? 1 : 0;
 				sValue = sValue.substr(0, ii - oneLess);
 				break;
 			}

@@ -213,7 +213,6 @@ ACTOR static Future<Void> doPathExpansion(PromiseStream<Reference<IReadContext>>
 
 		return Void();
 	} catch (Error& e) {
-		// fprintf(stderr, "ERROR in path expansion: %s\n", e.what());
 		promises.sendError(e);
 		throw;
 	}
