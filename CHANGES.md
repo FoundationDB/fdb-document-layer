@@ -1,5 +1,9 @@
 ## Release notes
 
+## 1.7.2
+
+* [#185](https://github.com/FoundationDB/fdb-document-layer/pull/185) Fix for compound index selection query planner
+
 ## 1.7.1
 
 * [#135](https://github.com/FoundationDB/fdb-document-layer/issues/135) Fix for None value handling in arrays
