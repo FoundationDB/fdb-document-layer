@@ -463,11 +463,6 @@ ACTOR void setup(NetworkAddress na,
 	if (!proxyto.present()) {
 		state Reference<DocumentLayer> docLayer;
 		state Reference<DatabaseContext> db;
-		TraceEvent("StartingServer")
-		    .detail("DocLayerPkgName", FDB_DOC_VT_PACKAGE_NAME)
-		    .detail("DocLayerVersion", FDB_DOC_VT_VERSION)
-		    .detail("DocLayerSourceVersion", getGitVersion())
-		    .detail("FlowSourceVersion", getFlowGitVersion());
 		try {
 			auto cluster = fdb->createCluster(clusterFile);
 			Reference<DatabaseContext> database = cluster->createDatabase();
@@ -641,6 +636,7 @@ void setThreadName(const char* name) {
 int main(int argc, char** argv) {
 	CSimpleOpt args(argc, argv, g_rgOptions, SO_O_EXACT);
 
+	std::string commandLine;
 	Optional<uint16_t> proxyfrom, proxyto;
 	char* endptr;
 	char** proxyports;
@@ -666,6 +662,12 @@ int main(int argc, char** argv) {
 #endif
 	std::string tlsCertPath, tlsKeyPath, tlsCAPath, tlsPassword;
 	std::vector<std::string> tlsVerifyPeers;
+
+	for (int a = 0; a < argc; a++) {
+		if (a)
+			commandLine += ' ';
+		commandLine += argv[a];
+	}
 
 	while (args.Next()) {
 		if (args.LastError() == SO_ARG_INVALID_DATA) {
@@ -1017,6 +1019,14 @@ int main(int argc, char** argv) {
 	setThreadName("fdbdoc-main");
 	TraceEvent::setNetworkThread();
 	openTraceFile(na, rollsize, maxLogsSize, logFolder, "fdbdoc-trace", logGroup);
+
+	TraceEvent("StartingServer")
+	    .detail("DocLayerPkgName", FDB_DOC_VT_PACKAGE_NAME)
+	    .detail("DocLayerVersion", FDB_DOC_VT_VERSION)
+	    .detail("DocLayerSourceVersion", getGitVersion())
+	    .detail("FlowSourceVersion", getFlowGitVersion())
+	    .detail("CommandLine", commandLine);
+
 	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options,
 	      fdbDatacenterID);
 	systemMonitor();
