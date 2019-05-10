@@ -405,8 +405,8 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 		                                      ? msg->query.getObjectField(DocLayerConstants::QUERY_OPERATOR.c_str())
 		                                      : msg->query;
 
-		// Plan needs to be state in case we have a sort plan,
-		// which in turn holds a reference to the actor that does the sorting
+		// Plan needs to be state in case we have a sort plan, which in turn holds a reference to the actor that does
+		// the sorting
 		state Reference<Plan> plan = planQuery(cx, queryObject);
 		if (!ordering.present() && msg->numberToSkip)
 			plan = ref(new SkipPlan(msg->numberToSkip, plan));
@@ -982,12 +982,12 @@ std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool m
 			}
 		}
 	}
+
 	std::vector<std::string> bannedIndexFields;
-	bannedIndexFields.reserve(affectedFields.size() + prefixesOfAffectedFields.size());
-	for (const auto& s : affectedFields)
-		bannedIndexFields.push_back(s);
-	for (const auto& s : prefixesOfAffectedFields)
-		bannedIndexFields.push_back(s);
+	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(affectedFields), std::end(affectedFields));
+	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(prefixesOfAffectedFields),
+	                         std::end(prefixesOfAffectedFields));
+
 	return bannedIndexFields;
 }
 
@@ -1024,8 +1024,8 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 				auto upOneFn = upOneLevel(fn);
 				if (!upOneFn.empty())
 					futures.push_back(ensureValidObject(cx, upOneFn, getLastPart(fn), true));
-			} else if (operatorName !=
-			           DocLayerConstants::SET_ON_INSERT) { // Don't bother checking/setting the targeted field if we hit
+			} else if (operatorName != DocLayerConstants::SET_ON_INSERT) {
+				// Don't bother checking/setting the targeted field if we hit
 				// $setOnInsert and aren't upserting
 				auto upOneFn = upOneLevel(fn);
 				if (!upOneFn.empty())
@@ -1140,7 +1140,8 @@ ExtMsgGetMore::ExtMsgGetMore(ExtMsgHeader* header, const uint8_t* body) : header
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
-	ptr += sizeof(int32_t); // mongo OP_GET_MORE begins with int32 ZERO, reserved for future use
+	// Mongo OP_GET_MORE begins with int32 ZERO, reserved for future use
+	ptr += sizeof(int32_t);
 
 	const char* collName = (const char*)ptr;
 	ptr += strlen(collName) + 1;
@@ -1188,7 +1189,8 @@ ExtMsgDelete::ExtMsgDelete(ExtMsgHeader* header, const uint8_t* body) : header(h
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
-	ptr += sizeof(int32_t); // mongo OP_DELETE begins with int32 ZERO, reserved for future use
+	// Mongo OP_DELETE begins with int32 ZERO, reserved for future use
+	ptr += sizeof(int32_t);
 
 	const char* collName = (const char*)ptr;
 	ptr += strlen(collName) + 1;
@@ -1291,10 +1293,11 @@ ExtMsgKillCursors::ExtMsgKillCursors(ExtMsgHeader* header, const uint8_t* body) 
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (const uint8_t*)header + header->messageLength;
 
-	ptr += sizeof(int32_t); // mongo OP_KILL_CURSORS begins with int32 ZERO, reserved for future use
+	// Mongo OP_KILL_CURSORS begins with int32 ZERO, reserved for future use
+	ptr += sizeof(int32_t);
 	numberOfCursorIDs = *(int32_t*)ptr;
-	ptr += sizeof(
-	    int32_t); // totally unnecessary for this to be in the message given that we know the overall message length...
+	// Totally unnecessary for this to be in the message given that we know the overall message length...
+	ptr += sizeof(int32_t);
 	cursorIDs = new int64_t[numberOfCursorIDs];
 
 	memcpy(cursorIDs, ptr, numberOfCursorIDs * sizeof(int64_t));
@@ -1441,81 +1444,3 @@ Reference<IInsertOp> simpleUpsert(bson::BSONObj const& selector, bson::BSONObj c
 Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj const& update) {
 	return ref(new ExtOperatorUpsert(selector, update));
 }
-/*
-namespace Tests {
-
-    bool check_simplify(const char *query, const char *expected = "")
-    {
-        fprintf(stderr, "query:      %s\n", query);
-        auto p = queryToPredicate(bson::fromjson(query), true);
-        fprintf(stderr, "predicate:  %s\n", p->toString().c_str());
-        std::string s = p->simplify()->toString();
-        fprintf(stderr, "simplified: %s\n", s.c_str());
-        fprintf(stderr, "expected:   %s\n", expected);
-
-        bool success = s == expected;
-        if (success)
-            fprintf(stderr, "VERIFIED.\n");
-        else
-            fprintf(stderr, "*** RESULT DOES NOT MATCH!!!!!!!!! ***\n");
-
-        fprintf(stderr, "\n");
-
-        return success;
-    }
-
-    TEST_CASE("bigdoc/ext/predicate_simplification")
-    {
-        bool success = true;
-
-        success = success && check_simplify("{ _id : { $elemMatch : { $gte : 111, $lt  : 999 } } }",
-"ANY(ExtPath((_id\\x00) matching RANGE(111 <= x < 999))"); success = success && check_simplify("{ _id : { $elemMatch : {
-$gt  : 111, $lte : 999 } } }", "ANY(ExtPath((_id\\x00) matching RANGE(111 < x <= 999))"); success = success &&
-check_simplify("{ _id : { $elemMatch : { $gt  : 999, $lt  : 111 } } }", "NONE()"); success = success &&
-check_simplify("{ _id : { $elemMatch : { $gte : 999, $lt  : 999 } } }", "NONE()"); success = success &&
-check_simplify("{ _id : { $elemMatch : { $eq  : 999, $lt  : 999 } } }", "NONE()");
-
-        success = success && check_simplify("{ _id : { $gte : 111, $lt  : 999 } }", "ANY(ExtPath((_id\\x00) matching
-RANGE(111 <= x < 999))"); success = success && check_simplify("{ _id : { $gt  : 111, $lte : 999 } }",
-"ANY(ExtPath((_id\\x00) matching RANGE(111 < x <= 999))"); success = success && check_simplify("{ _id : { $gt  : 999,
-$lt  : 111 } }", "NONE()"); success = success && check_simplify("{ _id : { $gte : 999, $lt  : 999 } }", "NONE()");
-        success = success && check_simplify("{ _id : { $eq  : 999, $lt  : 999 } }", "NONE()");
-
-        success = success && check_simplify("{ x : { $elemMatch : { $gte : 111, $lt  : 999 } } }", "ANY(ExtPath((x\\x00)
-matching RANGE(111 <= x < 999))"); success = success && check_simplify("{ x : { $elemMatch : { $gt  : 111, $lte : 999 }
-} }", "ANY(ExtPath((x\\x00) matching RANGE(111 < x <= 999))"); success = success && check_simplify("{ x : { $elemMatch :
-{ $gt  : 999, $lt  : 111 } } }", "NONE()"); success = success && check_simplify("{ x : { $elemMatch : { $gte : 999, $lt
-: 999 } } }", "NONE()"); success = success && check_simplify("{ x : { $elemMatch : { $eq  : 999, $lt  : 999 } } }",
-"NONE()");
-
-        success = success && check_simplify("{ x : { $gte : 111, $lt  : 999 } }", "AND(ANY(ExtPath((x\\x00) matching
-RANGE(111 <= x < \\x1f)), ANY(ExtPath((x\\x00) matching RANGE(\\x1e < x < 999)))"); success = success &&
-check_simplify("{ x : { $gt  : 111, $lte : 999 } }", "AND(ANY(ExtPath((x\\x00) matching RANGE(111 < x < \\x1f)),
-ANY(ExtPath((x\\x00) matching RANGE(\\x1e <= x <= 999)))"); success = success && check_simplify("{ x : { $gt  : 999, $lt
-: 111 } }", "AND(ANY(ExtPath((x\\x00) matching RANGE(999 < x < \\x1f)), ANY(ExtPath((x\\x00) matching RANGE(\\x1e < x <
-111)))"); success = success && check_simplify("{ x : { $gte : 999, $lt  : 999 } }", "AND(ANY(ExtPath((x\\x00) matching
-RANGE(999 <= x < \\x1f)), ANY(ExtPath((x\\x00) matching RANGE(\\x1e < x < 999)))"); success = success &&
-check_simplify("{ x : { $eq  : 999, $lt  : 999 } }", "AND(ANY(ExtPath((x\\x00) matching EQUALS('999')),
-ANY(ExtPath((x\\x00) matching RANGE(\\x1e < x < 999)))");
-
-        success = success && check_simplify("{ x : { $lte : null } }", "ANY(ExtPath((x\\x00) matching
-EQUALS('\\x14'))"); success = success && check_simplify("{ x : { $gte : null } }", "ANY(ExtPath((x\\x00) matching
-RANGE(\\x14 <= x < \\x15))"); success = success && check_simplify("{ x : { $gt  : null, $lte : 999 } }",
-"AND(ANY(ExtPath((x\\x00) matching RANGE(\\x14 < x < \\x15)), ANY(ExtPath((x\\x00) matching RANGE(\\x1e <= x <=
-999)))"); success = success && check_simplify("{ x : { $gt  : 999,  $lt  : null} }", "NONE()");
-
-        success = success && check_simplify("{ x: { $elemMatch : { _id: { $gte: 111, $lte : 999 } } } }",
-"ANY(ExtPath((x\\x00) matching AND(ANY(ExtPath((_id\\x00) matching RANGE(111 <= x < \\x1f)), ANY(ExtPath((_id\\x00)
-matching RANGE(\\x1e <= x <= 999)), IS_OBJECT()))"); success = success && check_simplify("{ x: { $elemMatch : { _id: {
-$elemMatch : { $gte: 111, $lte : 999 } } } } }", "ANY(ExtPath((x\\x00) matching AND(ANY(ExtPath((_id\\x00) matching
-RANGE(111 <= x <= 999)), IS_OBJECT()))"); success = success && check_simplify("{ x: { $elemMatch : { _id: { $gte: 999,
-$lte : 111 } } } }", "ANY(ExtPath((x\\x00) matching AND(ANY(ExtPath((_id\\x00) matching RANGE(999 <= x < \\x1f)),
-ANY(ExtPath((_id\\x00) matching RANGE(\\x1e <= x <= 111)), IS_OBJECT()))"); success = success && check_simplify("{ x: {
-$elemMatch : { _id: { $elemMatch : { $gte: 999, $lte : 111 } } } } }", "NONE()");
-
-        ASSERT(success);
-
-        return Void();
-    }
-}
-*/

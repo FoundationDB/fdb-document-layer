@@ -99,14 +99,6 @@ protected:
 	~ITDoc() = default;
 };
 
-/*static std::string getFDBKey( DataKey const& key, int extraReserveBytes = 0 ) {
-    std::string r;
-    r.reserve(1 + key.byteSize() + extraReserveBytes);
-    r.assign(1, (char)0xbd);
-    r += key.toString();
-    return r;
-}*/
-
 static std::string getFDBKey(DataKey const& key, int extraReserveBytes = 0) {
 	return key.toString();
 }
@@ -398,7 +390,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			}
 			// clear all existing index entries
 			for (cartesian_product_iterator<DataValue, std::vector<DataValue>::iterator> ovv(old_values); ovv; ++ovv) {
-				// fprintf(stderr, "Old value: %s\n", printable(StringRef(v.encode_key_part())).c_str());
 				DataKey old_key(self->indexPath);
 				for (int i = 0; i < ovv.size(); i++)
 					old_key.append(ovv[i].encode_key_part());
@@ -408,7 +399,6 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 			// write the new/updated index entries
 			nvv.reset();
 			for (; nvv; ++nvv) {
-				// fprintf(stderr, "New value: %s\n", printable(StringRef(v.encode_key_part())).c_str());
 				DataKey new_key(self->indexPath);
 				for (int i = 0; i < nvv.size(); i++)
 					new_key.append(nvv[i].encode_key_part());
@@ -745,8 +735,8 @@ void CollectionContext::bumpMetadataVersion() {
 }
 
 Future<uint64_t> CollectionContext::getMetadataVersion() {
-	Future<Optional<FDBStandalone<StringRef>>> fov = cx->getTransaction()->tr->get(
-	    StringRef(unbound->getVersionKey())); // FIXME: Wow how many abstractions does this violate at once?
+	// FIXME: Wow how many abstractions does this violate at once?
+	Future<Optional<FDBStandalone<StringRef>>> fov = cx->getTransaction()->tr->get(StringRef(unbound->getVersionKey()));
 	Future<uint64_t> ret = map(fov, [](Optional<FDBStandalone<StringRef>> ov) -> uint64_t {
 		if (!ov.present())
 			return 0;
@@ -757,19 +747,21 @@ Future<uint64_t> CollectionContext::getMetadataVersion() {
 }
 
 Future<Standalone<StringRef>> IReadWriteContext::getValueEncodedId() {
+	// FIXME: this is inefficient in about 12 different ways
 	return map(getMaybeRecursiveIfPresent(
 	               getSubContext(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part())),
 	           [](Optional<DataValue> odv) -> Standalone<StringRef> {
 		           return odv.present() ? odv.get().encode_value() : StringRef();
-	           }); // FIXME: this is inefficient in about 12 different ways
+	           });
 }
 
 Future<Standalone<StringRef>> IReadWriteContext::getKeyEncodedId() {
+	// FIXME: this is inefficient in about 12 different ways
 	return map(getMaybeRecursiveIfPresent(
 	               getSubContext(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part())),
 	           [](Optional<DataValue> odv) -> Standalone<StringRef> {
 		           return odv.present() ? odv.get().encode_key_part() : StringRef();
-	           }); // FIXME: this is inefficient in about 12 different ways
+	           });
 }
 
 Future<Standalone<StringRef>> BsonContext::getValueEncodedId() {

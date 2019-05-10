@@ -188,8 +188,9 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 		ec->startHousekeeping();
 
 		loop {
-			state Promise<Void> finished; // will be broken (or set or whatever) only when the memory we are passing to
-			                              // processRequest is no longer needed and can be popped
+			// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer
+			// needed and can be popped
+			state Promise<Void> finished;
 			choose {
 				when(Void _ = wait(onError)) {
 					if (verboseLogging)

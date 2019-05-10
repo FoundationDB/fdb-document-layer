@@ -322,8 +322,6 @@ Projector::IncludeType Projector::includeNextField(int depth, std::string fieldN
 		return INCLUDE_ALL;
 	}
 
-	// std::string info = format("Checking field %s (depth=%d, isSimple=%d, inArray=%d, startingStackSize=%d",
-	// fieldName.c_str(), depth, isSimple, inArray, projectionStack.size());
 	Reference<Projection> currentProjection;
 	if (projectionStack.size() >= depth) {
 		projectionStack.resize(depth);
@@ -357,8 +355,6 @@ Projector::IncludeType Projector::includeNextField(int depth, std::string fieldN
 		result = INCLUDE_PARTIAL;
 	}
 
-	// fprintf(stderr, "%s, included=%d, stackSize=%d): %d\n", info.c_str(), currentProjection->included,
-	// projectionStack.size(), result);
 	return result;
 }
 
