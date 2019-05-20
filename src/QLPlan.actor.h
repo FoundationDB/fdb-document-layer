@@ -497,7 +497,7 @@ struct ProjectAndUpdatePlan : ConcretePlan<ProjectAndUpdatePlan> {
 
 	// RW plan needs to worry that directory might have changed
 	bool wasMetadataChangeOkay(Reference<UnboundCollectionContext> cx) override { return false; }
-} __unused;
+};
 
 struct FindAndModifyPlan : ConcretePlan<FindAndModifyPlan> {
 	Reference<Plan> subPlan;
