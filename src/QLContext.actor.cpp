@@ -149,7 +149,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 			}
 
 			while (!rr.empty()) {
-				state int permits = rr.size();
+				state int64_t permits = rr.size();
 				if (flowControlLock)
 					wait(flowControlLock->takeUpTo(permits));
 

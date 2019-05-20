@@ -664,15 +664,15 @@ FutureStream<Reference<ScanReturnedContext>> TableScanPlan::execute(PlanCheckpoi
 }
 
 Reference<DocTransaction> NonIsolatedPlan::newTransaction() {
-	Reference<FDB::Transaction> tr = Reference<FDB::Transaction>(new FDB::Transaction(database));
+	Reference<FDB::Transaction> tr = database->createTransaction();
 	int64_t timeoutMS = 4000;
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeoutMS, sizeof(timeoutMS)));
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
 	return DocTransaction::create(tr);
 }
 
-Reference<DocTransaction> NonIsolatedPlan::newTransaction(Reference<FDB::DatabaseContext> database) {
-	Reference<FDB::Transaction> tr = Reference<FDB::Transaction>(new FDB::Transaction(database));
+Reference<DocTransaction> NonIsolatedPlan::newTransaction(Reference<FDB::Database> database) {
+	Reference<FDB::Transaction> tr = database->createTransaction();
 	int64_t timeoutMS = 4000;
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeoutMS, sizeof(timeoutMS)));
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
@@ -985,7 +985,7 @@ FutureStream<Reference<ScanReturnedContext>> RetryPlan::execute(PlanCheckpoint* 
 }
 
 Reference<DocTransaction> RetryPlan::newTransaction() {
-	Reference<FDB::Transaction> tr = Reference<FDB::Transaction>(new FDB::Transaction(database));
+	Reference<FDB::Transaction> tr = database->createTransaction();
 	tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
 	tr->setOption(FDB_TR_OPTION_RETRY_LIMIT, StringRef((uint8_t*)&(retryLimit), sizeof(int64_t)));
 	tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&(timeout), sizeof(int64_t)));
@@ -1162,7 +1162,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
                                         Reference<DocTransaction> dtr,
                                         Reference<Plan> subPlan,
                                         Reference<MetadataManager> mm,
-                                        Reference<DatabaseContext> database,
+                                        Reference<Database> database,
                                         Reference<UnboundCollectionContext> cx,
                                         Reference<IUpdateOp> updateOp,
                                         Reference<IInsertOp> upsertOp,

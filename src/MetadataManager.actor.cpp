@@ -95,9 +95,9 @@ ACTOR static Future<Reference<UnboundCollectionContext>> constructContext(Namesp
 		// The initial set of directory reads take place in a separate transaction with the same read version as `tr'.
 		// This hopefully prevents us from accidentally RYWing a directory that `tr' itself created, and then adding it
 		// to the cache, when there's a chance that `tr' won't commit.
-		state Reference<FDB::Transaction> snapshotTr(new Transaction(docLayer->database));
+		state Reference<FDB::Transaction> snapshotTr = docLayer->database->createTransaction();
 		FDB::Version v = wait(tr->tr->getReadVersion());
-		snapshotTr->setVersion(v);
+		snapshotTr->setReadVersion(v);
 		state Future<Reference<DirectorySubspace>> fcollectionDirectory =
 		    docLayer->rootDirectory->open(snapshotTr, {StringRef(ns.first), StringRef(ns.second)});
 		state Future<Reference<DirectorySubspace>> findexDirectory = docLayer->rootDirectory->open(
