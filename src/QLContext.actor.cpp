@@ -35,7 +35,7 @@ Future<DataValue> IReadContext::toDataValue() {
 	return getRecursiveKnownPresent(Reference<IReadContext>::addRef(this));
 }
 
-ACTOR Future<Void> DocTransaction::commitChanges(Reference<DocTransaction> self, std::string docPrefix) {
+ACTOR static Future<Void> commitChangesActor(Reference<DocTransaction> self, std::string docPrefix) {
 	auto deferredDocument = self->deferredDocuments.find(docPrefix);
 	if (deferredDocument == self->deferredDocuments.end())
 		return Void();
@@ -43,7 +43,11 @@ ACTOR Future<Void> DocTransaction::commitChanges(Reference<DocTransaction> self,
 	return Void();
 }
 
-ACTOR Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr, Reference<DocumentDeferred> self) {
+Future<Void> DocTransaction::commitChanges(std::string const& docPrefix) {
+	return commitChangesActor(Reference<DocTransaction>::addRef(this), docPrefix);
+}
+
+ACTOR static Future<Void> commitChangesActor(Reference<DocTransaction> tr, Reference<DocumentDeferred> self) {
 	wait(self->snapshotLock.onUnused());
 	for (auto& f : self->deferred)
 		f(tr);
@@ -51,6 +55,10 @@ ACTOR Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr,
 	wait(waitForAll(self->index_update_actors));
 	self->writes_finished = Promise<Void>();
 	return Void();
+}
+
+Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr) {
+	return commitChangesActor(tr, Reference<DocumentDeferred>::addRef(this));
 }
 
 /**
@@ -66,7 +74,7 @@ Future<Void> DocTransaction::onError(Error const& e) {
 }
 
 void DocTransaction::cancel_ongoing_index_reads() {
-	for (auto deferredDocument : deferredDocuments) {
+	for (const auto& deferredDocument : deferredDocuments) {
 		for (auto actor : deferredDocument.second->index_update_actors)
 			actor.cancel();
 	}

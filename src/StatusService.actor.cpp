@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
+#include "StatusService.actor.h"
 #include "ExtUtil.actor.h"
-#include "StatusService.h"
 #include "bindings/flow/Tuple.h"
 #include "bson.h"
 #include "flow/Platform.h"

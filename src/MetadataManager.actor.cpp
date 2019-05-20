@@ -251,13 +251,13 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 
 		state Reference<Plan> buildingPlan = ec->wrapOperationPlan(
 		    ref(new BuildIndexPlan(ref(new TableScanPlan(mcx)), info, ns.first, encodedIndexId, ec->mm)), false, mcx);
-		int64_t _ = wait(executeUntilCompletionTransactionally(buildingPlan, tr));
+		wait(success(executeUntilCompletionTransactionally(buildingPlan, tr)));
 
 		state Reference<Plan> finalizePlan = ec->isolatedWrapOperationPlan(
 		    ref(new UpdateIndexStatusPlan(ns, encodedIndexId, ec->mm,
 		                                  std::string(DocLayerConstants::INDEX_STATUS_READY), build_id)),
 		    0, -1);
-		int64_t _ = wait(executeUntilCompletionTransactionally(finalizePlan, ec->getOperationTransaction()));
+		wait(success(executeUntilCompletionTransactionally(finalizePlan, ec->getOperationTransaction())));
 
 		return Void();
 	} catch (Error& e) {
@@ -275,7 +275,7 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
 			                                  std::string(DocLayerConstants::INDEX_STATUS_ERROR), build_id)),
 			    0, -1);
 			try {
-				int64_t _ = wait(executeUntilCompletionTransactionally(errorPlan, ec->getOperationTransaction()));
+				wait(success(executeUntilCompletionTransactionally(errorPlan, ec->getOperationTransaction())));
 				okay = true;
 			} catch (Error& e) {
 				if (e.code() == error_code_index_wrong_build_id)

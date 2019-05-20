@@ -20,8 +20,14 @@
 
 #include "DocLayer.h"
 
-void statusUpdateActor(std::string const& version,
-                       std::string const& host,
-                       int32_t const& port,
-                       Reference<DocumentLayer> const& docLayer,
-                       uint64_t const& startTime);
+#if defined(NO_INTELLISENSE) && !defined(_STATUS_SERVICE_ACTOR_G_H_)
+#define _STATUS_SERVICE_ACTOR_G_H_
+#include "StatusService.actor.g.h"
+#elif !defined(_STATUS_SERVICE_ACTOR_H_)
+#define _STATUS_SERVICE_ACTOR_H_
+ACTOR void statusUpdateActor(std::string version,
+                             std::string host,
+                             int32_t port,
+                             Reference<DocumentLayer> docLayer,
+                             uint64_t startTime);
+#endif // _STATUS_SERVICE_ACTOR_H_

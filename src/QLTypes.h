@@ -127,8 +127,6 @@ struct DataValue {
 	static DataValue arrayOfLength(uint32_t length);
 	static DataValue subObject();
 	static DataValue nullValue();
-	static DataValue minKey();
-	static DataValue maxKey();
 
 	static DataValue firstOfType(const DataValue& other);
 	static DataValue firstOfnextType(const DataValue& other);

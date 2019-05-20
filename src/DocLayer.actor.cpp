@@ -39,7 +39,7 @@
 #include "DocLayer.h"
 #include "ExtMsg.actor.h"
 #include "IMetric.h"
-#include "StatusService.h"
+#include "StatusService.actor.h"
 
 #include "flow/SystemMonitor.h"
 

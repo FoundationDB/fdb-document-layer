@@ -61,10 +61,7 @@ struct DocumentDeferred : ReferenceCounted<DocumentDeferred> {
 	std::set<struct ITDoc*> dirty;
 	std::vector<std::function<void(Reference<struct DocTransaction>)>> deferred;
 
-	Future<Void> commitChanges(Reference<DocTransaction> tr) {
-		return commitChanges(tr, Reference<DocumentDeferred>::addRef(this));
-	}
-	static Future<Void> commitChanges(Reference<DocTransaction> const& tr, Reference<DocumentDeferred> const& self);
+	Future<Void> commitChanges(Reference<DocTransaction> tr);
 };
 
 struct DocTransaction : ReferenceCounted<DocTransaction> {
@@ -76,10 +73,7 @@ struct DocTransaction : ReferenceCounted<DocTransaction> {
 		return Reference<DocTransaction>(new DocTransaction(tr));
 	}
 
-	Future<Void> commitChanges(std::string const& docPrefix) {
-		return commitChanges(Reference<DocTransaction>::addRef(this), docPrefix);
-	}
-	static Future<Void> commitChanges(Reference<DocTransaction> const& self, std::string const& docPrefix);
+	Future<Void> commitChanges(std::string const& docPrefix);
 
 	Future<Void> onError(Error const& e);
 

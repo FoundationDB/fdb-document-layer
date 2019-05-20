@@ -22,7 +22,6 @@ add_executable(fdbdoc
         QLPredicate.h
         QLTypes.cpp
         QLTypes.h
-        StatusService.h
         version.cpp Constants.cpp Constants.h)
 
 set(ACTOR_FILES
@@ -44,6 +43,7 @@ set(ACTOR_FILES
         StatusService.actor.cpp
         ExtMsg.actor.h
         ExtUtil.actor.h
+        StatusService.actor.h
         QLPlan.actor.h
         QLProjection.actor.h
         )

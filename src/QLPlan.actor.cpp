@@ -1903,11 +1903,6 @@ Reference<PlanCheckpoint> PlanCheckpoint::stopAndCheckpoint() {
 	return rest;
 }
 
-void PlanCheckpoint::boundToStopPoint() {
-	for (auto& scan : scans)
-		scan.bounds = KeyRangeRef(scan.bounds.begin, scan.split);
-}
-
 ACTOR void uncancellableHoldActor(Future<Void> held) {
 	wait(held);
 }
@@ -1953,10 +1948,6 @@ FDB::Key& PlanCheckpoint::splitBound(int whichScan) {
 
 bool PlanCheckpoint::splitBoundWanted() {
 	return boundsWanted;
-}
-
-Future<Void> PlanCheckpoint::lastOpResult() {
-	return ops.back().actors;
 }
 
 int64_t& PlanCheckpoint::getIntState(int64_t defaultValue) {

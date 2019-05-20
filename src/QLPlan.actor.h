@@ -1,3 +1,4 @@
+#include <climits>
 /*
  * QLPlan.h
  *
@@ -51,20 +52,9 @@ struct PlanCheckpoint : ReferenceCounted<PlanCheckpoint>, FastAllocated<PlanChec
 	Reference<PlanCheckpoint> stopAndCheckpoint();
 
 	/**
-	 * Bounds this checkpoint to exclude the remainder returned by stopAndCheckpoint().
-	 */
-	void boundToStopPoint();
-
-	/**
 	 * Cancels any outstanding operations but doesn't change the bounds of this.
 	 */
 	void stop();
-
-	/**
-	 * Returns an error (perhaps end_of_stream()) when the last operation added to the
-	 * checkpoint returns
-	 */
-	Future<Void> lastOpResult();
 
 	/**
 	 * Interface for operations.
@@ -507,7 +497,7 @@ struct ProjectAndUpdatePlan : ConcretePlan<ProjectAndUpdatePlan> {
 
 	// RW plan needs to worry that directory might have changed
 	bool wasMetadataChangeOkay(Reference<UnboundCollectionContext> cx) override { return false; }
-};
+} __unused;
 
 struct FindAndModifyPlan : ConcretePlan<FindAndModifyPlan> {
 	Reference<Plan> subPlan;
@@ -693,7 +683,7 @@ struct UpdateIndexStatusPlan : ConcretePlan<UpdateIndexStatusPlan> {
 struct FlushChangesPlan : ConcretePlan<FlushChangesPlan> {
 	Reference<Plan> subPlan;
 
-	FlushChangesPlan(Reference<Plan> subPlan) : subPlan(subPlan) {}
+	explicit FlushChangesPlan(Reference<Plan> subPlan) : subPlan(subPlan) {}
 
 	bson::BSONObj describe() override {
 		return BSON(

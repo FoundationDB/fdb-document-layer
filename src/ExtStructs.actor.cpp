@@ -61,7 +61,7 @@ ACTOR Future<WriteResult> lastErrorOrLastResult(Future<WriteResult> previous,
                                                 int releasePermits) {
 	try {
 		state WriteResult next_wr = wait(next); // might throw
-		WriteResult _ = wait(previous); // might throw
+		wait(success(previous)); // might throw
 		lock->release(releasePermits);
 		return next_wr;
 	} catch (...) {
