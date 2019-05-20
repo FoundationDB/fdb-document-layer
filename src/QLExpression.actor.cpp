@@ -21,6 +21,7 @@
  */
 
 #include "QLExpression.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 ACTOR Future<Optional<std::pair<Standalone<StringRef>, DataValue>>> getArrayAncestor(DataKey dk,
                                                                                      Reference<IReadContext> cx,
@@ -70,9 +71,9 @@ ACTOR static Future<Void> doPathExpansionIfNotArray(PromiseStream<Reference<IRea
                                                     bool imputeNulls) {
 	Optional<DataValue> v = wait(document->get(arrayPath));
 	if (!v.present() || v.get().getSortType() != DVTypeCode::ARRAY) {
-		Void _ = wait(doPathExpansion(promises, queryPath, document,
-		                              DataKey::decode_bytes(Standalone<StringRef>(arrayPath)).size() + 1, false,
-		                              expandLastArray, imputeNulls));
+		wait(doPathExpansion(promises, queryPath, document,
+		                     DataKey::decode_bytes(Standalone<StringRef>(arrayPath)).size() + 1, false, expandLastArray,
+		                     imputeNulls));
 	}
 	return Void();
 }
@@ -138,7 +139,7 @@ ACTOR static Future<Void> doArrayExpansion(PromiseStream<Reference<IReadContext>
 			                                  expandLastArray, imputeNulls));
 		}
 	}
-	Void _ = wait(waitForAll(futures));
+	wait(waitForAll(futures));
 
 	return Void();
 }
@@ -165,8 +166,7 @@ ACTOR static Future<Void> doPathExpansion(PromiseStream<Reference<IReadContext>>
 
 		state Optional<std::pair<Standalone<StringRef>, DataValue>> arrayAncestor = wait(arrayAncestorF);
 		if (arrayAncestor.present()) {
-			Void _ = wait(
-			    doArrayExpansion(promises, queryPath, document, arrayAncestor.get(), expandLastArray, imputeNulls));
+			wait(doArrayExpansion(promises, queryPath, document, arrayAncestor.get(), expandLastArray, imputeNulls));
 		}
 
 		// MongoDB will impute a null here (for certain predicates) if the "most recent existing ancestor" in the dotted

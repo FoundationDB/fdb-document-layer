@@ -19,6 +19,7 @@
  */
 
 #include "ConsoleMetric.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 MetricStat::MetricStat(std::string mId, IMetricType mType)
     : mId(std::move(mId)),
@@ -162,7 +163,7 @@ void MetricStat::reset() {
 
 ACTOR static Future<Void> publisher(ConsoleMetric* self) {
 	loop {
-		Void _ = wait(delay(self->flushIntervalSeconds));
+		wait(delay(self->flushIntervalSeconds));
 		self->publish();
 	}
 }

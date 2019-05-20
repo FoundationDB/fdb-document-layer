@@ -19,6 +19,7 @@
  */
 
 #include "QLProjection.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 ACTOR Future<bson::BSONObj> projectDocument_impl(Reference<IReadContext> doc, Reference<Projection> projection) {
 	try {
@@ -42,7 +43,7 @@ ACTOR Future<bson::BSONObj> projectDocument_impl(Reference<IReadContext> doc, Re
 			}
 		}
 
-		Void _ = wait(waitForAll(dataValueFutures));
+		wait(waitForAll(dataValueFutures));
 
 		std::vector<BOBObj> currentPath;
 		currentPath.emplace_back(-1, "");

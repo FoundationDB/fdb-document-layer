@@ -46,7 +46,7 @@ struct ConnectionOptions {
 
 struct DocumentLayer : ReferenceCounted<DocumentLayer>, NonCopyable {
 	DocumentLayer(ConnectionOptions defaultConnectionOptions,
-	              Reference<FDB::DatabaseContext> database,
+	              Reference<FDB::Database> database,
 	              Reference<DirectorySubspace> rootDirectory)
 	    : defaultConnectionOptions(defaultConnectionOptions),
 	      database(database),
@@ -54,7 +54,7 @@ struct DocumentLayer : ReferenceCounted<DocumentLayer>, NonCopyable {
 	      rootDirectory(rootDirectory),
 	      mm(new MetadataManager(this)) {}
 
-	Reference<FDB::DatabaseContext> database;
+	Reference<FDB::Database> database;
 	Reference<MetadataManager> mm;
 	ConnectionOptions defaultConnectionOptions;
 	ActorCollection backgroundTasks;

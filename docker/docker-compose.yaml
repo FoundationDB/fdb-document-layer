@@ -9,11 +9,9 @@ services:
     networks: [test-net]
 
   fdbserver:
-    image: fdb-standalone:0.0.2
+    image: fdb-standalone:0.0.3
     build:
       context: fdbserver
-      args:
-        - FDB_VERSION=6.0.15
     environment:
       - FDB_PORT=4500
     networks: [test-net]
