@@ -28,7 +28,7 @@
 #include "flow/flow.h"
 
 #include "Constants.h"
-#include "ExtMsg.h"
+#include "ExtMsg.actor.h"
 #include "ExtStructs.h"
 #include "IDispatched.h"
 

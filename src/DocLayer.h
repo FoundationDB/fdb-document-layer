@@ -65,6 +65,4 @@ struct DocumentLayer : ReferenceCounted<DocumentLayer>, NonCopyable {
 	uint32_t nrConnections = 0;
 };
 
-Future<Void> wrapError(const Future<Void>& actorThatCouldThrow);
-
 #endif /* _DOCLAYER_H_ */

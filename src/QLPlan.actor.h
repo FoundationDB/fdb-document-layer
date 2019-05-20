@@ -18,8 +18,11 @@
  * limitations under the License.
  */
 
-#ifndef _QL_PLAN_H_
-#define _QL_PLAN_H_
+#if defined(NO_INTELLISENSE) && !defined(_QL_PLAN_ACTOR_G_H_)
+#define _QL_PLAN_ACTOR_G_H_
+#include "QLPlan.actor.g.h"
+#elif !defined(_QL_PLAN_ACTOR_H_)
+#define _QL_PLAN_ACTOR_H_
 
 #pragma once
 
@@ -27,7 +30,7 @@
 #include "QLContext.h"
 #include "QLOperations.h"
 #include "QLPredicate.h"
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 
 /**
  * Represents a plan running in a particular transaction(al try) and its bounds in the keyspace
@@ -707,13 +710,13 @@ struct FlushChangesPlan : ConcretePlan<FlushChangesPlan> {
 };
 
 // Like executeUntilCompletion(), but uses the transaction you gave it.
-Future<int64_t> executeUntilCompletionTransactionally(const Reference<Plan>& plan, const Reference<DocTransaction>& tr);
+ACTOR Future<int64_t> executeUntilCompletionTransactionally(Reference<Plan> plan, Reference<DocTransaction> tr);
 // Like executeUntilCompletionTransactionally(), but also returns the last thing returned by the plan (if any).
-Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCompletionAndReturnLastTransactionally(
-    const Reference<Plan>& plan,
-    const Reference<DocTransaction>& tr);
+ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCompletionAndReturnLastTransactionally(
+    Reference<Plan> plan,
+    Reference<DocTransaction> tr);
 
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit);
 Reference<Plan> flushChanges(Reference<Plan> subPlan);
 
-#endif /* _QL_PLAN_H_ */
+#endif /* _QL_PLAN_ACTOR_H_ */

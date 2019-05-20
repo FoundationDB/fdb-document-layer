@@ -31,7 +31,7 @@
 #include "DocLayer.h"
 #include "MetadataManager.h"
 
-#include "QLPlan.h"
+#include "QLPlan.actor.h"
 
 extern bool verboseLogging;
 extern bool verboseConsoleOutput;

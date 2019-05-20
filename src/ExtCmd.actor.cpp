@@ -24,11 +24,11 @@
 #include "ordering.h"
 
 #include "ExtCmd.h"
-#include "ExtMsg.h"
+#include "ExtMsg.actor.h"
 #include "ExtUtil.actor.h"
 
-#include "QLPlan.h"
-#include "QLProjection.h"
+#include "QLPlan.actor.h"
+#include "QLProjection.actor.h"
 
 #ifndef WIN32
 #include "gitVersion.h"

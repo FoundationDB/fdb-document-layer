@@ -18,11 +18,15 @@
  * limitations under the License.
  */
 
-#ifndef _QL_PROJECTION_H
-#define _QL_PROJECTION_H
+#if defined(NO_INTELLISENSE) && !defined(_QL_PROJECTION_ACTOR_G_H_)
+#define _QL_PROJECTION_ACTOR_G_H_
+#include "QLProjection.actor.g.h"
+#elif !defined(_QL_PROJECTION_ACTOR_H_)
+#define _QL_PROJECTION_ACTOR_H_
 #pragma once
 
 #include "QLContext.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 struct Projection : public ReferenceCounted<Projection> {
 
@@ -113,16 +117,16 @@ public:
 	IncludeType includeNextField(int depth, std::string fieldName, bool isSimple, bool inArray);
 };
 
-Future<bson::BSONObj> projectDocument(const Reference<IReadContext>& di,
-                                      const Reference<Projection>& projection,
-                                      const Optional<bson::BSONObj>& orderObj);
+ACTOR Future<bson::BSONObj> projectDocument(Reference<IReadContext> di,
+                                            Reference<Projection> projection,
+                                            Optional<bson::BSONObj> orderObj);
 
-Future<Optional<DataValue>> getMaybeRecursiveIfPresent(
-    const Reference<IReadContext>& cx,
-    const Reference<Projection>& projection = Reference<Projection>());
-Future<DataValue> getMaybeRecursive(const Reference<IReadContext>& cx, const StringRef& path);
-Future<DataValue> getRecursiveKnownPresent(const Reference<IReadContext>& cx,
-                                           const Reference<Projection>& projection = Reference<Projection>());
+ACTOR Future<Optional<DataValue>> getMaybeRecursiveIfPresent(
+    Reference<IReadContext> cx,
+    Reference<Projection> projection = Reference<Projection>());
+ACTOR Future<DataValue> getMaybeRecursive(Reference<IReadContext> cx, StringRef path);
+ACTOR Future<DataValue> getRecursiveKnownPresent(Reference<IReadContext> cx,
+                                                 Reference<Projection> projection = Reference<Projection>());
 
 // Parse a Projection tree from a BSON projection specification
 Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector); // FIXME: Where does this belong?
@@ -162,4 +166,4 @@ protected:
 	const BOBObj& operator=(const BOBObj& rhs);
 };
 
-#endif
+#endif /* _QL_PROJECTION_ACTOR_H_ */

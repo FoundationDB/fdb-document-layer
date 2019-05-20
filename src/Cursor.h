@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "QLPlan.h"
+#include "QLPlan.actor.h"
 
 struct Cursor : ReferenceCounted<Cursor>, NonCopyable {
 

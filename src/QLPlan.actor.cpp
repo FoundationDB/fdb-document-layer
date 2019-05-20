@@ -20,11 +20,11 @@
  * MongoDB is a registered trademark of MongoDB, Inc.
  */
 
+#include "QLPlan.actor.h"
 #include "DocumentError.h"
 #include "ExtStructs.h"
 #include "ExtUtil.actor.h"
-#include "QLPlan.h"
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 
 #include "flow/actorcompiler.h" // This must be the last #include.
 #include "ordering.h"

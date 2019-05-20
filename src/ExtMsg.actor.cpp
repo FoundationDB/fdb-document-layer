@@ -20,8 +20,8 @@
  * MongoDB is a registered trademark of MongoDB, Inc.
  */
 
+#include "ExtMsg.actor.h"
 #include "Ext.h"
-#include "ExtMsg.h"
 
 #include "Cursor.h"
 #include "ExtCmd.h"
@@ -30,9 +30,9 @@
 #include "MetadataManager.h"
 
 #include "QLOperations.h"
-#include "QLPlan.h"
+#include "QLPlan.actor.h"
 #include "QLPredicate.h"
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 #include "QLTypes.h"
 
 #include "bson.h"
@@ -53,6 +53,15 @@ REGISTER_MSG(ExtMsgInsert);
 REGISTER_MSG(ExtMsgGetMore);
 REGISTER_MSG(ExtMsgDelete);
 REGISTER_MSG(ExtMsgKillCursors);
+
+ACTOR Future<Void> wrapError(Future<Void> actorThatCouldThrow) {
+	try {
+		wait(actorThatCouldThrow);
+	} catch (Error& e) {
+		TraceEvent(SevError, "BackgroundTask").error(e);
+	}
+	return Void();
+}
 
 // ns -> database.collection
 Namespace getDBCollectionPair(const char* ns, std::pair<std::string, std::string> errMsg) {

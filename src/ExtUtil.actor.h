@@ -95,22 +95,22 @@ int insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IRea
 int insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx);
 int insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx);
 
-Future<Void> ensureValidObject(const Reference<IReadWriteContext>& cx,
-                               const std::string& objectRoot,
-                               const std::string& objectSubfield,
-                               const bool& createRoot);
+ACTOR Future<Void> ensureValidObject(Reference<IReadWriteContext> cx,
+                                     std::string objectRoot,
+                                     std::string objectSubfield,
+                                     bool createRoot);
 
 /**
  * Returns the length if it is an array, -1 if a non-array value, and -2 if the field is not set
  */
-Future<int> isArray(const Reference<IReadWriteContext>& docCx, const std::string& arrayRoot);
+ACTOR Future<int> isArray(Reference<IReadWriteContext> docCx, std::string arrayRoot);
 
 /**
  * Places the "top-level" elements of the array stored in `document` under `arrayField` into `p`.
  */
-Future<Void> getArrayStream(const Reference<IReadWriteContext>& document,
-                            const Standalone<StringRef>& arrayField,
-                            const PromiseStream<DataValue>& p);
+ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
+                                  Standalone<StringRef> arrayField,
+                                  PromiseStream<DataValue> p);
 
 bool is_literal_match(bson::BSONObj const& obj);
 Reference<IPredicate> eq_predicate(const bson::BSONElement& el, const std::string& prefix);
@@ -139,8 +139,8 @@ Future<Reference<Plan>> getIndexesForCollectionPlan(Namespace const& ns,
                                                     Reference<DocTransaction> tr,
                                                     Reference<MetadataManager> mm);
 Reference<Plan> getIndexesForCollectionPlan(Reference<UnboundCollectionContext> indexesCollection, Namespace const& ns);
-Future<std::vector<bson::BSONObj>> getIndexesTransactionally(const Reference<Plan>& indexMetadataPlan,
-                                                             const Reference<DocTransaction>& tr);
+ACTOR Future<std::vector<bson::BSONObj>> getIndexesTransactionally(Reference<Plan> indexMetadataPlan,
+                                                                   Reference<DocTransaction> tr);
 
 /**
  * Utility overload of mapAsync that returns the mapped stream to you

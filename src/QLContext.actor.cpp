@@ -23,7 +23,7 @@
 #include "ExtUtil.actor.h"
 #include "QLContext.h"
 #include "QLExpression.h"
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 #include "QLTypes.h"
 
 #include "DocumentError.h"

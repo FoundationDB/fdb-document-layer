@@ -7,7 +7,6 @@ add_executable(fdbdoc
         error_definitions.h
         Ext.h
         ExtCmd.h
-        ExtMsg.h
         ExtOperator.h
         ExtStructs.h
         FPUUtils.h
@@ -20,9 +19,7 @@ add_executable(fdbdoc
         QLContext.h
         QLExpression.h
         QLOperations.h
-        QLPlan.h
         QLPredicate.h
-        QLProjection.h
         QLTypes.cpp
         QLTypes.h
         StatusService.h
@@ -45,7 +42,10 @@ set(ACTOR_FILES
         QLPredicate.actor.cpp
         QLProjection.actor.cpp
         StatusService.actor.cpp
+        ExtMsg.actor.h
         ExtUtil.actor.h
+        QLPlan.actor.h
+        QLProjection.actor.h
         )
 
 add_subdirectory(../thirdparty ${CMAKE_BINARY_DIR}/thirdparty)
