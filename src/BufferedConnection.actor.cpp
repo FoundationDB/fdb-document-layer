@@ -21,6 +21,7 @@
 #include "BufferedConnection.h"
 
 #include "flow/Net2Packet.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 #define BC_BLOCK_SIZE 4096
 
@@ -63,8 +64,8 @@ struct BufferedConnectionData {
 ACTOR Future<Void> reader(BufferedConnectionData* self) {
 	loop {
 		loop {
-			Void _ = wait(self->connection->onReadable());
-			Void _ = wait(delay(0, TaskReadSocket));
+			wait(self->connection->onReadable());
+			wait(delay(0, TaskReadSocket));
 
 			int to_read = self->desired_bytes.get() + BCBlock::DATA_SIZE - self->total_bytes.get();
 			if (to_read <= 0)
@@ -86,13 +87,13 @@ ACTOR Future<Void> reader(BufferedConnectionData* self) {
 			self->total_bytes.set(self->total_bytes.get() + rb);
 		}
 
-		Void _ = wait(self->desired_bytes.onChange());
+		wait(self->desired_bytes.onChange());
 	}
 }
 
 ACTOR Future<Void> writer(BufferedConnectionData* self) {
 	loop {
-		Void _ = wait(self->on_data_write.onTrigger());
+		wait(self->on_data_write.onTrigger());
 
 		loop {
 			int wb = self->connection->write(self->unsent.getUnsent());
@@ -105,15 +106,15 @@ ACTOR Future<Void> writer(BufferedConnectionData* self) {
 				break;
 			}
 
-			Void _ = wait(self->connection->onWritable());
-			Void _ = wait(delay(0, TaskWriteSocket));
+			wait(self->connection->onWritable());
+			wait(delay(0, TaskWriteSocket));
 		}
 	}
 }
 
 ACTOR Future<Void> connectionKeeper(BufferedConnectionData* self) {
 	try {
-		Void _ = wait(reader(self) || writer(self));
+		wait(reader(self) || writer(self));
 		ASSERT(false);
 		throw internal_error();
 	} catch (Error& e) {
@@ -273,10 +274,10 @@ ACTOR Future<Void> doOnBytesAvailable(BufferedConnectionData* self, int count) {
 		return Void();
 
 	loop {
-		Void _ = wait(self->total_bytes.onChange());
+		wait(self->total_bytes.onChange());
 
 		if (self->total_bytes.get() >= count) {
-			Void _ = wait(delay(0, TaskDefaultPromiseEndpoint));
+			wait(delay(0, TaskDefaultPromiseEndpoint));
 			return Void();
 		}
 	}
@@ -287,7 +288,7 @@ Future<Void> BufferedConnection::onBytesAvailable(int count) {
 }
 
 ACTOR Future<Void> doRead(BufferedConnection* bc, BufferedConnectionData* self, uint8_t* buf, int count) {
-	Void _ = wait(bc->onBytesAvailable(count));
+	wait(bc->onBytesAvailable(count));
 	self->copyInto(buf, count);
 	bc->advance(count);
 	bc->pop(count);

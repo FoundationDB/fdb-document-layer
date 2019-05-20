@@ -21,6 +21,7 @@
 #include "Cursor.h"
 #include "DocLayer.h"
 #include "Knobs.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors) {
 	time_t now = time(nullptr);

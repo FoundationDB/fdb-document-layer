@@ -27,6 +27,7 @@
 #include "QLTypes.h"
 
 #include "DocumentError.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 using namespace FDB;
 
@@ -38,16 +39,16 @@ ACTOR Future<Void> DocTransaction::commitChanges(Reference<DocTransaction> self,
 	auto deferredDocument = self->deferredDocuments.find(docPrefix);
 	if (deferredDocument == self->deferredDocuments.end())
 		return Void();
-	Void _ = wait(deferredDocument->second->commitChanges(self));
+	wait(deferredDocument->second->commitChanges(self));
 	return Void();
 }
 
 ACTOR Future<Void> DocumentDeferred::commitChanges(Reference<DocTransaction> tr, Reference<DocumentDeferred> self) {
-	Void _ = wait(self->snapshotLock.onUnused());
+	wait(self->snapshotLock.onUnused());
 	for (auto& f : self->deferred)
 		f(tr);
 	self->writes_finished.send(Void());
-	Void _ = wait(waitForAll(self->index_update_actors));
+	wait(waitForAll(self->index_update_actors));
 	self->writes_finished = Promise<Void>();
 	return Void();
 }
@@ -150,7 +151,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
 			while (!rr.empty()) {
 				state int permits = rr.size();
 				if (flowControlLock)
-					Void _ = wait(flowControlLock->takeUpTo(permits));
+					wait(flowControlLock->takeUpTo(permits));
 
 				for (int i = 0; i < permits; i++) {
 					auto& kv = rr[i];
@@ -324,7 +325,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 
 			dd->snapshotLock.unuse();
 
-			Void _ = wait(writes_finished);
+			wait(writes_finished);
 
 			std::vector<Future<std::vector<DataValue>>> f_new_values;
 			for (const auto& expr : self->exprs) {
@@ -355,7 +356,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
 				ASSERT(self->flowControlLock.present());
-				Void _ = wait(self->flowControlLock.get()->take());
+				wait(self->flowControlLock.get()->take());
 				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 
 				for (; nvv; ++nvv) {
@@ -465,7 +466,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 
 			dd->snapshotLock.unuse();
 
-			Void _ = wait(writes_finished);
+			wait(writes_finished);
 
 			state std::vector<DataValue> new_values =
 			    wait(consumeAll(mapAsync(self->expr->evaluate(doc), [](Reference<IReadContext> valcx) {
@@ -480,7 +481,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 				// one finished duplication detecting and index record writing. And thus the following section
 				// before the `lock.release()` call, needs to be protected using a mutex lock.
 				ASSERT(self->flowControlLock.present());
-				Void _ = wait(self->flowControlLock.get()->take());
+				wait(self->flowControlLock.get()->take());
 				state FlowLock::Releaser releaser(*self->flowControlLock.get(), 1);
 
 				for (const DataValue& v : new_values) {

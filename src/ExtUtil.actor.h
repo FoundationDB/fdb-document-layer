@@ -29,6 +29,7 @@
 #include "ExtStructs.h"
 #include "QLContext.h"
 #include "QLPredicate.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 #include <string>
 
 #define QLOG(...)                                                                                                      \
@@ -232,9 +233,9 @@ runRYWTransaction(Reference<FDB::DatabaseContext> cx, Function func, int64_t ret
 				// FDBPlugin_getDescendants() is involved, since it may be in a state where it issues another getRange()
 				// before its next wait(). The delay(0,0) which we wait on here gives us a new call stack, and prevents
 				// this (rare but real) problem.
-				Void _ = wait(delay(0.0));
+				wait(delay(0.0));
 
-				Void _ = wait(tr->commit());
+				wait(tr->commit());
 
 				return result;
 			}
@@ -242,7 +243,7 @@ runRYWTransaction(Reference<FDB::DatabaseContext> cx, Function func, int64_t ret
 			catch (Error& e) {
 				if (e.code() == error_code_commit_unknown_result)
 					throw;
-				Void _ = wait(tr->onError(e));
+				wait(tr->onError(e));
 			}
 		}
 	} catch (Error& e) {
@@ -270,9 +271,9 @@ runTransactionAsync(Reference<FDB::DatabaseContext> cx, Function func, int64_t r
 				// FDBPlugin_getDescendants() is involved, since it may be in a state where it issues another getRange()
 				// before its next wait(). The delay(0,0) which we wait on here gives us a new call stack, and prevents
 				// this (rare but real) problem.
-				Void _ = wait(delay(0.0));
+				wait(delay(0.0));
 
-				Void _ = wait(tr->commit());
+				wait(tr->commit());
 
 				return result;
 			}
@@ -280,7 +281,7 @@ runTransactionAsync(Reference<FDB::DatabaseContext> cx, Function func, int64_t r
 			catch (Error& e) {
 				if (e.code() == error_code_commit_unknown_result)
 					throw;
-				Void _ = wait(tr->onError(e));
+				wait(tr->onError(e));
 			}
 		}
 	} catch (Error& e) {

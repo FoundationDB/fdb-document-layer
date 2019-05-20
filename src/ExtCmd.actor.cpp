@@ -33,6 +33,7 @@
 #ifndef WIN32
 #include "gitVersion.h"
 #endif
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 using namespace FDB;
 
@@ -90,7 +91,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 	    .detail("ns", fullCollNameToString(ns))
 	    .detail("index", matchingIndexObj.toString());
 
-	Void _ = wait(matchingIndex->commitChanges());
+	wait(matchingIndex->commitChanges());
 
 	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(StringRef(encodeMaybeDotted(matchingName)));
 	tr->tr->clear(FDB::KeyRangeRef(indexKey, strinc(indexKey)));
@@ -113,11 +114,11 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 	try {
 		// No need to wait on lastWrite. The ranges we write ensure that this will conflict with anything it needs to
 		// conflict with.
-		Void _ = wait(runRYWTransaction(ec->docLayer->database,
-		                                [=](Reference<DocTransaction> tr) {
-			                                return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
-		                                },
-		                                ec->options.retryLimit, ec->options.timeoutMillies));
+		wait(runRYWTransaction(ec->docLayer->database,
+		                       [=](Reference<DocTransaction> tr) {
+			                       return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
+		                       },
+		                       ec->options.retryLimit, ec->options.timeoutMillies));
 
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
@@ -372,7 +373,7 @@ ACTOR static Future<Void> Internal_doDropCollection(Reference<DocTransaction> tr
                                                     Reference<MetadataManager> mm) {
 	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
 	int _ = wait(internal_doDropIndexesActor(tr, query->ns, mm));
-	Void _ = wait(unbound->collectionDirectory->remove(tr->tr));
+	wait(unbound->collectionDirectory->remove(tr->tr));
 	return Void();
 }
 
@@ -382,7 +383,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropCollection(Reference<ExtConnec
 	try {
 		// No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict with
 		// anything it needs to conflict with.
-		Void _ = wait(runRYWTransaction(
+		wait(runRYWTransaction(
 		    ec->docLayer->database,
 		    [=](Reference<DocTransaction> tr) { return Internal_doDropCollection(tr, query, ec->mm); },
 		    ec->options.retryLimit, ec->options.timeoutMillies));
@@ -670,7 +671,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateIndexes(Reference<ExtConnect
 		f.push_back(attemptIndexInsertion(indexDoc, ec, ec->getOperationTransaction(), query->ns));
 	}
 	try {
-		Void _ = wait(waitForAll(f));
+		wait(waitForAll(f));
 		reply->addDocument(BSON("ok" << 1.0));
 	} catch (Error& e) {
 		// clang-format off
@@ -816,7 +817,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
 			throw unsupported_cmd_option();
 		}
 
-		Void _ = wait(runRYWTransaction(
+		wait(runRYWTransaction(
 		    ec->docLayer->database,
 		    [=](Reference<DocTransaction> tr) { return Internal_doCreateCollection(tr, query, ec->mm); },
 		    ec->options.retryLimit, ec->options.timeoutMillies));
@@ -1139,7 +1140,7 @@ struct ListCollectionsCmd {
 					break;
 				}
 				if (e.code() != error_code_actor_cancelled) {
-					Void _ = wait(dtr->onError(e));
+					wait(dtr->onError(e));
 				}
 			}
 		}
@@ -1220,7 +1221,7 @@ struct ListIndexesCmd {
 				return reply;
 			} catch (Error& e) {
 				if (e.code() != error_code_actor_cancelled) {
-					Void _ = wait(dtr->onError(e));
+					wait(dtr->onError(e));
 				}
 			}
 		}
@@ -1254,20 +1255,20 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		state FutureStream<Reference<ScanReturnedContext>> queryResults = qrPlan->execute(checkpoint.getPtr(), dtr);
 		state PromiseStream<Reference<ScanReturnedContext>> filteredResults;
 
-		Void _ = wait(asyncFilter(queryResults,
-		                          [=](Reference<ScanReturnedContext> queryResult) mutable {
-			                          scanned++;
-			                          return map(predicate->evaluate(queryResult), [=](bool keep) mutable {
-				                          if (keep)
-					                          filtered++;
-				                          // For `distinct`, accumulated distinct values are already held in the
-				                          // distinctPredicate, and the returned kv is no longer needed by any
-				                          // upstream caller after this point. Thus release it immediately.
-				                          flowControlLock->release();
-				                          return keep;
-			                          });
-		                          },
-		                          filteredResults));
+		wait(asyncFilter(queryResults,
+		                 [=](Reference<ScanReturnedContext> queryResult) mutable {
+			                 scanned++;
+			                 return map(predicate->evaluate(queryResult), [=](bool keep) mutable {
+				                 if (keep)
+					                 filtered++;
+				                 // For `distinct`, accumulated distinct values are already held in the
+				                 // distinctPredicate, and the returned kv is no longer needed by any
+				                 // upstream caller after this point. Thus release it immediately.
+				                 flowControlLock->release();
+				                 return keep;
+			                 });
+		                 },
+		                 filteredResults));
 
 		bson::BSONArrayBuilder arrayBuilder;
 		distinctPredicate->collectDataValues(arrayBuilder);

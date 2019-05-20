@@ -28,6 +28,7 @@
 #include "QLPredicate.h"
 #include "QLProjection.h"
 #include "QLTypes.h"
+#include "flow/actorcompiler.h" // This must be the last #include.
 
 using namespace FDB;
 
@@ -203,7 +204,7 @@ ACTOR Future<Void> ensureValidObject(Reference<IReadWriteContext> cx,
 	} else if (createRoot) {
 		cx->set(encodedObjectRoot, DataValue::subObject().encode_value());
 		if (upOneLevel(objectRoot) != "") {
-			Void _ = wait(ensureValidObject(cx, upOneLevel(objectRoot), getLastPart(objectRoot), createRoot));
+			wait(ensureValidObject(cx, upOneLevel(objectRoot), getLastPart(objectRoot), createRoot));
 		}
 	}
 
