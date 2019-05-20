@@ -1,4 +1,4 @@
-ARG FDB_VERSION=6.0.15
+ARG FDB_VERSION=6.1.7
 
 FROM foundationdb/foundationdb:$FDB_VERSION
 LABEL version=0.0.2

@@ -12,8 +12,6 @@ services:
     image: fdb-standalone:0.0.2
     build:
       context: fdbserver
-      args:
-        - FDB_VERSION=6.1.7
     environment:
       - FDB_PORT=4500
     networks: [test-net]
