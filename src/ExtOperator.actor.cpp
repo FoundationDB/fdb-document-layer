@@ -21,7 +21,7 @@
  */
 
 #include "Ext.h"
-#include "ExtMsg.h"
+#include "ExtMsg.actor.h"
 #include "ExtOperator.h"
 #include "ExtUtil.actor.h"
 

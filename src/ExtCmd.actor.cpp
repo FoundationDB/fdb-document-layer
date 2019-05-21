@@ -24,11 +24,11 @@
 #include "ordering.h"
 
 #include "ExtCmd.h"
-#include "ExtMsg.h"
+#include "ExtMsg.actor.h"
 #include "ExtUtil.actor.h"
 
-#include "QLPlan.h"
-#include "QLProjection.h"
+#include "QLPlan.actor.h"
+#include "QLProjection.actor.h"
 
 #ifndef WIN32
 #include "gitVersion.h"
@@ -104,7 +104,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 ACTOR static Future<Void> Internal_doDropDatabase(Reference<DocTransaction> tr,
                                                   Reference<ExtMsgQuery> query,
                                                   Reference<DirectorySubspace> rootDirectory) {
-	bool _ = wait(rootDirectory->removeIfExists(tr->tr, {StringRef(query->ns.first)}));
+	wait(success(rootDirectory->removeIfExists(tr->tr, {StringRef(query->ns.first)})));
 	return Void();
 }
 
@@ -372,7 +372,7 @@ ACTOR static Future<Void> Internal_doDropCollection(Reference<DocTransaction> tr
                                                     Reference<ExtMsgQuery> query,
                                                     Reference<MetadataManager> mm) {
 	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, query->ns));
-	int _ = wait(internal_doDropIndexesActor(tr, query->ns, mm));
+	wait(success(internal_doDropIndexesActor(tr, query->ns, mm)));
 	wait(unbound->collectionDirectory->remove(tr->tr));
 	return Void();
 }
@@ -931,11 +931,6 @@ struct GetMemoryUsageCmd {
 };
 REGISTER_CMD(GetMemoryUsageCmd, "getmemoryusage");
 
-static std::string getFullCollectionName(Reference<ExtMsgQuery> msg, const char* collFieldName) {
-	std::string collectionName = msg->query.getField(collFieldName).String();
-	return std::string().append(msg->getDBName()).append(".").append(collectionName);
-}
-
 /**
  * Write commands coming part of Query message are implemented here. Doc Layer simulates a Standalone server
  * setup. So, Write concern is not really applicable. But, other flags related to whether to wait until journal is
@@ -943,9 +938,9 @@ static std::string getFullCollectionName(Reference<ExtMsgQuery> msg, const char*
  * writes fully persisted before responding back to client. This is stronger guarantee than what the client
  * has asked for with the flags.
  */
-static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnection> const& nmc,
-                                                     Reference<ExtMsgQuery> const& msg,
-                                                     Reference<ExtMsgReply> const& reply);
+ACTOR static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnection> nmc,
+                                                           Reference<ExtMsgQuery> msg,
+                                                           Reference<ExtMsgReply> reply);
 struct InsertCmd {
 	static const char* name;
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
@@ -990,9 +985,9 @@ ACTOR static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnecti
 	return reply;
 }
 
-static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnection> const& nmc,
-                                                     Reference<ExtMsgQuery> const& msg,
-                                                     Reference<ExtMsgReply> const& reply);
+ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnection> nmc,
+                                                           Reference<ExtMsgQuery> msg,
+                                                           Reference<ExtMsgReply> reply);
 struct DeleteCmd {
 	static const char* name;
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
@@ -1044,9 +1039,9 @@ ACTOR static Future<Reference<ExtMsgReply>> deleteAndReply(Reference<ExtConnecti
 	return reply;
 }
 
-static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnection> const& nmc,
-                                                     Reference<ExtMsgQuery> const& msg,
-                                                     Reference<ExtMsgReply> const& reply);
+ACTOR static Future<Reference<ExtMsgReply>> updateAndReply(Reference<ExtConnection> nmc,
+                                                           Reference<ExtMsgQuery> msg,
+                                                           Reference<ExtMsgReply> reply);
 struct UpdateCmd {
 	static const char* name;
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,

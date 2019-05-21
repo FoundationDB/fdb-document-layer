@@ -37,9 +37,9 @@
 #include "ConsoleMetric.h"
 #include "Cursor.h"
 #include "DocLayer.h"
-#include "ExtMsg.h"
+#include "ExtMsg.actor.h"
 #include "IMetric.h"
-#include "StatusService.h"
+#include "StatusService.actor.h"
 
 #include "flow/SystemMonitor.h"
 
@@ -135,15 +135,6 @@ IMetricReporter* DocumentLayer::metricReporter;
 extern const char* getGitVersion();
 extern const char* getFlowGitVersion();
 extern bool g_crashOnError;
-
-ACTOR Future<Void> wrapError(Future<Void> actorThatCouldThrow) {
-	try {
-		wait(actorThatCouldThrow);
-	} catch (Error& e) {
-		TraceEvent(SevError, "BackgroundTask").error(e);
-	}
-	return Void();
-}
 
 Future<Void> processRequest(Reference<ExtConnection> ec,
                             ExtMsgHeader* header,
@@ -493,7 +484,7 @@ ACTOR void setup(NetworkAddress na,
 			state Future<Void> t = delay(5.0);
 			try {
 				choose {
-					when(Version rv = wait(frv)) {
+					when(wait(success(frv))) {
 						TraceEvent("ClusterConnected");
 						break;
 					}

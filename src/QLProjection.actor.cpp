@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
 ACTOR Future<bson::BSONObj> projectDocument_impl(Reference<IReadContext> doc, Reference<Projection> projection) {

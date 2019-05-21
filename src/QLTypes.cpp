@@ -203,16 +203,6 @@ DataValue DataValue::nullValue() {
 	return DataValue(StringRef(&code, 1));
 }
 
-DataValue DataValue::minKey() {
-	auto code = uint8_t(DVTypeCode::MIN_KEY);
-	return DataValue(StringRef(&code, 1));
-}
-
-DataValue DataValue::maxKey() {
-	auto code = uint8_t(DVTypeCode::MAX_KEY);
-	return DataValue(StringRef(&code, 1));
-}
-
 bool DataValue::isSimpleType() const {
 	return !(getBSONType() == bson::Object || getBSONType() == bson::Array);
 }
@@ -684,7 +674,7 @@ StringRef DataKey::decode_item(StringRef bytes, int itemNumber) {
 		while (remaining > 0) {
 			int itemLen = getKeyPartLength(start, remaining);
 			if (itemNumber == items++)
-				return StringRef(start, itemLen);
+				return {start, itemLen};
 			start += itemLen;
 			remaining -= itemLen;
 		}

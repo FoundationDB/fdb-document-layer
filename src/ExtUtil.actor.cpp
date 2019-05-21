@@ -26,7 +26,7 @@
 
 #include "QLContext.h"
 #include "QLPredicate.h"
-#include "QLProjection.h"
+#include "QLProjection.actor.h"
 #include "QLTypes.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
