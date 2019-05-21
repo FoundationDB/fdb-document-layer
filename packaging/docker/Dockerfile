@@ -22,7 +22,7 @@ FROM ubuntu:18.04
 # Install dependencies
 
 RUN apt-get update && \
-	apt-get install -y curl=7.58.0-2ubuntu3.6 && \
+	apt-get install -y curl=7.58.0-2ubuntu3.6 less && \
 	rm -r /var/lib/apt/lists/*
 
 # Install FoundationDB Document Layer Binaries
