@@ -143,8 +143,8 @@ std::string DataValue::encode_key_part() const {
 	}
 }
 
-std::string DataValue::encode_value() const {
-	return representation.toString();
+StringRef DataValue::encode_value() const {
+	return representation;
 }
 
 DataValue DataValue::decode_key_part(StringRef key) {

@@ -118,7 +118,7 @@ struct DataValue {
 	int compare(DataValue const& other) const;
 
 	std::string encode_key_part() const;
-	std::string encode_value() const;
+	StringRef encode_value() const;
 
 	static DataValue decode_key_part(StringRef nonNumKey);
 	static DataValue decode_key_part(StringRef numKey, bson::BSONType numCode);

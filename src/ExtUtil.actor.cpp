@@ -760,11 +760,11 @@ Optional<IdInfo> extractEncodedIds(bson::BSONObj obj) {
 			throw no_array_id();
 		} else if (el.isABSONObj()) {
 			encodedId = DataValue(sortBsonObj(el.Obj())).encode_key_part();
-			valueEncodedId = DataValue::subObject().encode_value();
+			valueEncodedId = DataValue::subObject().encode_value().toString();
 			idObj = el.Obj().getOwned();
 		} else {
 			encodedId = DataValue(el).encode_key_part();
-			valueEncodedId = DataValue(el).encode_value();
+			valueEncodedId = DataValue(el).encode_value().toString();
 			idObj = Optional<bson::BSONObj>();
 		}
 		encodedIds = IdInfo(encodedId, valueEncodedId, idObj);
