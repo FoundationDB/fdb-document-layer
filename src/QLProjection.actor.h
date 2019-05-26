@@ -125,8 +125,8 @@ ACTOR Future<Optional<DataValue>> getMaybeRecursiveIfPresent(
     Reference<IReadContext> cx,
     Reference<Projection> projection = Reference<Projection>());
 ACTOR Future<DataValue> getMaybeRecursive(Reference<IReadContext> cx, StringRef path);
-ACTOR Future<DataValue> getRecursiveKnownPresent(Reference<IReadContext> cx,
-                                                 Reference<Projection> projection = Reference<Projection>());
+Future<DataValue> getRecursiveKnownPresent(Reference<IReadContext> const& cx,
+                                           Reference<Projection> const& projection = Reference<Projection>());
 
 // Parse a Projection tree from a BSON projection specification
 Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector); // FIXME: Where does this belong?

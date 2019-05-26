@@ -108,7 +108,7 @@ protected:
 	~ITDoc() = default;
 };
 
-static std::string getFDBKey(DataKey const& key, int extraReserveBytes = 0) {
+static string getFDBKey(DataKey const& key) {
 	return key.toString();
 }
 
@@ -139,7 +139,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
                                                    Standalone<StringRef> relEnd,
                                                    PromiseStream<KeyValue> output,
                                                    Reference<FlowLock> flowControlLock) {
-	std::string prefix = getFDBKey(key, relEnd.size());
+	std::string prefix = getFDBKey(key);
 	state int substrOffset = static_cast<int>(prefix.size());
 	state std::string begin = strAppend(prefix, relBegin);
 	state std::string end = std::move(prefix);
@@ -718,7 +718,7 @@ Optional<Reference<IndexInfo>> UnboundCollectionContext::getCompoundIndex(std::v
 		return Optional<Reference<IndexInfo>>();
 	auto indexV = simpleIndexMap.find(prefix[0]);
 	ASSERT(indexV != simpleIndexMap.end());
-	for (Reference<IndexInfo> index : indexV->second) {
+	for (const Reference<IndexInfo>& index : indexV->second) {
 		if (index->size() > prefix.size() && index->hasPrefix(prefix)) {
 			if (index->indexKeys[prefix.size()].first == nextIndexKey) {
 				return index;

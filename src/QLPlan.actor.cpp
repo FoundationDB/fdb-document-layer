@@ -85,12 +85,6 @@ Optional<Reference<Plan>> FilterPlan::push_down(Reference<UnboundCollectionConte
 	return ref(new FilterPlan(cx, source, ref(new AndPredicate(filter, query))->simplify()));
 }
 
-static Optional<DataKey> toDataKey(Optional<DataValue> const& v) {
-	if (!v.present())
-		return Optional<DataKey>();
-	return DataKey::decode_bytes(v.get().encode_key_part());
-}
-
 Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionContext> cx,
                                                    Reference<IPredicate> query) {
 	switch (query->getTypeCode()) {
@@ -361,7 +355,7 @@ ACTOR static Future<bool> simpleWouldBeLast(Reference<ScanReturnedContext> doc,
 	else {
 		std::vector<Standalone<StringRef>> old_key_parts;
 		old_key_parts.reserve(old_values.size());
-		for (auto dv : old_values)
+		for (const auto& dv : old_values)
 			old_key_parts.push_back(dv.encode_key_part());
 		std::sort(old_key_parts.begin(), old_key_parts.end());
 		Standalone<StringRef> last;
@@ -589,8 +583,7 @@ FutureStream<Reference<ScanReturnedContext>> PrimaryKeyLookupPlan::execute(PlanC
 	}
 }
 
-ACTOR static Future<Void> doUnion(PlanCheckpoint* checkpoint,
-                                  FutureStream<Reference<ScanReturnedContext>> a,
+ACTOR static Future<Void> doUnion(FutureStream<Reference<ScanReturnedContext>> a,
                                   FutureStream<Reference<ScanReturnedContext>> b,
                                   PromiseStream<Reference<ScanReturnedContext>> output) {
 	state Future<Reference<ScanReturnedContext>> aFuture = waitAndForward(a);
@@ -641,8 +634,7 @@ ACTOR static Future<Void> doUnion(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> UnionPlan::execute(PlanCheckpoint* checkpoint,
                                                                 Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> output;
-	checkpoint->addOperation(
-	    doUnion(checkpoint, plan1->execute(checkpoint, tr), plan2->execute(checkpoint, tr), output), output);
+	checkpoint->addOperation(doUnion(plan1->execute(checkpoint, tr), plan2->execute(checkpoint, tr), output), output);
 	return output.getFuture();
 }
 
@@ -1045,8 +1037,7 @@ FutureStream<Reference<ScanReturnedContext>> ProjectionPlan::execute(PlanCheckpo
 	return docs.getFuture();
 }
 
-ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
-                                         FutureStream<Reference<ScanReturnedContext>> input,
+ACTOR static Future<Void> doFlushChanges(FutureStream<Reference<ScanReturnedContext>> input,
                                          PromiseStream<Reference<ScanReturnedContext>> output) {
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
 	try {
@@ -1087,7 +1078,7 @@ ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> FlushChangesPlan::execute(PlanCheckpoint* checkpoint,
                                                                        Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> docs;
-	checkpoint->addOperation(doFlushChanges(checkpoint, subPlan->execute(checkpoint, tr), docs), docs);
+	checkpoint->addOperation(doFlushChanges(subPlan->execute(checkpoint, tr), docs), docs);
 	return docs.getFuture();
 }
 
@@ -1754,7 +1745,7 @@ FutureStream<Reference<ScanReturnedContext>> BuildIndexPlan::execute(PlanCheckpo
 }
 
 bool BuildIndexPlan::wasMetadataChangeOkay(Reference<UnboundCollectionContext> newCx) {
-	for (Reference<IndexInfo> i : newCx->knownIndexes) {
+	for (const Reference<IndexInfo>& i : newCx->knownIndexes) {
 		if (i->indexName == index->indexName && i->status == IndexInfo::IndexStatus::BUILDING &&
 		    i->buildId.get() == index->buildId.get())
 			return scan->wasMetadataChangeOkay(newCx);

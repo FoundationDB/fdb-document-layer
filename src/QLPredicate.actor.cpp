@@ -79,9 +79,7 @@ void NonePredicate::simplify_and(SimplifyAndContext& cx) {
 	cx.isNone = true;
 }
 
-ACTOR static Future<bool> doAndEvaluate(std::vector<Reference<IPredicate>> terms,
-                                        Reference<IReadContext> context,
-                                        bool expandArrays) {
+ACTOR static Future<bool> doAndEvaluate(std::vector<Reference<IPredicate>> terms, Reference<IReadContext> context) {
 	// Short-circuit, could be parallel instead?
 
 	for (const auto& term : terms) {
@@ -94,7 +92,7 @@ ACTOR static Future<bool> doAndEvaluate(std::vector<Reference<IPredicate>> terms
 }
 
 Future<bool> AndPredicate::evaluate(Reference<IReadContext> const& context) {
-	return doAndEvaluate(terms, context, true);
+	return doAndEvaluate(terms, context);
 }
 
 void AndPredicate::simplify_and(SimplifyAndContext& cx) {
@@ -135,7 +133,7 @@ Reference<IPredicate> AndPredicate::simplify() {
 std::string AndPredicate::toString() {
 	std::string s = "AND(";
 	int addcomma = 0;
-	for (auto t : terms) {
+	for (const auto& t : terms) {
 		if (addcomma++)
 			s += ", ";
 		s += t->toString();
@@ -154,9 +152,7 @@ Reference<IPredicate> AndPredicate::simplify_not() {
 	return OrPredicate(terms).simplify();
 }
 
-ACTOR Future<bool> doOrEvaluate(std::vector<Reference<IPredicate>> terms,
-                                Reference<IReadContext> context,
-                                bool expandArrays) {
+ACTOR Future<bool> doOrEvaluate(std::vector<Reference<IPredicate>> terms, Reference<IReadContext> context) {
 	state std::vector<Future<bool>> ets;
 	for (const auto& term : terms) {
 		Future<bool> et = term->evaluate(context);
@@ -180,7 +176,7 @@ Future<bool> OrPredicate::evaluate(Reference<IReadContext> const& context) {
 
 	// or ...
 
-	return doOrEvaluate(terms, context, true);
+	return doOrEvaluate(terms, context);
 }
 
 Reference<IPredicate> OrPredicate::simplify() {
@@ -296,13 +292,13 @@ void EqPredicate::simplify_and(SimplifyAndContext& cx) {
 		cx.rangeLike = range_equiv;
 }
 
-ACTOR Future<bool> doNotEvaluate(Reference<IPredicate> term, Reference<IReadContext> context, bool expandArrays) {
+ACTOR Future<bool> doNotEvaluate(Reference<IPredicate> term, Reference<IReadContext> context) {
 	bool et = wait(term->evaluate(context));
 	return !et;
 }
 
 Future<bool> NotPredicate::evaluate(Reference<IReadContext> const& context) {
-	return doNotEvaluate(term, context, true);
+	return doNotEvaluate(term, context);
 }
 
 Reference<IPredicate> NotPredicate::simplify() {

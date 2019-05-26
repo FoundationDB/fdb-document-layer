@@ -42,12 +42,6 @@ struct IExpression {
 	virtual std::string toString() const = 0;
 
 	/**
-	 * Bounds on the number of subdocuments that evaluate() could return (for any input)
-	 */
-	virtual int min_results() const { return 0; }
-	virtual int max_results() const { return std::numeric_limits<int>::max(); }
-
-	/**
 	 * Return the name of the index which, if it exists, indexes by the values of this expression
 	 */
 	virtual std::string get_index_key() const { return {}; }

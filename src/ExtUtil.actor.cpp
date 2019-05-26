@@ -51,7 +51,7 @@ std::string getLastPart(std::string maybeDottedFieldName) {
 }
 
 Key encodeMaybeDotted(std::string fieldname) {
-	if (fieldname.compare("") == 0)
+	if (fieldname.empty())
 		return StringRef(fieldname);
 
 	std::string path;
@@ -203,7 +203,7 @@ ACTOR Future<Void> ensureValidObject(Reference<IReadWriteContext> cx,
 		}
 	} else if (createRoot) {
 		cx->set(encodedObjectRoot, DataValue::subObject().encode_value());
-		if (upOneLevel(objectRoot) != "") {
+		if (!upOneLevel(objectRoot).empty()) {
 			wait(ensureValidObject(cx, upOneLevel(objectRoot), getLastPart(objectRoot), createRoot));
 		}
 	}
@@ -240,7 +240,7 @@ Projection::Iterator& Projection::Iterator::operator++() {
 		return *this;
 	}
 
-	while (stack.size() &&
+	while (!stack.empty() &&
 	       (stack.back().itr == stack.back().projection->fields.end() || stack.back().projection->shouldBeRead)) {
 		if (stack.back().itr == stack.back().projection->fields.end()) {
 			stack.pop_back();
@@ -252,7 +252,7 @@ Projection::Iterator& Projection::Iterator::operator++() {
 		}
 	}
 
-	if (stack.size()) {
+	if (!stack.empty()) {
 		path.push_back(stack.back().itr->first);
 		StackEntry newEntry = StackEntry(stack.back().itr->second);
 		++stack.back().itr;
@@ -276,7 +276,7 @@ Projection::Iterator Projection::begin() {
 	Reference<Projection> root = Reference<Projection>::addRef(this);
 
 	Projection::Iterator itr;
-	itr.stack.push_back(Iterator::StackEntry(root));
+	itr.stack.emplace_back(root);
 
 	return ++itr;
 }
@@ -293,7 +293,7 @@ std::string Projection::debugString(bool first) {
 
 	s << "{";
 	bool addComma = false;
-	for (auto itr : fields) {
+	for (const auto& itr : fields) {
 		if (addComma)
 			s << ", ";
 		else
@@ -338,7 +338,7 @@ Projector::IncludeType Projector::includeNextField(int depth, std::string fieldN
 		else {
 			auto itr = currentProjection->fields.find(fieldName);
 			if (itr != currentProjection->fields.end()) {
-				projectionStack.push_back(std::make_pair(fieldName, itr->second));
+				projectionStack.emplace_back(fieldName, itr->second);
 			}
 		}
 	}
@@ -392,7 +392,7 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 				auto popped = std::move(bobs.back());
 				bobs.pop_back();
 				if (popped.isArrayLength >= 0) {
-					if (bobs.size())
+					if (!bobs.empty())
 						bobs.back().append(popped.fieldname, DataValue(bson::BSONArray(popped.build())));
 					else {
 						ASSERT(i == dk.size() - 1);
@@ -400,7 +400,7 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 						currentLoc++;
 					}
 				} else {
-					if (bobs.size())
+					if (!bobs.empty())
 						bobs.back().append(popped.fieldname, DataValue(popped.build()));
 					else {
 						ASSERT(i == dk.size() - 1);
@@ -411,7 +411,7 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 			}
 
 			DataValue kdv = DataValue::decode_key_part(dk[dk.size() - 1]);
-			if (!bobs.size()) {
+			if (bobs.empty()) {
 				ASSERT(kdv.getSortType() == DVTypeCode::NUMBER);
 				int j = kdv.getDouble();
 				for (; currentLoc < j; ++currentLoc) {
@@ -423,13 +423,13 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 			DataValue dv = DataValue::decode_value(kv.value);
 			switch (dv.getBSONType()) {
 			case bson::BSONType::Object:
-				bobs.push_back(BOBObj(-1, fieldname));
+				bobs.emplace_back(-1, fieldname);
 				break;
 			case bson::BSONType::Array:
-				bobs.push_back(BOBObj(dv.getArraysize(), fieldname));
+				bobs.emplace_back(dv.getArraysize(), fieldname);
 				break;
 			default: {
-				if (bobs.size())
+				if (!bobs.empty())
 					bobs.back().append(fieldname, dv);
 				else {
 					p.send(dv);
@@ -445,7 +445,7 @@ ACTOR Future<Void> getArrayStream(Reference<IReadWriteContext> document,
 		}
 	}
 
-	if (bobs.size()) {
+	if (!bobs.empty()) {
 		for (auto i = bobs.size() - 1; i > 0; --i) {
 			if (bobs[i].isArrayLength >= 0) {
 				bobs[i - 1].append(bobs[i].fieldname, DataValue(bson::BSONArray(bobs[i].build())));
@@ -507,8 +507,8 @@ Reference<IPredicate> eq_predicate(const bson::BSONElement& el, const std::strin
 }
 
 Reference<IPredicate> re_predicate(const bson::BSONElement& el, const std::string& prefix) {
-	std::string regexPattern = "";
-	std::string regexOptions = "";
+	std::string regexPattern;
+	std::string regexOptions;
 	if (el.type() == bson::BSONType::RegEx) {
 		regexPattern = el.regex();
 		regexOptions = el.regexFlags();
@@ -689,7 +689,7 @@ bson::BSONObj transformOperatorQueryToUpdatableDocument(bson::BSONObj selector, 
 				else if (fieldName == "$all") {
 					if (next.type() != bson::BSONType::Array || next.Array().size() > 1)
 						throw invalid_query_operator();
-					else if (next.Array().size())
+					else if (!next.Array().empty())
 						builder.appendAs(next.Array()[0], bson::StringData(parentKey));
 				} else if (fieldName == "$elemMatch")
 					stop = true;
@@ -888,7 +888,7 @@ Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector) {
 					Reference<Projection>* current = &root;
 					do {
 						prev = pos + 1;
-						pos = fieldName.find(".", prev);
+						pos = fieldName.find('.', prev);
 						current = &(*current)->fields[fieldName.substr(prev, std::max(pos - prev, (size_t)1))];
 						if (!*current) {
 							*current = Reference<Projection>(new Projection());
@@ -896,7 +896,7 @@ Reference<Projection> parseProjection(bson::BSONObj const& fieldSelector) {
 
 						// The last field in the fieldName spec should be included iff the element was inclusive. All
 						// others should be the opposite.
-						if (pos == fieldName.npos) {
+						if (pos == std::string::npos) {
 							(*current)->included = elIncluded;
 						} else {
 							(*current)->included = !elIncluded;
