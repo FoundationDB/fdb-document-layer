@@ -877,7 +877,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	}
 
 	std::vector<Reference<IInsertOp>> inserts;
-	std::set<std::string> ids;
+	std::set<Standalone<StringRef>> ids;
 	int insertSize = 0;
 	for (const auto& d : *documents) {
 		const bson::BSONObj& obj = d;

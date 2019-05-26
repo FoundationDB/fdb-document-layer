@@ -117,7 +117,7 @@ struct DataValue {
 
 	int compare(DataValue const& other) const;
 
-	std::string encode_key_part() const;
+	Standalone<StringRef> encode_key_part() const;
 	StringRef encode_value() const;
 
 	static DataValue decode_key_part(StringRef nonNumKey);

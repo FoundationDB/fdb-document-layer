@@ -129,17 +129,17 @@ static std::string unescape_nulls(StringRef key) {
 	return s;
 }
 
-std::string DataValue::encode_key_part() const {
+Standalone<StringRef> DataValue::encode_key_part() const {
 	switch (getSortType()) {
 	case DVTypeCode::NUMBER:
-		return representation.substr(0, 11).toString();
+		return representation.substr(0, 11);
 	case DVTypeCode::STRING:
-		return escape_nulls();
+		return StringRef(escape_nulls());
 	case DVTypeCode::PACKED_ARRAY:
 	case DVTypeCode::PACKED_OBJECT:
-		return escape_nulls();
+		return StringRef(escape_nulls());
 	default:
-		return representation.toString();
+		return representation.contents(); // Force a copy
 	}
 }
 

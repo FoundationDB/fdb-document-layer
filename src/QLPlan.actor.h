@@ -236,8 +236,8 @@ private:
 struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 	IndexScanPlan(Reference<UnboundCollectionContext> cx,
 	              Reference<IndexInfo> index,
-	              Optional<std::string> begin,
-	              Optional<std::string> end,
+	              Optional<Key> begin,
+	              Optional<Key> end,
 	              std::vector<std::string> matchedPrefix)
 	    : cx(cx), index(index), begin(begin), end(end), matchedPrefix(matchedPrefix) {}
 	bson::BSONObj describe() override {
@@ -263,8 +263,8 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 private:
 	Reference<UnboundCollectionContext> cx;
 	Reference<IndexInfo> index;
-	Optional<std::string> begin;
-	Optional<std::string> end;
+	Optional<Key> begin;
+	Optional<Key> end;
 
 	// Matched index not necessarily the exact match. This plan could simply use prefix of index.
 	// For now, index direction is not honored by Doc Layer, probably SOMEDAY

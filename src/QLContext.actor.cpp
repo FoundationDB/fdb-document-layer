@@ -693,8 +693,8 @@ void UnboundCollectionContext::addIndex(Reference<IndexInfo> info) {
 }
 
 Key UnboundCollectionContext::getIndexesSubspace() {
-	return Standalone<StringRef>(metadataDirectory->key().toString() +
-	                             DataValue(std::string(DocLayerConstants::INDICES_KEY)).encode_key_part());
+	return metadataDirectory->key().withSuffix(
+	    DataValue(DocLayerConstants::INDICES_KEY, DVTypeCode::STRING).encode_key_part());
 }
 
 Reference<UnboundQueryContext> UnboundCollectionContext::getIndexesContext() {
@@ -729,8 +729,8 @@ Optional<Reference<IndexInfo>> UnboundCollectionContext::getCompoundIndex(std::v
 }
 
 Key UnboundCollectionContext::getVersionKey() {
-	return Key(KeyRef(metadataDirectory->key().toString() +
-	                  DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part()));
+	return metadataDirectory->key().withSuffix(
+	    DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part());
 }
 
 std::string UnboundCollectionContext::databaseName() {
@@ -795,8 +795,8 @@ IndexInfo::IndexInfo(std::string indexName,
                      Optional<UID> buildId,
                      bool isUniqueIndex)
     : indexName(indexName), indexKeys(indexKeys), status(status), buildId(buildId), isUniqueIndex(isUniqueIndex) {
-	encodedIndexName = DataValue(indexName, DVTypeCode::STRING).encode_key_part();
-	indexCx = collectionCx->getIndexesContext()->getSubContext(encodedIndexName);
+	indexCx =
+	    collectionCx->getIndexesContext()->getSubContext(DataValue(indexName, DVTypeCode::STRING).encode_key_part());
 	multikey = true;
 }
 

@@ -529,7 +529,7 @@ ACTOR static Future<Void> doPopActor(Reference<IReadWriteContext> cx,
 		length = 0;
 
 	state Reference<IReadWriteContext> scx = cx->getSubContext(path);
-	state std::string kp;
+	state Standalone<StringRef> kp;
 
 	if (element.number() == 1) {
 		if (length > 0) {
@@ -625,7 +625,7 @@ ACTOR static Future<Void> doPullActor(Reference<IReadWriteContext> cx,
 		loop {
 			try {
 				DataValue next = waitNext(f);
-				std::string kp = DataValue(oldNumber).encode_key_part();
+				Standalone<StringRef> kp = DataValue(oldNumber).encode_key_part();
 				bool dontwrite = false;
 				if (uniques.find(next) != uniques.end()) {
 					pulled++;
@@ -769,7 +769,7 @@ ACTOR static Future<Void> doPushActor(Reference<IReadWriteContext> cx,
 				if (slice > 0) {
 					if (slice < length) {
 						for (int n = slice; n < length; ++n) {
-							std::string kp = DataValue(n).encode_key_part();
+							Standalone<StringRef> kp = DataValue(n).encode_key_part();
 							scx->getSubContext(kp)->clearDescendants();
 							scx->clear(kp);
 						}
@@ -809,7 +809,7 @@ ACTOR static Future<Void> doPushActor(Reference<IReadWriteContext> cx,
 						loop {
 							try {
 								DataValue next = waitNext(f2);
-								std::string kp = DataValue(oldNumber).encode_key_part();
+								Standalone<StringRef> kp = DataValue(oldNumber).encode_key_part();
 								scx->getSubContext(kp)->clearDescendants();
 								scx->clear(kp);
 								if (oldNumber >= skip) {

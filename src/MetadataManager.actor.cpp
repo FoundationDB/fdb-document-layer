@@ -31,9 +31,9 @@ std::string fullCollNameToString(Namespace const& ns) {
 }
 
 Future<uint64_t> getMetadataVersion(Reference<DocTransaction> tr, Reference<DirectorySubspace> metadataDirectory) {
-	std::string versionKey = metadataDirectory->key().toString() +
-	                         DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part();
-	Future<Optional<FDBStandalone<StringRef>>> fov = tr->tr->get(StringRef(versionKey));
+	Standalone<StringRef> versionKey = metadataDirectory->key().withSuffix(
+	    DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part());
+	Future<Optional<FDBStandalone<StringRef>>> fov = tr->tr->get(versionKey);
 	Future<uint64_t> ret = map(fov, [](Optional<FDBStandalone<StringRef>> ov) -> uint64_t {
 		if (!ov.present())
 			return 0;

@@ -50,9 +50,9 @@ std::string getLastPart(std::string maybeDottedFieldName) {
 	}
 }
 
-std::string encodeMaybeDotted(std::string fieldname) {
+Key encodeMaybeDotted(std::string fieldname) {
 	if (fieldname.compare("") == 0)
-		return fieldname;
+		return StringRef(fieldname);
 
 	std::string path;
 	std::string fn = fieldname;
@@ -64,20 +64,20 @@ std::string encodeMaybeDotted(std::string fieldname) {
 		std::string sub = fn.substr(0, pos);
 		if (std::all_of(sub.begin(), sub.end(), ::isdigit)) {
 			const char* c_sub = sub.c_str();
-			path += DataValue(atoi(c_sub)).encode_key_part();
+			path += DataValue(atoi(c_sub)).encode_key_part().toString();
 		} else {
-			path += DataValue(sub).encode_key_part();
+			path += DataValue(sub).encode_key_part().toString();
 		}
 
 		fn = fn.substr(pos + 1);
 	}
-	return path;
+	return StringRef(path);
 }
 
 int insertElementRecursive(std::string fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
-	std::string kp = encodeMaybeDotted(fn);
+	Key kp = encodeMaybeDotted(fn);
 
 	int nrFDBKeys = 1;
 	cx->set(kp, DataValue::subObject().encode_value());
@@ -95,7 +95,7 @@ int insertElementRecursive(std::string fn, bson::BSONArray const& arr, Reference
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
 
-	std::string kp = encodeMaybeDotted(fn);
+	Key kp = encodeMaybeDotted(fn);
 	int nrFDBKeys = 1;
 
 	cx->set(kp, DataValue::arrayOfLength(arr.nFields()).encode_value());
@@ -113,7 +113,7 @@ int insertElementRecursive(std::string fn, bson::BSONElement const& elem, Refere
 	if (fn[0] == '$')
 		throw fieldname_with_dollar();
 
-	std::string kp = encodeMaybeDotted(fn);
+	Key kp = encodeMaybeDotted(fn);
 	if (!elem.isABSONObj()) {
 		cx->set(kp, DataValue(elem).encode_value());
 		return 1;
@@ -136,7 +136,7 @@ int insertElementRecursive(bson::BSONElement const& elem, Reference<IReadWriteCo
 }
 
 int insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IReadWriteContext> cx) {
-	std::string kp = DataValue(fn).encode_key_part();
+	Standalone<StringRef> kp = DataValue(fn).encode_key_part();
 	if (!elem.isABSONObj()) {
 		cx->set(kp, DataValue(elem).encode_value());
 		return 1;
@@ -149,7 +149,7 @@ int insertElementRecursive(int fn, bson::BSONElement const& elem, Reference<IRea
 }
 
 int insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWriteContext> cx) {
-	std::string kp = DataValue(fn).encode_key_part();
+	Standalone<StringRef> kp = DataValue(fn).encode_key_part();
 	int nrFDBKeys = 1;
 
 	cx->set(kp, DataValue::subObject().encode_value());
@@ -163,7 +163,7 @@ int insertElementRecursive(int fn, bson::BSONObj const& obj, Reference<IReadWrit
 }
 
 int insertElementRecursive(int fn, bson::BSONArray const& arr, Reference<IReadWriteContext> cx) {
-	std::string kp = DataValue(fn).encode_key_part();
+	Standalone<StringRef> kp = DataValue(fn).encode_key_part();
 	int nrFDBKeys = 1;
 
 	cx->set(kp, DataValue::arrayOfLength(arr.nFields()).encode_value());
@@ -180,7 +180,7 @@ ACTOR Future<Void> ensureValidObject(Reference<IReadWriteContext> cx,
                                      std::string objectRoot,
                                      std::string objectSubfield,
                                      bool createRoot) {
-	state std::string encodedObjectRoot = encodeMaybeDotted(objectRoot);
+	state Key encodedObjectRoot = encodeMaybeDotted(objectRoot);
 	state Optional<DataValue> optionalValue = wait(cx->get(encodedObjectRoot));
 	state Future<Optional<DataValue>> futureOptionalSubfield =
 	    cx->getSubContext(encodedObjectRoot)->get(encodeMaybeDotted(objectSubfield));
@@ -753,18 +753,18 @@ Optional<IdInfo> extractEncodedIds(bson::BSONObj obj) {
 	if (!elok) {
 		encodedIds = Optional<IdInfo>();
 	} else {
-		std::string encodedId;
-		std::string valueEncodedId;
+		Standalone<StringRef> encodedId;
+		Standalone<StringRef> valueEncodedId;
 		Optional<bson::BSONObj> idObj;
 		if (el.type() == bson::BSONType::Array) {
 			throw no_array_id();
 		} else if (el.isABSONObj()) {
 			encodedId = DataValue(sortBsonObj(el.Obj())).encode_key_part();
-			valueEncodedId = DataValue::subObject().encode_value().toString();
+			valueEncodedId = DataValue::subObject().encode_value();
 			idObj = el.Obj().getOwned();
 		} else {
 			encodedId = DataValue(el).encode_key_part();
-			valueEncodedId = DataValue(el).encode_value().toString();
+			valueEncodedId = DataValue(el).encode_value();
 			idObj = Optional<bson::BSONObj>();
 		}
 		encodedIds = IdInfo(encodedId, valueEncodedId, idObj);

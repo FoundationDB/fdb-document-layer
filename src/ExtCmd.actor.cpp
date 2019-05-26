@@ -93,7 +93,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 
 	wait(matchingIndex->commitChanges());
 
-	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(StringRef(encodeMaybeDotted(matchingName)));
+	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(encodeMaybeDotted(matchingName));
 	tr->tr->clear(FDB::KeyRangeRef(indexKey, strinc(indexKey)));
 
 	targetedCollection->bindCollectionContext(tr)->bumpMetadataVersion();

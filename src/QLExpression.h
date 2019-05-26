@@ -53,7 +53,7 @@ struct IExpression {
 	virtual std::string get_index_key() const { return {}; }
 };
 
-std::string encodeMaybeDotted(std::string fieldname);
+Key encodeMaybeDotted(std::string fieldname);
 /**
  * This expression implements a MongoDB dot-separated path expansion (it returns all subdocuments
  * patching the given path, expanding arrays as necessary).
@@ -72,7 +72,7 @@ struct ExtPathExpression : IExpression, ReferenceCounted<ExtPathExpression>, Fas
 
 	ExtPathExpression(std::string const& strPath, bool const& expandLastArray, bool const& imputeNulls)
 	    : strPath(strPath), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {
-		path = StringRef(encodeMaybeDotted(strPath));
+		path = encodeMaybeDotted(strPath);
 	}
 
 	GenFutureStream<Reference<IReadContext>> evaluate(Reference<IReadContext> const& document) override;

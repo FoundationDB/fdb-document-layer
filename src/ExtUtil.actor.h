@@ -41,11 +41,11 @@ Reference<T> ref(T* newVal) {
 }
 
 struct IdInfo {
-	std::string keyEncoded;
-	std::string valueEncoded;
+	Standalone<StringRef> keyEncoded;
+	Standalone<StringRef> valueEncoded;
 	Optional<bson::BSONObj> objValue;
 
-	IdInfo(std::string keyEncoded, std::string valueEncoded, Optional<bson::BSONObj> objValue)
+	IdInfo(Standalone<StringRef> keyEncoded, Standalone<StringRef> valueEncoded, Optional<bson::BSONObj> objValue)
 	    : keyEncoded(keyEncoded), valueEncoded(valueEncoded), objValue(objValue) {}
 };
 
@@ -76,7 +76,7 @@ bson::BSONObj transformOperatorQueryToUpdatableDocument(bson::BSONObj selector,
 
 std::string upOneLevel(std::string maybeDottedFieldName);
 std::string getLastPart(std::string maybeDottedFieldName);
-std::string encodeMaybeDotted(std::string fieldname);
+Key encodeMaybeDotted(std::string fieldname);
 
 /**
  * The usual way of inserting an element
