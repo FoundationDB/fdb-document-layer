@@ -246,7 +246,7 @@ struct QueryContext : IReadWriteContext, ReferenceCounted<QueryContext>, FastAll
 	void clearDescendants() override;
 	void clearRoot() override;
 	void clear(StringRef key) override;
-	void addIndex(struct IndexInfo index);
+	void addIndex(Reference<struct IndexInfo> index);
 	const DataKey getPrefix();
 
 	Future<Void> commitChanges() override;
@@ -338,7 +338,7 @@ private:
 	DataKey prefix;
 };
 
-struct IndexInfo {
+struct IndexInfo : ReferenceCounted<IndexInfo>, FastAllocated<IndexInfo> {
 	enum IndexStatus { READY = 0, BUILDING = 1000, INVALID = 9999 };
 
 	std::string indexName;
@@ -362,9 +362,9 @@ struct IndexInfo {
 };
 
 struct IndexComparator {
-	bool operator()(const IndexInfo& lhs, const IndexInfo& rhs) {
-		return lhs.indexKeys.size() == rhs.indexKeys.size() ? lhs.indexName < rhs.indexName
-		                                                    : lhs.indexKeys.size() < rhs.indexKeys.size();
+	bool operator()(const Reference<IndexInfo>& lhs, const Reference<IndexInfo>& rhs) {
+		return lhs->indexKeys.size() == rhs->indexKeys.size() ? lhs->indexName < rhs->indexName
+		                                                      : lhs->indexKeys.size() < rhs->indexKeys.size();
 	}
 };
 
@@ -393,14 +393,14 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	      cx(Reference<UnboundQueryContext>::addRef(other.cx.getPtr())),
 	      bannedFieldNames(other.bannedFieldNames) {}
 
-	Optional<IndexInfo> getSimpleIndex(std::string simple_index_map_key);
-	Optional<IndexInfo> getCompoundIndex(std::vector<std::string> const& prefix, std::string nextIndexKey);
+	Optional<Reference<IndexInfo>> getSimpleIndex(std::string simple_index_map_key);
+	Optional<Reference<IndexInfo>> getCompoundIndex(std::vector<std::string> const& prefix, std::string nextIndexKey);
 	void setBannedFieldNames(std::vector<std::string> bannedFns) {
 		bannedFieldNames = std::set<std::string>(bannedFns.begin(), bannedFns.end());
 	}
 	FDB::Key getVersionKey();
 	Reference<struct CollectionContext> bindCollectionContext(Reference<DocTransaction> tr);
-	void addIndex(IndexInfo index);
+	void addIndex(Reference<IndexInfo> index);
 	Key getIndexesSubspace();
 	Reference<UnboundQueryContext> getIndexesContext(); // FIXME: Remove this method
 	std::string databaseName();
@@ -414,11 +414,11 @@ struct UnboundCollectionContext : ReferenceCounted<UnboundCollectionContext>, Fa
 	Reference<UnboundQueryContext> cx;
 
 	// This is used by the planner, and should only hold indexes that are ready to speed up queries
-	std::map<std::string, std::set<IndexInfo, IndexComparator>> simpleIndexMap;
+	std::map<std::string, std::set<Reference<IndexInfo>, IndexComparator>> simpleIndexMap;
 
 	// This holds all indexes that will be loaded as plugins (i.e. for sets and clears), and should
 	// include indexes that are still building
-	std::vector<IndexInfo> knownIndexes;
+	std::vector<Reference<IndexInfo>> knownIndexes;
 
 	const uint64_t metadataVersion;
 
