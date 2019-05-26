@@ -290,21 +290,23 @@ struct IndexPlugin : ITDoc {
 	}
 
 	DataKey collectionPath;
+	Reference<IndexInfo> indexInfo;
 	DataKey indexPath;
 	std::string indexName;
 	bool multikey;
 	bool isUniqueIndex;
 	Optional<Reference<FlowLock>> flowControlLock;
 
-	IndexPlugin(DataKey collectionPath, IndexInfo const& indexInfo, Reference<ITDoc> next)
+	IndexPlugin(DataKey collectionPath, Reference<IndexInfo> indexInfo, Reference<ITDoc> next)
 	    : collectionPath(collectionPath),
-	      indexPath(indexInfo.indexCx->getPrefix()), // dbName+collectionName+"metadata"+"indices"+indexName
+	      indexInfo(indexInfo),
+	      indexPath(indexInfo->indexCx->getPrefix()), // dbName+collectionName+"metadata"+"indices"+indexName
 	      ITDoc(next),
-	      multikey(indexInfo.multikey),
-	      isUniqueIndex(indexInfo.isUniqueIndex),
-	      indexName(indexInfo.indexName),
-	      flowControlLock(indexInfo.isUniqueIndex ? Optional<Reference<FlowLock>>(Reference<FlowLock>(new FlowLock(1)))
-	                                              : Optional<Reference<FlowLock>>()) {}
+	      multikey(indexInfo->multikey),
+	      isUniqueIndex(indexInfo->isUniqueIndex),
+	      indexName(indexInfo->indexName),
+	      flowControlLock(indexInfo->isUniqueIndex ? Optional<Reference<FlowLock>>(Reference<FlowLock>(new FlowLock(1)))
+	                                               : Optional<Reference<FlowLock>>()) {}
 };
 
 struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>, FastAllocated<CompoundIndexPlugin> {
@@ -439,7 +441,7 @@ struct CompoundIndexPlugin : IndexPlugin, ReferenceCounted<CompoundIndexPlugin>,
 	std::string toString() override { return "CompoundIndexPlugin"; }
 
 	CompoundIndexPlugin(DataKey collectionPath,
-	                    IndexInfo const& indexInfo,
+	                    Reference<IndexInfo> indexInfo,
 	                    std::vector<std::pair<Reference<IExpression>, int>> exprs,
 	                    Reference<ITDoc> next)
 	    : IndexPlugin(collectionPath, indexInfo, next), exprs(exprs) {}
@@ -551,7 +553,7 @@ struct SimpleIndexPlugin : IndexPlugin, ReferenceCounted<SimpleIndexPlugin>, Fas
 	std::string toString() override { return "SimpleIndexPlugin"; }
 
 	SimpleIndexPlugin(DataKey collectionPath,
-	                  IndexInfo const& indexInfo,
+	                  Reference<IndexInfo> indexInfo,
 	                  Reference<IExpression> expr,
 	                  Reference<ITDoc> next)
 	    : IndexPlugin(collectionPath, indexInfo, next), expr(expr) {}
@@ -597,18 +599,19 @@ QueryContext::QueryContext(QueryContext const& other, StringRef sub) : self(new 
 QueryContext::QueryContext(class Reference<ITDoc> layers, Reference<DocTransaction> tr, DataKey path)
     : self(new QueryContextData(layers, tr, path)) {}
 
-void QueryContext::addIndex(IndexInfo index) {
-	if (index.size() == 1) {
+void QueryContext::addIndex(Reference<IndexInfo> index) {
+	if (index->size() == 1) {
 		self->layers = Reference<ITDoc>(new SimpleIndexPlugin(
-		    self->prefix, index, Reference<IExpression>(new ExtPathExpression(index.indexKeys[0].first, true, true)),
+		    self->prefix, index, Reference<IExpression>(new ExtPathExpression(index->indexKeys[0].first, true, true)),
 		    self->layers));
 	} else {
-		std::vector<std::pair<Reference<IExpression>, int>> exprs(index.size());
-		std::transform(
-		    index.indexKeys.begin(), index.indexKeys.end(), exprs.begin(), [](std::pair<std::string, int> index_pair) {
-			    return std::make_pair(Reference<IExpression>(new ExtPathExpression(index_pair.first, true, true)),
-			                          index_pair.second);
-		    });
+		std::vector<std::pair<Reference<IExpression>, int>> exprs(index->size());
+		std::transform(index->indexKeys.begin(), index->indexKeys.end(), exprs.begin(),
+		               [](std::pair<std::string, int> index_pair) {
+			               return std::make_pair(
+			                   Reference<IExpression>(new ExtPathExpression(index_pair.first, true, true)),
+			                   index_pair.second);
+		               });
 		self->layers = Reference<ITDoc>(new CompoundIndexPlugin(self->prefix, index, exprs, self->layers));
 	}
 }
@@ -675,14 +678,14 @@ Reference<CollectionContext> UnboundCollectionContext::bindCollectionContext(Ref
 	return Reference<CollectionContext>(new CollectionContext(tr, Reference<UnboundCollectionContext>::addRef(this)));
 }
 
-void UnboundCollectionContext::addIndex(IndexInfo info) {
+void UnboundCollectionContext::addIndex(Reference<IndexInfo> info) {
 	knownIndexes.push_back(info);
-	if (info.status == IndexInfo::IndexStatus::READY) {
-		auto sim_iterator = simpleIndexMap.find(info.indexKeys[0].first);
+	if (info->status == IndexInfo::IndexStatus::READY) {
+		auto sim_iterator = simpleIndexMap.find(info->indexKeys[0].first);
 		if (sim_iterator == simpleIndexMap.end()) {
-			std::set<IndexInfo, IndexComparator> iSet;
+			std::set<Reference<IndexInfo>, IndexComparator> iSet;
 			iSet.insert(info);
-			simpleIndexMap.insert(make_pair(info.indexKeys[0].first, iSet));
+			simpleIndexMap.insert(make_pair(info->indexKeys[0].first, iSet));
 		} else {
 			sim_iterator->second.insert(info);
 		}
@@ -698,31 +701,31 @@ Reference<UnboundQueryContext> UnboundCollectionContext::getIndexesContext() {
 	return Reference<UnboundQueryContext>(new UnboundQueryContext(DataKey()))->getSubContext(getIndexesSubspace());
 }
 
-Optional<IndexInfo> UnboundCollectionContext::getSimpleIndex(std::string simpleIndexMapKey) {
+Optional<Reference<IndexInfo>> UnboundCollectionContext::getSimpleIndex(std::string simpleIndexMapKey) {
 	if (bannedFieldNames.find(simpleIndexMapKey) != bannedFieldNames.end())
-		return Optional<IndexInfo>();
+		return Optional<Reference<IndexInfo>>();
 	auto index = simpleIndexMap.find(simpleIndexMapKey);
 	if (index == simpleIndexMap.end()) {
-		return Optional<IndexInfo>();
+		return Optional<Reference<IndexInfo>>();
 	} else {
 		return *index->second.begin();
 	}
 }
 
-Optional<IndexInfo> UnboundCollectionContext::getCompoundIndex(std::vector<std::string> const& prefix,
-                                                               std::string nextIndexKey) {
+Optional<Reference<IndexInfo>> UnboundCollectionContext::getCompoundIndex(std::vector<std::string> const& prefix,
+                                                                          std::string nextIndexKey) {
 	if (bannedFieldNames.find(nextIndexKey) != bannedFieldNames.end())
-		return Optional<IndexInfo>();
+		return Optional<Reference<IndexInfo>>();
 	auto indexV = simpleIndexMap.find(prefix[0]);
 	ASSERT(indexV != simpleIndexMap.end());
-	for (IndexInfo index : indexV->second) {
-		if (index.size() > prefix.size() && index.hasPrefix(prefix)) {
-			if (index.indexKeys[prefix.size()].first == nextIndexKey) {
+	for (Reference<IndexInfo> index : indexV->second) {
+		if (index->size() > prefix.size() && index->hasPrefix(prefix)) {
+			if (index->indexKeys[prefix.size()].first == nextIndexKey) {
 				return index;
 			}
 		}
 	}
-	return Optional<IndexInfo>();
+	return Optional<Reference<IndexInfo>>();
 }
 
 Key UnboundCollectionContext::getVersionKey() {

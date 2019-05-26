@@ -62,7 +62,8 @@ IndexInfo::IndexStatus indexStatus(const bson::BSONObj& indexObj) {
 		return IndexInfo::IndexStatus::INVALID;
 }
 
-IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Reference<UnboundCollectionContext> cx) {
+Reference<IndexInfo> MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj,
+                                                       Reference<UnboundCollectionContext> cx) {
 	IndexInfo::IndexStatus status = indexStatus(indexObj);
 	bson::BSONObj keyObj = indexObj.getObjectField(DocLayerConstants::KEY_FIELD);
 	std::vector<std::pair<std::string, int>> indexKeys;
@@ -78,12 +79,14 @@ IndexInfo MetadataManager::indexInfoFromObj(const bson::BSONObj& indexObj, Refer
 		fprintf(stderr, "%s\n\n", describeIndex(indexKeys).c_str());
 	}
 	if (status == IndexInfo::IndexStatus::BUILDING) {
-		return IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx, status,
-		                 UID::fromString(indexObj.getStringField(DocLayerConstants::BUILD_ID_FIELD)),
-		                 indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD));
+		return Reference<IndexInfo>(
+		    new IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx, status,
+		                  UID::fromString(indexObj.getStringField(DocLayerConstants::BUILD_ID_FIELD)),
+		                  indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD)));
 	} else {
-		return IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx, status, Optional<UID>(),
-		                 indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD));
+		return Reference<IndexInfo>(new IndexInfo(indexObj.getStringField(DocLayerConstants::NAME_FIELD), indexKeys, cx,
+		                                          status, Optional<UID>(),
+		                                          indexObj.getBoolField(DocLayerConstants::UNIQUE_FIELD)));
 	}
 }
 
@@ -118,8 +121,8 @@ ACTOR static Future<Reference<UnboundCollectionContext>> constructContext(Namesp
 		    new UnboundCollectionContext(version, collectionDirectory, metadataDirectory));
 
 		for (const auto& indexObj : allIndexes) {
-			IndexInfo index = MetadataManager::indexInfoFromObj(indexObj, cx);
-			if (index.status != IndexInfo::IndexStatus::INVALID) {
+			Reference<IndexInfo> index = MetadataManager::indexInfoFromObj(indexObj, cx);
+			if (index->status != IndexInfo::IndexStatus::INVALID) {
 				cx->addIndex(index);
 			}
 		}
@@ -240,13 +243,13 @@ ACTOR static Future<Void> buildIndex_impl(bson::BSONObj indexObj,
                                           Standalone<StringRef> encodedIndexId,
                                           Reference<ExtConnection> ec,
                                           UID build_id) {
-	state IndexInfo info;
+	state Reference<IndexInfo> info;
 	try {
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
 		state Reference<UnboundCollectionContext> mcx = wait(ec->mm->getUnboundCollectionContext(tr, ns, false));
 		info = MetadataManager::indexInfoFromObj(indexObj, mcx);
-		info.status = IndexInfo::IndexStatus::BUILDING;
-		info.buildId = build_id;
+		info->status = IndexInfo::IndexStatus::BUILDING;
+		info->buildId = build_id;
 		mcx->addIndex(info);
 
 		state Reference<Plan> buildingPlan = ec->wrapOperationPlan(
