@@ -108,7 +108,7 @@ protected:
 	~ITDoc() = default;
 };
 
-static std::string getFDBKey(DataKey const& key, int extraReserveBytes = 0) {
+static string getFDBKey(DataKey const& key) {
 	return key.toString();
 }
 
@@ -139,7 +139,7 @@ ACTOR static Future<Void> FDBPlugin_getDescendants(DataKey key,
                                                    Standalone<StringRef> relEnd,
                                                    PromiseStream<KeyValue> output,
                                                    Reference<FlowLock> flowControlLock) {
-	std::string prefix = getFDBKey(key, relEnd.size());
+	std::string prefix = getFDBKey(key);
 	state int substrOffset = static_cast<int>(prefix.size());
 	state std::string begin = strAppend(prefix, relBegin);
 	state std::string end = std::move(prefix);
@@ -693,8 +693,8 @@ void UnboundCollectionContext::addIndex(Reference<IndexInfo> info) {
 }
 
 Key UnboundCollectionContext::getIndexesSubspace() {
-	return Standalone<StringRef>(metadataDirectory->key().toString() +
-	                             DataValue(std::string(DocLayerConstants::INDICES_KEY)).encode_key_part());
+	return metadataDirectory->key().withSuffix(
+	    DataValue(DocLayerConstants::INDICES_KEY, DVTypeCode::STRING).encode_key_part());
 }
 
 Reference<UnboundQueryContext> UnboundCollectionContext::getIndexesContext() {
@@ -718,7 +718,7 @@ Optional<Reference<IndexInfo>> UnboundCollectionContext::getCompoundIndex(std::v
 		return Optional<Reference<IndexInfo>>();
 	auto indexV = simpleIndexMap.find(prefix[0]);
 	ASSERT(indexV != simpleIndexMap.end());
-	for (Reference<IndexInfo> index : indexV->second) {
+	for (const Reference<IndexInfo>& index : indexV->second) {
 		if (index->size() > prefix.size() && index->hasPrefix(prefix)) {
 			if (index->indexKeys[prefix.size()].first == nextIndexKey) {
 				return index;
@@ -729,8 +729,8 @@ Optional<Reference<IndexInfo>> UnboundCollectionContext::getCompoundIndex(std::v
 }
 
 Key UnboundCollectionContext::getVersionKey() {
-	return Key(KeyRef(metadataDirectory->key().toString() +
-	                  DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part()));
+	return metadataDirectory->key().withSuffix(
+	    DataValue(DocLayerConstants::VERSION_KEY, DVTypeCode::STRING).encode_key_part());
 }
 
 std::string UnboundCollectionContext::databaseName() {
@@ -795,8 +795,8 @@ IndexInfo::IndexInfo(std::string indexName,
                      Optional<UID> buildId,
                      bool isUniqueIndex)
     : indexName(indexName), indexKeys(indexKeys), status(status), buildId(buildId), isUniqueIndex(isUniqueIndex) {
-	encodedIndexName = DataValue(indexName, DVTypeCode::STRING).encode_key_part();
-	indexCx = collectionCx->getIndexesContext()->getSubContext(encodedIndexName);
+	indexCx =
+	    collectionCx->getIndexesContext()->getSubContext(DataValue(indexName, DVTypeCode::STRING).encode_key_part());
 	multikey = true;
 }
 

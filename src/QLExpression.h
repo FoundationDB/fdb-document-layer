@@ -42,18 +42,12 @@ struct IExpression {
 	virtual std::string toString() const = 0;
 
 	/**
-	 * Bounds on the number of subdocuments that evaluate() could return (for any input)
-	 */
-	virtual int min_results() const { return 0; }
-	virtual int max_results() const { return std::numeric_limits<int>::max(); }
-
-	/**
 	 * Return the name of the index which, if it exists, indexes by the values of this expression
 	 */
 	virtual std::string get_index_key() const { return {}; }
 };
 
-std::string encodeMaybeDotted(std::string fieldname);
+Key encodeMaybeDotted(std::string fieldname);
 /**
  * This expression implements a MongoDB dot-separated path expansion (it returns all subdocuments
  * patching the given path, expanding arrays as necessary).
@@ -72,7 +66,7 @@ struct ExtPathExpression : IExpression, ReferenceCounted<ExtPathExpression>, Fas
 
 	ExtPathExpression(std::string const& strPath, bool const& expandLastArray, bool const& imputeNulls)
 	    : strPath(strPath), expandLastArray(expandLastArray), imputeNulls(imputeNulls) {
-		path = StringRef(encodeMaybeDotted(strPath));
+		path = encodeMaybeDotted(strPath);
 	}
 
 	GenFutureStream<Reference<IReadContext>> evaluate(Reference<IReadContext> const& document) override;

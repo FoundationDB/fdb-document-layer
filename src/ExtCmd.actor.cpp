@@ -93,7 +93,7 @@ ACTOR static Future<std::pair<int, int>> dropIndexMatching(Reference<DocTransact
 
 	wait(matchingIndex->commitChanges());
 
-	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(StringRef(encodeMaybeDotted(matchingName)));
+	Key indexKey = targetedCollection->getIndexesSubspace().withSuffix(encodeMaybeDotted(matchingName));
 	tr->tr->clear(FDB::KeyRangeRef(indexKey, strinc(indexKey)));
 
 	targetedCollection->bindCollectionContext(tr)->bumpMetadataVersion();
@@ -848,8 +848,9 @@ ACTOR static Future<Reference<ExtMsgReply>> doGetKVStatusActor(Reference<ExtConn
 		Optional<FDB::FDBStandalone<StringRef>> status = wait(dtr->tr->get(statusKey));
 		if (status.present()) {
 			const DataValue vv = DataValue::decode_value(status.get());
-			reply->addDocument(BSON("ok" << 1.0 << "jsonValue"
-			                             << vv.encode_value().c_str()) /*bson::fromjson(vv.encode_value().c_str())*/);
+			reply->addDocument(
+			    BSON("ok" << 1.0 << "jsonValue"
+			              << vv.encode_value().toString()) /*bson::fromjson(vv.encode_value().c_str())*/);
 		}
 	} catch (Error& e) {
 		reply->addDocument(

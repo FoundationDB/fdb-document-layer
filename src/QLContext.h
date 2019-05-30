@@ -192,7 +192,7 @@ protected:
 	bson::BSONObj obj;
 	bool isArray;
 
-	std::string fieldNameToKeyPart(StringRef fn) {
+	Standalone<StringRef> fieldNameToKeyPart(StringRef fn) {
 		if (isArray || std::all_of(fn.begin(), fn.end(), ::isdigit)) {
 			return DataValue(atoi(fn.toString().c_str())).encode_key_part();
 		} else
@@ -215,7 +215,7 @@ protected:
 			bson::BSONElement el = i.next();
 			StringRef name((uint8_t*)el.fieldName(), el.fieldNameSize());
 
-			auto key = prefix.toString() + fieldNameToKeyPart(name);
+			auto key = prefix.withSuffix(fieldNameToKeyPart(name));
 			if (key >= begin && key < end) {
 				out.send(FDB::KeyValueRef(key, DataValue(el).encode_value()));
 			}
@@ -342,7 +342,6 @@ struct IndexInfo : ReferenceCounted<IndexInfo>, FastAllocated<IndexInfo> {
 	enum IndexStatus { READY = 0, BUILDING = 1000, INVALID = 9999 };
 
 	std::string indexName;
-	std::string encodedIndexName;
 	Reference<UnboundQueryContext> indexCx;
 	std::vector<std::pair<std::string, int>> indexKeys;
 	IndexStatus status;

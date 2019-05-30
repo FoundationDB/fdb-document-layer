@@ -85,12 +85,6 @@ Optional<Reference<Plan>> FilterPlan::push_down(Reference<UnboundCollectionConte
 	return ref(new FilterPlan(cx, source, ref(new AndPredicate(filter, query))->simplify()));
 }
 
-static Optional<DataKey> toDataKey(Optional<DataValue> const& v) {
-	if (!v.present())
-		return Optional<DataKey>();
-	return DataKey::decode_bytes(Standalone<StringRef>(v.get().encode_key_part()));
-}
-
 Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionContext> cx,
                                                    Reference<IPredicate> query) {
 	switch (query->getTypeCode()) {
@@ -113,10 +107,8 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
 				Optional<DataValue> begin, end;
 				anyPred->pred->get_range(begin, end);
 				if (begin.present() || end.present()) {
-					Optional<std::string> beginKey =
-					    begin.present() ? begin.get().encode_key_part() : Optional<std::string>();
-					Optional<std::string> endKey =
-					    end.present() ? end.get().encode_key_part() : Optional<std::string>();
+					Optional<Key> beginKey = begin.present() ? begin.get().encode_key_part() : Optional<Key>();
+					Optional<Key> endKey = end.present() ? end.get().encode_key_part() : Optional<Key>();
 					if (anyPred->pred->range_is_tight()) {
 						return ref(new IndexScanPlan(cx, oIndex.get(), beginKey, endKey, {indexKey}));
 					} else {
@@ -206,22 +198,22 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 				Optional<DataValue> beginSuffix, endSuffix;
 				anyPred->pred->get_range(beginSuffix, endSuffix);
 				if (beginSuffix.present() || endSuffix.present()) {
-					Standalone<StringRef> beginKeySuffix =
+					Key beginKeySuffix =
 					    beginSuffix.present() ? beginSuffix.get().encode_key_part() : LiteralStringRef("\x00");
-					Standalone<StringRef> endKeySuffix =
+					Key endKeySuffix =
 					    endSuffix.present() ? endSuffix.get().encode_key_part() : LiteralStringRef("\xff");
 					std::vector<std::string> newPrefix(matchedPrefix);
 					newPrefix.push_back(anyPred->expr->get_index_key());
 					if (anyPred->pred->range_is_tight()) {
 						return ref(new IndexScanPlan(
-						    cx, oIndex.get(), begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						    end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix));
+						    cx, oIndex.get(), begin.present() ? begin.get().withSuffix(beginKeySuffix) : begin,
+						    end.present() ? end.get().withSuffix(endKeySuffix) : end, newPrefix));
 					} else {
 						return FilterPlan::construct_filter_plan(
 						    cx,
 						    ref(new IndexScanPlan(cx, oIndex.get(),
-						                          begin.present() ? strAppend(begin.get(), beginKeySuffix) : begin,
-						                          end.present() ? strAppend(end.get(), endKeySuffix) : end, newPrefix)),
+						                          begin.present() ? begin.get().withSuffix(beginKeySuffix) : begin,
+						                          end.present() ? end.get().withSuffix(endKeySuffix) : end, newPrefix)),
 						    query);
 					}
 				}
@@ -361,12 +353,12 @@ ACTOR static Future<bool> simpleWouldBeLast(Reference<ScanReturnedContext> doc,
 	if (old_values.size() == 1)
 		return true;
 	else {
-		std::vector<std::string> old_key_parts;
+		std::vector<Standalone<StringRef>> old_key_parts;
 		old_key_parts.reserve(old_values.size());
-		for (auto dv : old_values)
+		for (const auto& dv : old_values)
 			old_key_parts.push_back(dv.encode_key_part());
 		std::sort(old_key_parts.begin(), old_key_parts.end());
-		std::string last;
+		Standalone<StringRef> last;
 		for (auto s = old_key_parts.rbegin(); !(s == old_key_parts.rend()); ++s) {
 			if (*s < indexUpperBound) {
 				last = *s;
@@ -402,7 +394,7 @@ ACTOR static Future<bool> compoundWouldBeLast(Reference<ScanReturnedContext> doc
 		for (cartesian_product_iterator<DataValue, std::vector<DataValue>::iterator> vv(old_values); vv; ++vv) {
 			std::string buildingKey;
 			for (int i = 0; i < vv.size(); i++)
-				buildingKey.append(vv[i].encode_key_part());
+				buildingKey.append(vv[i].encode_key_part().toString());
 			old_key_parts.push_back(buildingKey);
 		}
 		std::sort(old_key_parts.begin(), old_key_parts.end());
@@ -509,7 +501,7 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
                                            int scanID) {
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 	try {
-		state std::string x(begin.encode_key_part());
+		state Standalone<StringRef> x = begin.encode_key_part();
 		FDB::KeyRangeRef scanBounds = checkpoint->getBounds(scanID);
 		if (x >= scanBounds.begin && x < scanBounds.end) {
 			Optional<DataValue> odv = wait(cx->cx->get(x));
@@ -591,8 +583,7 @@ FutureStream<Reference<ScanReturnedContext>> PrimaryKeyLookupPlan::execute(PlanC
 	}
 }
 
-ACTOR static Future<Void> doUnion(PlanCheckpoint* checkpoint,
-                                  FutureStream<Reference<ScanReturnedContext>> a,
+ACTOR static Future<Void> doUnion(FutureStream<Reference<ScanReturnedContext>> a,
                                   FutureStream<Reference<ScanReturnedContext>> b,
                                   PromiseStream<Reference<ScanReturnedContext>> output) {
 	state Future<Reference<ScanReturnedContext>> aFuture = waitAndForward(a);
@@ -643,8 +634,7 @@ ACTOR static Future<Void> doUnion(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> UnionPlan::execute(PlanCheckpoint* checkpoint,
                                                                 Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> output;
-	checkpoint->addOperation(
-	    doUnion(checkpoint, plan1->execute(checkpoint, tr), plan2->execute(checkpoint, tr), output), output);
+	checkpoint->addOperation(doUnion(plan1->execute(checkpoint, tr), plan2->execute(checkpoint, tr), output), output);
 	return output.getFuture();
 }
 
@@ -1047,8 +1037,7 @@ FutureStream<Reference<ScanReturnedContext>> ProjectionPlan::execute(PlanCheckpo
 	return docs.getFuture();
 }
 
-ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
-                                         FutureStream<Reference<ScanReturnedContext>> input,
+ACTOR static Future<Void> doFlushChanges(FutureStream<Reference<ScanReturnedContext>> input,
                                          PromiseStream<Reference<ScanReturnedContext>> output) {
 	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
 	try {
@@ -1089,7 +1078,7 @@ ACTOR static Future<Void> doFlushChanges(PlanCheckpoint* checkpoint,
 FutureStream<Reference<ScanReturnedContext>> FlushChangesPlan::execute(PlanCheckpoint* checkpoint,
                                                                        Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> docs;
-	checkpoint->addOperation(doFlushChanges(checkpoint, subPlan->execute(checkpoint, tr), docs), docs);
+	checkpoint->addOperation(doFlushChanges(subPlan->execute(checkpoint, tr), docs), docs);
 	return docs.getFuture();
 }
 
@@ -1620,7 +1609,7 @@ FutureStream<Reference<ScanReturnedContext>> UpdateIndexStatusPlan::execute(Plan
 ACTOR static Future<Void> buildIndexEntry(Reference<ScanReturnedContext> doc, Reference<IndexInfo> index) {
 	// This is sufficient even for compound indexes, because we have one index entry per document, so
 	// dirtying one of the indexed fields causes the plugin to rewrite the entry.
-	state Standalone<StringRef> index_key = StringRef(encodeMaybeDotted(index->indexKeys[0].first));
+	state Standalone<StringRef> index_key = encodeMaybeDotted(index->indexKeys[0].first);
 	Optional<DataValue> odv = wait(doc->get(index_key));
 
 	// Don't need to worry about objects or arrays, because even if
@@ -1756,7 +1745,7 @@ FutureStream<Reference<ScanReturnedContext>> BuildIndexPlan::execute(PlanCheckpo
 }
 
 bool BuildIndexPlan::wasMetadataChangeOkay(Reference<UnboundCollectionContext> newCx) {
-	for (Reference<IndexInfo> i : newCx->knownIndexes) {
+	for (const Reference<IndexInfo>& i : newCx->knownIndexes) {
 		if (i->indexName == index->indexName && i->status == IndexInfo::IndexStatus::BUILDING &&
 		    i->buildId.get() == index->buildId.get())
 			return scan->wasMetadataChangeOkay(newCx);
