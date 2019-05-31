@@ -31,11 +31,12 @@ struct Cursor : ReferenceCounted<Cursor>, NonCopyable {
 	Reference<PlanCheckpoint> checkpoint;
 	int64_t id;
 	int32_t returned;
+	int32_t limit;
 	std::map<int64_t, Reference<Cursor>>* siblings;
 	time_t expiry;
 
-	Cursor(FutureStream<Reference<ScanReturnedContext>> docs, Reference<PlanCheckpoint> checkpoint)
-	    : docs(docs), checkpoint(checkpoint), returned(0) {
+	Cursor(FutureStream<Reference<ScanReturnedContext>> docs, Reference<PlanCheckpoint> checkpoint, int32_t limit = 0)
+	    : docs(docs), checkpoint(checkpoint), returned(0), limit(limit) {
 		id = g_random->randomInt64(INT64_MIN, INT64_MAX);
 		expiry = time(nullptr) + DOCLAYER_KNOBS->CURSOR_EXPIRY;
 		siblings = nullptr;

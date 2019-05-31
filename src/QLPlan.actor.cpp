@@ -1957,3 +1957,9 @@ std::string PlanCheckpoint::toString() {
 	}
 	return s;
 }
+
+Reference<Plan> planProjection(Reference<Plan> plan,
+                               bson::BSONObj const& selector,
+                               Optional<bson::BSONObj> const& ordering) {
+	return Reference<Plan>(new ProjectionPlan(parseProjection(selector), plan, ordering));
+}

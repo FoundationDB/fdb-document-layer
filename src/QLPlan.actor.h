@@ -707,5 +707,8 @@ ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCom
 
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit);
 Reference<Plan> flushChanges(Reference<Plan> subPlan);
+Reference<Plan> planProjection(Reference<Plan> plan,
+                               bson::BSONObj const& selector,
+                               Optional<bson::BSONObj> const& ordering);
 
 #endif /* _QL_PLAN_ACTOR_H_ */

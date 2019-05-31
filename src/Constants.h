@@ -58,6 +58,26 @@ extern const char* METADATA_VERSION_FIELD;
 extern const char* NS_FIELD;
 extern const char* QUERY_FIELD;
 extern const char* CURRENTLY_PROCESSING_DOC_FIELD;
+extern const char* GET_MORE_CMD_BATCH_SIZE_FIELD;
+extern const char* GET_MORE_CMD_CURSOR_ID_FIELD;
+extern const char* GET_MORE_CMD_CURSOR_COLLECTION_FIELD;
+extern const char* FIND_CMD_FIND_FIELD;
+extern const char* FIND_CMD_FILTER_FIELD;
+extern const char* FIND_CMD_SORT_FIELD;
+extern const char* FIND_CMD_PROJECTION_FIELD;
+extern const char* FIND_CMD_HINT_FIELD;
+extern const char* FIND_CMD_SKIP_FIELD;
+extern const char* FIND_CMD_LIMIT_FIELD;
+extern const char* FIND_CMD_BATCH_SIZE_FIELD;
+extern const char* FIND_CMD_MAX_TIME_MS_FIELD;
+extern const char* FIND_CMD_REPLY_CURSOR_FIELD;
+extern const char* FIND_CMD_REPLY_CURSOR_ID_FIELD;
+extern const char* FIND_CMD_REPLY_CURSOR_NS_FIELD;
+extern const char* FIND_CMD_REPLY_CURSOR_FIRST_BATCH_FIELD;
+extern const char* FIND_CMD_REPLY_CURSOR_NEXT_BATCH_FIELD;
+extern const char* KILL_CURSORS_CMD_KILL_CURSORS_FIELD;
+extern const char* KILL_CURSORS_CMD_CURSORS_FIELD;
+extern const char* EXPLAIN_CMD_FIELD;
 
 // Mongo Operators
 extern const std::string RENAME;
