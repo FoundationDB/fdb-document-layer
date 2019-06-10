@@ -395,7 +395,7 @@ ACTOR Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 		    // clang-format off
 		    BSON("ok" << 1 <<
 			     DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIELD << BSON(
-					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (cursorKilled ? 0 : cursor->id) <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (long long)(cursorKilled ? 0 : cursor->id) <<
 					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NS_FIELD << ns.first + "." + ns.second <<
 					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIRST_BATCH_FIELD << repliedDocs.arr()
 					 )));
@@ -405,7 +405,7 @@ ACTOR Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 		    // clang-format off
 		    BSON("ok" << 1 <<
 			     DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIELD << BSON(
-					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (cursorKilled ? 0 : cursor->id) <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (long long)(cursorKilled ? 0 : cursor->id) <<
 					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NS_FIELD << ns.first + "." + ns.second <<
 					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NEXT_BATCH_FIELD << repliedDocs.arr()
 					 )));
