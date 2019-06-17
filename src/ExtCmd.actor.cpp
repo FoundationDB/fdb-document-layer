@@ -919,6 +919,246 @@ struct AvailableQueryOptionsCmd {
 };
 REGISTER_CMD(AvailableQueryOptionsCmd, "availablequeryoptions");
 
+ACTOR static Future<Reference<ExtMsgReply>> doGetMore(Reference<ExtMsgReply> reply,
+                                                      Reference<ExtConnection> ec,
+                                                      Namespace ns,
+                                                      int64_t cursorID,
+                                                      int32_t batchSize = 101) {
+	state Reference<Cursor> cursor = ec->cursors[cursorID];
+
+	if (cursor) {
+		try {
+			int32_t returned =
+			    wait(addDocumentsFromCursor(cursor, reply, ns, batchSize, AddDocsFromCursorCaller::GET_MORE_CMD));
+			reply->replyHeader.startingFrom = cursor->returned - returned;
+			reply->addResponseFlag(8 /*0b1000*/);
+			cursor->refresh();
+		} catch (Error& e) {
+			reply->setError(e);
+		}
+	} else {
+		reply->addDocument(BSON("ok" << 0 << "errmsg"
+		                             << "CursorNotFound"
+		                             << "code" << 43));
+		reply->addResponseFlag(0 /*0b0000*/); // set flag to 0 indicating cursor does not exist
+	}
+	return reply;
+}
+
+struct GetMoreCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
+	                                           Reference<ExtMsgQuery> query,
+	                                           Reference<ExtMsgReply> reply) {
+		if (!query->query.getField(DocLayerConstants::GET_MORE_CMD_CURSOR_ID_FIELD).isNumber() ||
+		    !query->query.getField(DocLayerConstants::GET_MORE_CMD_CURSOR_COLLECTION_FIELD).isString()) {
+			TraceEvent(SevWarn, "WireBadGetMoreCmd").detail("query", query->query.toString()).suppressFor(1.0);
+			throw wire_protocol_mismatch();
+		}
+
+		Namespace ns = std::make_pair(
+		    query->ns.first, query->query.getField(DocLayerConstants::GET_MORE_CMD_CURSOR_COLLECTION_FIELD).str());
+
+		bson::BSONElement batchSizeField = query->query.getField(DocLayerConstants::GET_MORE_CMD_BATCH_SIZE_FIELD);
+		int64_t cursorID = query->query.getField(DocLayerConstants::GET_MORE_CMD_CURSOR_ID_FIELD).numberLong();
+		return doGetMore(reply, nmc, query->ns, cursorID, batchSizeField.isNumber() ? batchSizeField.numberInt() : 101);
+	}
+};
+
+REGISTER_CMD(GetMoreCmd, "getmore");
+
+ACTOR static Future<Reference<ExtMsgReply>> doExplain(
+    Reference<ExtConnection> ec,
+    Reference<ExtMsgReply> reply,
+    Namespace ns,
+    bson::BSONObj filter,
+    bson::BSONObj projection,
+    Optional<bson::BSONObj> ordering = Optional<bson::BSONObj>(),
+    int32_t limit = 0, // hard limit on how many a cursor can return before got closed
+    int32_t skip = 0,
+    int32_t batchSize = 101, // how many docs to return in first batch
+    Optional<int64_t> maxTimeMS = Optional<int64_t>(), // TODO make use of maxTimeMS
+    Optional<bson::BSONObj> hint = Optional<bson::BSONObj>() // TODO make use of hint
+) {
+	try {
+		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
+		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, true));
+		state Reference<Cursor> cursor;
+
+		state Reference<Plan> plan = planQuery(cx, filter);
+		if (!ordering.present() && skip > 0)
+			plan = ref(new SkipPlan(skip, plan));
+		plan = planProjection(plan, projection, ordering);
+		plan = ec->wrapOperationPlan(plan, true, cx);
+		if (ordering.present()) {
+			plan = ref(new SortPlan(plan, ordering.get()));
+			if (skip > 0)
+				plan = ref(new SkipPlan(skip, plan));
+		}
+		reply->addDocument(BSON("ok" << 1 << "explanation" << plan->describe()));
+	} catch (Error& e) {
+		if (e.code() != error_code_end_of_stream) {
+			reply->setError(e.what(), e.code());
+		}
+	}
+	return reply;
+}
+
+struct ExplainCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
+	                                           Reference<ExtMsgQuery> msg,
+	                                           Reference<ExtMsgReply> reply) {
+		bson::BSONElement explainField = msg->query.getField(DocLayerConstants::EXPLAIN_CMD_FIELD);
+		if (!explainField.isABSONObj() ||
+		    !explainField.embeddedObject().getField(DocLayerConstants::FIND_CMD_FIND_FIELD).isString()) {
+			throw wire_protocol_mismatch();
+		}
+
+		bson::BSONObj explainObj = explainField.embeddedObject();
+
+		Namespace ns = std::make_pair(msg->ns.first, explainObj.getStringField(DocLayerConstants::FIND_CMD_FIND_FIELD));
+
+		bson::BSONElement filterField = explainObj.getField(DocLayerConstants::FIND_CMD_FILTER_FIELD);
+		bson::BSONElement projectionField = explainObj.getField(DocLayerConstants::FIND_CMD_PROJECTION_FIELD);
+		bson::BSONElement orderingField = explainObj.getField(DocLayerConstants::FIND_CMD_SORT_FIELD);
+		bson::BSONElement limitField = explainObj.getField(DocLayerConstants::FIND_CMD_LIMIT_FIELD);
+		bson::BSONElement skipField = explainObj.getField(DocLayerConstants::FIND_CMD_SKIP_FIELD);
+		bson::BSONElement batchSizeField = explainObj.getField(DocLayerConstants::FIND_CMD_BATCH_SIZE_FIELD);
+		bson::BSONElement maxTimeMSField = explainObj.getField(DocLayerConstants::FIND_CMD_MAX_TIME_MS_FIELD);
+		bson::BSONElement hintField = explainObj.getField(DocLayerConstants::FIND_CMD_HINT_FIELD);
+
+		return doExplain(
+		    nmc, reply, ns, filterField.isABSONObj() ? filterField.embeddedObject() : bson::BSONObj(),
+		    projectionField.isABSONObj() ? projectionField.embeddedObject() : bson::BSONObj(),
+		    orderingField.isABSONObj() ? Optional<bson::BSONObj>(orderingField.embeddedObject())
+		                               : Optional<bson::BSONObj>(),
+		    limitField.isNumber() ? limitField.numberInt() : 0, skipField.isNumber() ? skipField.numberInt() : 0,
+		    batchSizeField.isNumber() ? batchSizeField.numberInt() : 101,
+		    maxTimeMSField.isNumber() ? Optional<int64_t>(maxTimeMSField.numberLong()) : Optional<int64_t>(),
+		    hintField.isABSONObj() ? Optional<bson::BSONObj>(hintField.embeddedObject()) : Optional<bson::BSONObj>());
+	}
+};
+
+REGISTER_CMD(ExplainCmd, "explain");
+
+ACTOR static Future<Reference<ExtMsgReply>> doFind(
+    Reference<ExtConnection> ec,
+    Reference<ExtMsgReply> reply,
+    Namespace ns,
+    bson::BSONObj filter,
+    bson::BSONObj projection,
+    Optional<bson::BSONObj> ordering = Optional<bson::BSONObj>(),
+    int32_t limit = 0, // hard limit on how many a cursor can return before got closed
+    int32_t skip = 0,
+    int32_t batchSize = 101, // how many docs to return in first batch
+    Optional<int64_t> maxTimeMS = Optional<int64_t>(), // TODO make use of maxTimeMS
+    Optional<bson::BSONObj> hint = Optional<bson::BSONObj>() // TODO make use of hint
+) {
+	try {
+		state Reference<DocTransaction> dtr = ec->getOperationTransaction();
+		state Reference<UnboundCollectionContext> cx = wait(ec->mm->getUnboundCollectionContext(dtr, ns, true));
+		state Reference<Cursor> cursor;
+
+		state Reference<Plan> plan = planQuery(cx, filter);
+		if (!ordering.present() && skip > 0)
+			plan = ref(new SkipPlan(skip, plan));
+		plan = planProjection(plan, projection, ordering);
+		plan = ec->wrapOperationPlan(plan, true, cx);
+		if (ordering.present()) {
+			plan = ref(new SortPlan(plan, ordering.get()));
+			if (skip > 0)
+				plan = ref(new SkipPlan(skip, plan));
+		}
+		// TODO remove the $explain operator handling here since it should have been deprecated in this command from 3.2
+		if (filter.hasField("$explain")) {
+			reply->addDocument(BSON("explanation" << plan->describe()));
+			return reply;
+		}
+
+		Reference<PlanCheckpoint> outerCheckpoint(new PlanCheckpoint);
+
+		// Add a new cursor to the server's cursor collection
+		cursor = Cursor::add(ec->cursors, Reference<Cursor>(new Cursor(plan->execute(outerCheckpoint.getPtr(), dtr),
+		                                                               outerCheckpoint, limit)));
+		int32_t returned =
+		    wait(addDocumentsFromCursor(cursor, reply, ns, batchSize, AddDocsFromCursorCaller::FIND_CMD));
+	} catch (Error& e) {
+		if (e.code() != error_code_end_of_stream) {
+			reply->setError(e.what(), e.code());
+		}
+	}
+	return reply;
+}
+
+struct FindCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
+	                                           Reference<ExtMsgQuery> msg,
+	                                           Reference<ExtMsgReply> reply) {
+		bson::BSONElement findField = msg->query.getField(DocLayerConstants::FIND_CMD_FIND_FIELD);
+		if (!findField.isString()) {
+			throw wire_protocol_mismatch();
+		}
+
+		Namespace ns = std::make_pair(msg->ns.first, findField.str());
+
+		bson::BSONElement filterField = msg->query.getField(DocLayerConstants::FIND_CMD_FILTER_FIELD);
+		bson::BSONElement projectionField = msg->query.getField(DocLayerConstants::FIND_CMD_PROJECTION_FIELD);
+		bson::BSONElement orderingField = msg->query.getField(DocLayerConstants::FIND_CMD_SORT_FIELD);
+		bson::BSONElement limitField = msg->query.getField(DocLayerConstants::FIND_CMD_LIMIT_FIELD);
+		bson::BSONElement skipField = msg->query.getField(DocLayerConstants::FIND_CMD_SKIP_FIELD);
+		bson::BSONElement batchSizeField = msg->query.getField(DocLayerConstants::FIND_CMD_BATCH_SIZE_FIELD);
+		bson::BSONElement maxTimeMSField = msg->query.getField(DocLayerConstants::FIND_CMD_MAX_TIME_MS_FIELD);
+		bson::BSONElement hintField = msg->query.getField(DocLayerConstants::FIND_CMD_HINT_FIELD);
+
+		return doFind(
+		    ec, reply, ns, filterField.isABSONObj() ? filterField.embeddedObject() : bson::BSONObj(),
+		    projectionField.isABSONObj() ? projectionField.embeddedObject() : bson::BSONObj(),
+		    orderingField.isABSONObj() ? Optional<bson::BSONObj>(orderingField.embeddedObject())
+		                               : Optional<bson::BSONObj>(),
+		    limitField.isNumber() ? limitField.numberInt() : 0, skipField.isNumber() ? skipField.numberInt() : 0,
+		    batchSizeField.isNumber() ? batchSizeField.numberInt() : 101,
+		    maxTimeMSField.isNumber() ? Optional<int64_t>(maxTimeMSField.numberLong()) : Optional<int64_t>(),
+		    hintField.isABSONObj() ? Optional<bson::BSONObj>(hintField.embeddedObject()) : Optional<bson::BSONObj>());
+	}
+};
+
+REGISTER_CMD(FindCmd, "find");
+
+static Future<Reference<ExtMsgReply>> doKillCursors(Reference<ExtConnection> ec,
+                                                    Reference<ExtMsgReply> reply,
+                                                    bson::BSONArray cursorIds) {
+	for (bson::BSONObj::iterator i = cursorIds.begin(); i.more();) {
+		bson::BSONElement cursorId = i.next();
+		if (!cursorId.isNumber()) {
+			throw wire_protocol_mismatch();
+		}
+		Cursor::pluck(ec->cursors[cursorId.numberLong()]);
+	}
+	reply->addDocument(BSON("ok" << 1));
+	return reply;
+}
+
+struct KillCursorsCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
+	                                           Reference<ExtMsgQuery> msg,
+	                                           Reference<ExtMsgReply> reply) {
+		bson::BSONElement killCursors = msg->query.getField(DocLayerConstants::KILL_CURSORS_CMD_KILL_CURSORS_FIELD);
+		if (!killCursors.isString()) {
+			throw wire_protocol_mismatch();
+		}
+		bson::BSONElement cursorsField = msg->query.getField(DocLayerConstants::KILL_CURSORS_CMD_CURSORS_FIELD);
+		if (cursorsField.type() != bson::BSONType::Array) {
+			throw wire_protocol_mismatch();
+		}
+		return doKillCursors(ec, reply, bson::BSONArray(cursorsField.Obj()));
+	}
+};
+
+REGISTER_CMD(KillCursorsCmd, "killcursors");
+
 struct GetMemoryUsageCmd {
 	static const char* name;
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,

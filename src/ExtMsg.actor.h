@@ -255,6 +255,13 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
                                          std::vector<ExtUpdateCmd>* updateCmds,
                                          Reference<ExtConnection> ec);
 
+enum class AddDocsFromCursorCaller { QUERY, FIND_CMD, GET_MORE_CMD };
+ACTOR Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
+                                             Reference<ExtMsgReply> reply,
+                                             Namespace ns,
+                                             int32_t numberToReturn,
+                                             AddDocsFromCursorCaller from = AddDocsFromCursorCaller::QUERY);
+
 // FIXME: these don't really belong here either
 Reference<IUpdateOp> operatorUpdate(bson::BSONObj const& msgUpdate);
 Reference<IUpdateOp> replaceUpdate(bson::BSONObj const& replaceWith);

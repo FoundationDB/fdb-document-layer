@@ -1504,7 +1504,7 @@ ACTOR static Future<Void> doSort(PlanCheckpoint* outerCheckpoint,
 			if (e.code() == error_code_end_of_stream) {
 				break;
 			}
-			TraceEvent(SevError, "BD_runQuery2").error(e);
+			TraceEvent(SevError, "BD_doSort_collecting").error(e);
 			throw;
 		}
 	}
@@ -1523,7 +1523,7 @@ ACTOR static Future<Void> doSort(PlanCheckpoint* outerCheckpoint,
 			    ref(new BsonContext(returnProjections[i].getObjectField("doc").getOwned(), false)), -1, Key())));
 		}
 	} catch (Error& e) {
-		TraceEvent(SevError, "BD_runQuery2").error(e);
+		TraceEvent(SevError, "BD_doSort_returning").error(e);
 		throw;
 	}
 	innerCheckpoint->stop();
@@ -1956,4 +1956,10 @@ std::string PlanCheckpoint::toString() {
 		s.append(format("\t scan %d end:   %s\n", i, printable(scans[i].bounds.end).c_str()));
 	}
 	return s;
+}
+
+Reference<Plan> planProjection(Reference<Plan> plan,
+                               bson::BSONObj const& selector,
+                               Optional<bson::BSONObj> const& ordering) {
+	return Reference<Plan>(new ProjectionPlan(parseProjection(selector), plan, ordering));
 }

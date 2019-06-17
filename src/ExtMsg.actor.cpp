@@ -188,12 +188,6 @@ Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, bson::BSONObj 
 	return plan;
 }
 
-Reference<Plan> planProjection(Reference<Plan> plan,
-                               bson::BSONObj const& selector,
-                               Optional<bson::BSONObj> const& ordering) {
-	return Reference<Plan>(new ProjectionPlan(parseProjection(selector), plan, ordering));
-}
-
 ExtMsgQuery::ExtMsgQuery(ExtMsgHeader* header, const uint8_t* body) : header(header) {
 	const uint8_t* ptr = body;
 	const uint8_t* eom = (uint8_t*)header + header->messageLength;
@@ -332,14 +326,19 @@ ACTOR static Future<Reference<ExtMsgReply>> listCollections(Reference<ExtMsgQuer
 	return reply;
 }
 
-ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
-                                                    Reference<ExtMsgReply> reply,
-                                                    int32_t numberToReturn) {
+ACTOR Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
+                                             Reference<ExtMsgReply> reply,
+                                             Namespace ns,
+                                             int32_t numberToReturn,
+                                             AddDocsFromCursorCaller from) {
 	state int32_t returned = 0;
 	state int32_t returnedSize = 0;
 	state bool stop = false;
+	state bool cursorKilled = false;
 
 	state int32_t remaining = std::abs(numberToReturn);
+
+	state bson::BSONArrayBuilder repliedDocs;
 
 	while (!numberToReturn || remaining) {
 		try {
@@ -353,12 +352,19 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 				// that doc is wrapping a BsonContext, which means toDataValue() is synchronous.
 				bson::BSONObj obj = doc->toDataValue().get().getPackedObject().getOwned();
 				cursor->checkpoint->getDocumentFinishedLock()->release();
-				reply->addDocument(obj);
+				if (from == AddDocsFromCursorCaller::QUERY) {
+					reply->addDocument(obj);
+				} else {
+					repliedDocs << obj;
+				}
 
 				remaining--;
 				returned++;
-				cursor->returned++;
 				returnedSize += obj.objsize();
+				cursor->returned++;
+				if (cursor->returned == cursor->limit) {
+					throw end_of_stream();
+				}
 			} else {
 				throw success();
 			}
@@ -371,16 +377,40 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 				stop = false;
 				break;
 			}
-			TraceEvent(SevError, "BD_runQuery2").error(e);
+			TraceEvent(SevError, "BD_addDocumentsFromCursor").error(e);
 			throw;
 		}
 	}
 
 	// Reply with cursorID if requested or remove the cursor
-	if (numberToReturn >= 0 && !stop)
+	if (numberToReturn >= 0 && !stop) {
 		reply->replyHeader.cursorID = cursor->id;
-	else
+	} else {
+		cursorKilled = true;
 		Cursor::pluck(cursor);
+	}
+
+	if (from == AddDocsFromCursorCaller::FIND_CMD) {
+		reply->addDocument(
+		    // clang-format off
+		    BSON("ok" << 1 <<
+			     DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIELD << BSON(
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (long long)(cursorKilled ? 0 : cursor->id) <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NS_FIELD << ns.first + "." + ns.second <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIRST_BATCH_FIELD << repliedDocs.arr()
+					 )));
+		// clang-format on
+	} else if (from == AddDocsFromCursorCaller::GET_MORE_CMD) {
+		reply->addDocument(
+		    // clang-format off
+		    BSON("ok" << 1 <<
+			     DocLayerConstants::FIND_CMD_REPLY_CURSOR_FIELD << BSON(
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_ID_FIELD << (long long)(cursorKilled ? 0 : cursor->id) <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NS_FIELD << ns.first + "." + ns.second <<
+					 DocLayerConstants::FIND_CMD_REPLY_CURSOR_NEXT_BATCH_FIELD << repliedDocs.arr()
+					 )));
+		// clang-format on
+	}
 
 	return returned;
 }
@@ -461,7 +491,7 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 			if (toReturn == 1)
 				toReturn = -1;
 
-			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, toReturn));
+			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, msg->ns, toReturn));
 			reply->addResponseFlag(8 /*0b1000*/);
 
 			// If no replies sent yet OR results were placed in reply, send them.
@@ -1176,7 +1206,7 @@ ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Referen
 
 	if (cursor) {
 		try {
-			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, getMore->numberToReturn));
+			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, getMore->ns, getMore->numberToReturn));
 			reply->replyHeader.startingFrom = cursor->returned - returned;
 			reply->addResponseFlag(8 /*0b1000*/);
 			cursor->refresh();
@@ -1191,6 +1221,7 @@ ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Referen
 	return Void();
 }
 
+// OP_GET_MORE is deprecated after 3.2 in favor of the new command 'getMore'
 Future<Void> ExtMsgGetMore::run(Reference<ExtConnection> ec) {
 	return doGetMoreRun(Reference<ExtMsgGetMore>::addRef(this), ec);
 }
