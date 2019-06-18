@@ -371,7 +371,7 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 				stop = false;
 				break;
 			}
-			TraceEvent(SevError, "BD_runQuery2").error(e);
+			TraceEvent(SevError, "BD_addDocumentsFromCursor").error(e);
 			throw;
 		}
 	}
