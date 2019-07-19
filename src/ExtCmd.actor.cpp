@@ -425,13 +425,15 @@ ACTOR static Future<Void> Internal_doRenameCollection(Reference<DocTransaction> 
 	state std::string sourceCollection = getLastPart(query->ns.second);
 	state std::string destinationCollection = getLastPart(query->query.getStringField("to"));
 	state bool dropTarget = query->query.getBoolField("dropTarget");
-	state bool exists_destinationCollection =
-	    wait(ec->docLayer->rootDirectory->exists(tr->tr, {StringRef(ns.first), StringRef(destinationCollection)}));
-	state bool exists_sourceCollection =
-	    wait(ec->docLayer->rootDirectory->exists(tr->tr, {StringRef(ns.first), StringRef(sourceCollection)}));
 
-	if (exists_sourceCollection) {
-		if (exists_destinationCollection) {
+	state Future<bool> exists_destinationCollectionF =
+	    ec->docLayer->rootDirectory->exists(tr->tr, {StringRef(ns.first), StringRef(destinationCollection)});
+	state Future<bool> exists_sourceCollectionF =
+	    ec->docLayer->rootDirectory->exists(tr->tr, {StringRef(ns.first), StringRef(sourceCollection)});
+	wait(success(exists_destinationCollectionF) && success(exists_sourceCollectionF));
+
+	if (exists_sourceCollectionF.get()) {
+		if (exists_destinationCollectionF.get()) {
 			if (dropTarget) {
 				ns.second = destinationCollection;
 				state Reference<UnboundCollectionContext> unbound = wait(ec->mm->getUnboundCollectionContext(tr, ns));
@@ -439,7 +441,10 @@ ACTOR static Future<Void> Internal_doRenameCollection(Reference<DocTransaction> 
 				wait(unbound->collectionDirectory->remove(tr->tr));
 			}
 		}
+	} else {
+		throw directory_does_not_exist();
 	}
+
 	Reference<DirectorySubspace> Collection =
 	    wait(ec->docLayer->rootDirectory->move(tr->tr, {StringRef(ns.first), StringRef(sourceCollection)},
 	                                           {StringRef(ns.first), StringRef(destinationCollection)}));
