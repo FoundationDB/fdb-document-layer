@@ -404,7 +404,77 @@ struct DropCollectionCmd {
 		return doDropCollection(ec, query, reply);
 	}
 };
-REGISTER_CMD(DropCollectionCmd, "drop");
+REGISTER_CMD(DropCollectionCmd, "drop"); 
+ 
+ACTOR static Future<int> internal_doRenameCollectionIndexesActor(Reference<DocTransaction> tr, 
+                                                     Namespace ns, 
+                                                     Reference<MetadataManager> mm) { 
+    state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, ns)); 
+    unbound->bindCollectionContext(tr)->bumpMetadataVersion(); 
+    TraceEvent(SevInfo, "BumpMetadataVersion") 
+        .detail("reason", "renameCollection") 
+        .detail("ns", fullCollNameToString(ns)); 
+    return true; 
+} 
+ 
+ACTOR static Future<Void> Internal_doRenameCollection(Reference<DocTransaction> tr, 
+                                                    Reference<ExtMsgQuery> query, 
+                                                    Reference<ExtConnection> ec) { 
+    state Namespace ns; 
+    ns.first = upOneLevel(query->ns.second); 
+    state std::string sourceCollection = getLastPart(query->ns.second); 
+    state std::string destinationCollection = getLastPart(query->query.getStringField("to")); 
+    state bool dropTarget = query->query.getBoolField("dropTarget"); 
+    state bool exists_destinationCollection = wait(ec->docLayer->rootDirectory->exists(tr->tr, 
+                            {StringRef(ns.first), StringRef(destinationCollection)})); 
+    state bool exists_sourceCollection = wait(ec->docLayer->rootDirectory->exists(tr->tr, 
+                            {StringRef(ns.first), StringRef(sourceCollection)})); 
+ 
+    if(exists_sourceCollection) { 
+        if(exists_destinationCollection) { 
+            if(dropTarget) { 
+                ns.second = destinationCollection; 
+                state Reference<UnboundCollectionContext> unbound = wait(ec->mm->getUnboundCollectionContext(tr, ns)); 
+                wait(success(internal_doDropIndexesActor(tr, ns, ec->mm))); 
+                wait(unbound->collectionDirectory->remove(tr->tr)); 
+            } 
+        } 
+    } 
+    Reference<DirectorySubspace> Collection = wait(ec->docLayer->rootDirectory->move(tr->tr, 
+                            {StringRef(ns.first),StringRef(sourceCollection)}, 
+                            {StringRef(ns.first),StringRef(destinationCollection)})); 
+    ns.second = sourceCollection; 
+    wait(success(internal_doRenameCollectionIndexesActor(tr, ns, ec->mm))); 
+    return Void(); 
+} 
+ 
+ACTOR static Future<Reference<ExtMsgReply>> doRenameCollection(Reference<ExtConnection> ec, 
+                                                             Reference<ExtMsgQuery> query, 
+                                                             Reference<ExtMsgReply> reply) { 
+        try { 
+                // No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict with 
+                // anything it needs to conflict with. 
+                wait(runRYWTransaction( 
+                    ec->docLayer->database, 
+                    [=](Reference<DocTransaction> tr) { return Internal_doRenameCollection(tr, query, ec); }, 
+                    ec->options.retryLimit, ec->options.timeoutMillies)); 
+                reply->addDocument(BSON("ok" << 1.0)); 
+                return reply; 
+        } catch (Error& e) { 
+            reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code())); 
+            return reply; 
+        } 
+} 
+ 
+struct RenameCollectionCmd { 
+        static const char* name; 
+        static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec, 
+                                                   Reference<ExtMsgQuery> query, 
+                                                   Reference<ExtMsgReply> reply) { 
+                return doRenameCollection(ec, query, reply); 
+        } 
+}; 
+REGISTER_CMD(RenameCollectionCmd, "renamecollection"); 
 
 ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnection> ec,
                                                            Reference<ExtMsgQuery> query,
