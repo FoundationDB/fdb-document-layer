@@ -406,15 +406,29 @@ struct DropCollectionCmd {
 };
 REGISTER_CMD(DropCollectionCmd, "drop");
 
-ACTOR static Future<int> internal_doRenameCollectionIndexesActor(Reference<DocTransaction> tr,
-                                                                 Namespace ns,
-                                                                 Reference<MetadataManager> mm) {
+ACTOR static Future<Void> internal_doRenameCollectionIndexesActor(Reference<DocTransaction> tr,
+                                                                  Namespace ns,
+                                                                  Reference<MetadataManager> mm,
+                                                                  std::string destinationCollection) {
+	state Reference<UnboundCollectionContext> indexesCollection = wait(mm->indexesCollection(tr, ns.first));
+	state Reference<Plan> indexesPlan = wait(getIndexesForCollectionPlan(ns, tr, mm));
+	state std::vector<bson::BSONObj> indexes = wait(getIndexesTransactionally(indexesPlan, tr));
+	state Reference<QueryContext> matchingIndex;
+
+	for (const auto& indexObj : indexes) {
+		matchingIndex = indexesCollection->bindCollectionContext(tr)->cx->getSubContext(
+		    DataValue(indexObj.getField(DocLayerConstants::ID_FIELD)).encode_key_part());
+		matchingIndex->set(DataValue(DocLayerConstants::NS_FIELD, DVTypeCode::STRING).encode_key_part(),
+		                   DataValue(ns.first + "." + destinationCollection, DVTypeCode::STRING).encode_value());
+		wait(matchingIndex->commitChanges());
+	}
+
 	state Reference<UnboundCollectionContext> unbound = wait(mm->getUnboundCollectionContext(tr, ns));
 	unbound->bindCollectionContext(tr)->bumpMetadataVersion();
 	TraceEvent(SevInfo, "BumpMetadataVersion")
 	    .detail("reason", "renameCollection")
 	    .detail("ns", fullCollNameToString(ns));
-	return true;
+	return Void();
 }
 
 ACTOR static Future<Void> Internal_doRenameCollection(Reference<DocTransaction> tr,
@@ -435,21 +449,25 @@ ACTOR static Future<Void> Internal_doRenameCollection(Reference<DocTransaction> 
 	if (exists_sourceCollectionF.get()) {
 		if (exists_destinationCollectionF.get()) {
 			if (dropTarget) {
+				if (sourceCollection == destinationCollection) {
+					throw old_and_new_collection_name_cannot_be_same();
+				}
 				ns.second = destinationCollection;
 				state Reference<UnboundCollectionContext> unbound = wait(ec->mm->getUnboundCollectionContext(tr, ns));
 				wait(success(internal_doDropIndexesActor(tr, ns, ec->mm)));
 				wait(unbound->collectionDirectory->remove(tr->tr));
+			} else {
+				throw collection_name_already_exist();
 			}
 		}
 	} else {
-		throw directory_does_not_exist();
+		throw collection_name_does_not_exist();
 	}
 
-	Reference<DirectorySubspace> Collection =
-	    wait(ec->docLayer->rootDirectory->move(tr->tr, {StringRef(ns.first), StringRef(sourceCollection)},
-	                                           {StringRef(ns.first), StringRef(destinationCollection)}));
+	wait(success(ec->docLayer->rootDirectory->move(tr->tr, {StringRef(ns.first), StringRef(sourceCollection)},
+	                                               {StringRef(ns.first), StringRef(destinationCollection)})));
 	ns.second = sourceCollection;
-	wait(success(internal_doRenameCollectionIndexesActor(tr, ns, ec->mm)));
+	wait(success(internal_doRenameCollectionIndexesActor(tr, ns, ec->mm, destinationCollection)));
 	return Void();
 }
 

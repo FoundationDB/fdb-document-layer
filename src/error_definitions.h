@@ -85,6 +85,9 @@ DOCLAYER_ERROR(wire_protocol_mismatch, 29966, "Wire protocol mismatch. Bad messa
 DOCLAYER_ERROR(no_index_name, 29967, "No index name specified");
 DOCLAYER_ERROR(unsupported_index_type, 29969, "Document Layer does not support this index type, yet.");
 
+DOCLAYER_ERROR(collection_name_does_not_exist, 29976, "Collection name does not exist.");
+DOCLAYER_ERROR(collection_name_already_exist, 29977, "Collection name already exist.");
+DOCLAYER_ERROR(old_and_new_collection_name_cannot_be_same, 29978, "Old and New collection name cannot be same.");
 DOCLAYER_ERROR(collection_not_found, 29979, "Collection not found.");
 DOCLAYER_ERROR(no_transaction_in_progress, 29980, "No transaction in progress.");
 DOCLAYER_ERROR(no_symbol_type, 29981, "The Document Layer does not support the deprecated BSON `symbol` type.");
