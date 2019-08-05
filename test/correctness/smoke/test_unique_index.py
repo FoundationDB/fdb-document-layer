@@ -39,7 +39,7 @@ def _wrap(func, args, kwargs, expected_failure):
 
 def test_insert_single_field_unique_index(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
     collection.create_index([(random_key, pymongo.ASCENDING)], unique=True)
 
@@ -51,7 +51,7 @@ def test_insert_single_field_unique_index(fixture_collection):
 
 def test_insert_compound_unique_index(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
     random_key_3 = "{}-3".format(random_key)
     collection.create_index([(random_key, pymongo.ASCENDING), (random_key_2, pymongo.ASCENDING)], unique=True)
@@ -66,10 +66,10 @@ def test_insert_compound_unique_index(fixture_collection):
 
 def test_update_single_field_unique_index(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     collection.create_index([(random_key, pymongo.ASCENDING)], unique=True)
-    id1 = random.randint(0, sys.maxint)
-    id2 = random.randint(0, sys.maxint)
+    id1 = random.randint(0, sys.maxsize)
+    id2 = random.randint(0, sys.maxsize)
 
     assert _wrap(collection.insert_one, ({random_key: 1, "_id": id1},), {}, False), "non-duplicated non-null insert failed"
     assert _wrap(collection.insert_one, ({random_key: 2, "_id": id2},), {}, False), "non-duplicated non-null insert failed"
@@ -88,13 +88,13 @@ def test_update_single_field_unique_index(fixture_collection):
 def test_update_compound_unique_index(fixture_collection):
     collection = fixture_collection
 
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
     assert _wrap(collection.create_index, ([(random_key, pymongo.ASCENDING), (random_key_2, pymongo.ASCENDING)],),
                  {'unique': True}, False), "non-duplicated non-null index creation failed"
 
-    id1 = random.randint(0, sys.maxint)
-    id2 = random.randint(0, sys.maxint)
+    id1 = random.randint(0, sys.maxsize)
+    id2 = random.randint(0, sys.maxsize)
     assert _wrap(collection.insert_one, ({
                                          random_key: 1,
                                          random_key_2: 1,
@@ -119,10 +119,10 @@ def test_update_compound_unique_index(fixture_collection):
 
 def test_update_single_field_unique_index_with_same_value(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     collection.create_index([(random_key, pymongo.ASCENDING)], unique=True)
-    id1 = random.randint(0, sys.maxint)
-    id2 = random.randint(0, sys.maxint)
+    id1 = random.randint(0, sys.maxsize)
+    id2 = random.randint(0, sys.maxsize)
     assert _wrap(collection.insert_one, ({
                                          random_key: 1,
                                          "_id": id1
@@ -145,14 +145,14 @@ def test_update_single_field_unique_index_with_same_value(fixture_collection):
 
 def test_update_compound_unique_index_with_same_value(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
 
     assert _wrap(collection.create_index, ([(random_key, pymongo.ASCENDING), (random_key_2, pymongo.ASCENDING)],),
                  {'unique': True}, False), "non-duplicated non-null index creation failed"
 
-    id1 = random.randint(0, sys.maxint)
-    id2 = random.randint(0, sys.maxint)
+    id1 = random.randint(0, sys.maxsize)
+    id2 = random.randint(0, sys.maxsize)
     assert _wrap(collection.insert_one, ({
                                          random_key: 1,
                                          random_key_2: 1,
@@ -177,7 +177,7 @@ def test_update_compound_unique_index_with_same_value(fixture_collection):
 
 def test_create_single_field_unique_index(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
 
     assert _wrap(collection.insert_one, ({
@@ -194,7 +194,7 @@ def test_create_single_field_unique_index(fixture_collection):
 
 def test_create_compound_unique_index(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     random_key_2 = "{}-2".format(random_key)
 
     assert _wrap(collection.insert_one, ({
@@ -211,7 +211,7 @@ def test_create_compound_unique_index(fixture_collection):
 
 def test_unique_index_backgroud_build_request(fixture_collection):
     collection = fixture_collection
-    random_key = "key-{}".format(random.randint(0, sys.maxint))
+    random_key = "key-{}".format(random.randint(0, sys.maxsize))
     try:
         collection.create_index([(random_key, pymongo.ASCENDING)], unique=True, background=True)
         assert False, "did not get the expected error"

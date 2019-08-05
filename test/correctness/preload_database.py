@@ -216,14 +216,14 @@ def preload_database(ns):
             doc["_id"] = str(i)
             docs.append(doc)
         collection.insert(docs, safe=False)
-        print "Inserted " + str(i)
+        print ("Inserted " + str(i))
 
     # collection.insert(docs)
 
     # print [i for i in collection.find()]
-    print "Inserted " + str(ns['number']) + " documents"
-    print "Database: test"
-    print "Collection: " + ('performance' + str(instance)[2:] if ns['collection'] == '' else ns['collection'])
+    print ("Inserted " + str(ns['number']) + " documents")
+    print ("Database: test")
+    print ("Collection: " + ('performance' + str(instance)[2:] if ns['collection'] == '' else ns['collection']))
 
 
 if __name__ == "__main__":

@@ -49,7 +49,7 @@ def get_clients(str1, str2, ns):
         client_dict['mm'] = lambda: MongoModel("MongoDB")
 
     instance_id = str(random.random())[2:] if ns['instance_id'] == 0 else str(ns['instance_id'])
-    print 'Instance: ' + instance_id
+    print ('Instance: ' + instance_id)
 
     client1 = client_dict[str1]()
     client2 = client_dict[str2]()
@@ -141,12 +141,12 @@ def diff_results(cA, rA, cB, rB):
     only_b = b - a
 
     if len(only_a) > 0 or len(only_b) > 0:
-        print "  RESULT SET DIFFERENCES (as 'sets' so order within the returned results is not considered)"
+        print ("  RESULT SET DIFFERENCES (as 'sets' so order within the returned results is not considered)")
     for x in only_a:
-        print "    Only in", cA.__module__, ":", x
+        print ("    Only in", cA.__module__, ":", x)
     for x in only_b:
-        print "    Only in", cB.__module__, ":", x
-    print
+        print ("    Only in", cB.__module__, ":", x)
+    print()
 
 
 zero_resp_queries = 0
@@ -166,7 +166,7 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
     ret1 = get_result(query, collection1, projection, sort, limit, skip, exception_msg)
     ret2 = get_result(query, collection2, projection, sort, limit, skip, exception_msg)
     if len(exception_msg) == 1:
-        print '\033[91m\n', exception_msg[0], '\033[0m'
+        print ('\033[91m\n', exception_msg[0], '\033[0m')
         return False
 
     global total_queries
@@ -187,11 +187,11 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
             assert ret1[i] == ret2[i]
         return True
     except AssertionError:
-        print '\nQuery results didn\'t match at index %d!' % i
-        print 'Query: %r' % query
-        print 'Projection: %r' % projection
-        print '\n  %s' % format_result(collection1, ret1, i)
-        print '  %s\n' % format_result(collection2, ret2, i)
+        print ('\nQuery results didn\'t match at index %d!' % i)
+        print ('Query: %r' % query)
+        print ('Projection: %r' % projection)
+        print ('\n  %s' % format_result(collection1, ret1, i))
+        print ('  %s\n' % format_result(collection2, ret2, i))
 
         diff_results(collection1, ret1, collection2, ret2)
 
@@ -201,12 +201,12 @@ def check_query(query, collection1, collection2, projection=None, sort=None, lim
 
         return False
     except IndexError:
-        print 'Query results didn\'t match!'
-        print 'Query: %r' % query
-        print 'Projection: %r' % projection
+        print ('Query results didn\'t match!')
+        print ('Query: %r' % query)
+        print ('Projection: %r' % projection)
 
-        print '\n  %s' % format_result(collection1, ret1, i)
-        print '  %s\n' % format_result(collection2, ret2, i)
+        print ('\n  %s' % format_result(collection1, ret1, i))
+        print ('  %s\n' % format_result(collection2, ret2, i))
 
         diff_results(collection1, ret1, collection2, ret2)
 
@@ -237,8 +237,8 @@ def test_update(collection1, collection2, verbose=False):
             if verbose:
                 all = [x for x in collection1.find(dict())]
                 for item in collection1.find(update['query']):
-                    print '[{}] Before update doc:{}'.format(type(collection1), item)
-                print 'Before update collection1 size: ', len(all)
+                    print ('[{}] Before update doc:{}'.format(type(collection1), item))
+                print ('Before update collection1 size: ', len(all))
             collection1.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
         except pymongo.errors.OperationFailure as e:
             exceptionOne = e
@@ -248,8 +248,8 @@ def test_update(collection1, collection2, verbose=False):
             if verbose:
                 all = [x for x in collection2.find(dict())]
                 for item in collection2.find(update['query']):
-                    print '[{}]Before update doc:{}'.format(type(collection2), item)
-                print 'Before update collection2 size: ', len(all)
+                    print ('[{}]Before update doc:{}'.format(type(collection2), item))
+                print ('Before update collection2 size: ', len(all))
             collection2.update(update['query'], update['update'], upsert=update['upsert'], multi=update['multi'])
         except pymongo.errors.OperationFailure as e:
             exceptionTwo = e
@@ -265,9 +265,9 @@ def test_update(collection1, collection2, verbose=False):
             # TODO re-enable consistency check when failure happened
             return (True, True)
         else:
-            print 'Unmatched result: '
-            print type(exceptionOne), ': ', str(exceptionOne)
-            print type(exceptionTwo), ': ', str(exceptionTwo)
+            print ('Unmatched result: ')
+            print (type(exceptionOne), ': ', str(exceptionOne))
+            print (type(exceptionTwo), ': ', str(exceptionTwo))
             ignored_exception_check(exceptionOne)
             ignored_exception_check(exceptionTwo)
             return (False, False)
@@ -307,30 +307,30 @@ def one_iteration(collection1, collection2, ns, seed):
             func1(*args1, **kwargs1)
         except pymongo.errors.OperationFailure as e:
             if verbose:
-                print "Failed func1 with " + str(e)
+                print ("Failed func1 with " + str(e))
             exceptionOne = e
         except MongoModelException as e:
             if verbose:
-                print "Failed func1 with " + str(e)
+                print ("Failed func1 with " + str(e))
             exceptionOne = e
         try:
             func2(*args2, **kwargs2)
         except pymongo.errors.OperationFailure as e:
             if verbose:
-                print "Failed func2 with " + str(e)
+                print ("Failed func2 with " + str(e))
             exceptionTwo = e
         except MongoModelException as e:
             if verbose:
-                print "Failed func2 with " + str(e)
+                print ("Failed func2 with " + str(e))
             exceptionTwo = e
 
         if ((exceptionOne is None and exceptionTwo is None)
             or (exceptionOne is not None and exceptionTwo is not None and exceptionOne.code == exceptionTwo.code)):
             pass
         else:
-            print 'Unmatched result: '
-            print type(exceptionOne), ': ', str(exceptionOne)
-            print type(exceptionTwo), ': ', str(exceptionTwo)
+            print ('Unmatched result: ')
+            print (type(exceptionOne), ': ', str(exceptionOne))
+            print (type(exceptionTwo), ': ', str(exceptionTwo))
             okay = False
             ignored_exception_check(exceptionOne)
             ignored_exception_check(exceptionTwo)
@@ -383,7 +383,7 @@ def one_iteration(collection1, collection2, ns, seed):
             (collection2.insert, (docs,), {})
         )
         if not okay:
-            print "Failed when doing inserts"
+            print ("Failed when doing inserts")
             return (okay, fname, None)
 
         if not indexes_first:
@@ -398,7 +398,7 @@ def one_iteration(collection1, collection2, ns, seed):
                     (collection2.ensure_index, (i,), {"unique": uniqueIndex})
                     )
                 if not okay:
-                    print "Failed when adding index after insert"
+                    print ("Failed when adding index after insert")
                     return (okay, fname, None)
                 ii += 1
 
@@ -410,7 +410,7 @@ def one_iteration(collection1, collection2, ns, seed):
             okay, skip_current_iteration = test_update(collection1, collection2, verbose)
             if skip_current_iteration:
                 if verbose:
-                    print "Skipping current iteration due to the failure from update."
+                    print ("Skipping current iteration due to the failure from update.")
                 return (True, fname, None)
             if not okay:
                 return (okay, fname, None)
@@ -442,7 +442,7 @@ def one_iteration(collection1, collection2, ns, seed):
             return (okay, fname, None)
 
     except IgnoredException as e:
-        print "Ignoring EXCEPTION: ", e.message
+        print ("Ignoring EXCEPTION: ", e.message)
         return True, fname, None
     except Exception as e:
         import traceback
@@ -489,9 +489,9 @@ def test_forever(ns):
         collection1 = client1[dbName][collName]
         collection2 = client2[dbName][collName]
 
-        print '========================================================'
-        print 'PID : ' + str(os.getpid()) + ' iteration : ' + str(jj) + ' DB : ' + dbName + ' Collection: ' + collName
-        print '========================================================'
+        print ('========================================================')
+        print ('PID : ' + str(os.getpid()) + ' iteration : ' + str(jj) + ' DB : ' + dbName + ' Collection: ' + collName)
+        print ('========================================================')
         (okay, fname, e) = one_iteration(collection1, collection2, ns, seed)
 
         if not okay:
@@ -500,11 +500,11 @@ def test_forever(ns):
             # print 'File for failing iteration: ', fname
             with open(fname, 'r') as fp:
                 for line in fp:
-                    print line
+                    print (line)
             break
 
         # Generate a new seed and start over
-        seed = random.randint(0, sys.maxint)
+        seed = random.randint(0, sys.maxsize)
         gen.global_prng = random.Random(seed)
 
         # house keeping
@@ -567,13 +567,13 @@ def start_self_test(ns):
         time.sleep(1)
         if not t1.is_alive():
             sys.stdout = oldstdout
-            print 'SUCCESS: Test harness found artificial bug'
+            print ('SUCCESS: Test harness found artificial bug')
             break
 
     sys.stdout = oldstdout
 
     if t1.is_alive():
-        print 'FAILURE: Test harness did not find obvious artificial bug in 5 seconds'
+        print ('FAILURE: Test harness did not find obvious artificial bug in 5 seconds')
 
     sys.stdout = NullWriter()
 
@@ -583,12 +583,12 @@ def start_self_test(ns):
         time.sleep(1)
         if not t2.is_alive():
             sys.stdout = oldstdout
-            print 'FAILURE: Test of model vs. itself did not match'
+            print ('FAILURE: Test of model vs. itself did not match')
             return
 
     sys.stdout = oldstdout
 
-    print 'SUCCESS: Model was consistent with itself'
+    print ('SUCCESS: Model was consistent with itself')
 
 
 if __name__ == '__main__':
@@ -605,7 +605,7 @@ if __name__ == '__main__':
     parser_forever.add_argument('1', choices=['mongo', 'mm', 'doclayer'], help='first tester')
     parser_forever.add_argument('2', choices=['mongo', 'mm', 'doclayer'], help='second tester')
     parser_forever.add_argument(
-        '-s', '--seed', type=int, default=random.randint(0, sys.maxint), help='random seed to use')
+        '-s', '--seed', type=int, default=random.randint(0, sys.maxsize), help='random seed to use')
     parser_forever.add_argument('--no-updates', default=True, action='store_false', help='disable update tests')
     parser_forever.add_argument(
         '--no-sort', default=True, action='store_false', help='disable non-deterministic sort tests')

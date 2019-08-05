@@ -58,11 +58,11 @@ def test_all(times=300):
     return tests
 
 
-print yaml.safe_dump({
+print (yaml.safe_dump({
     'host': 'localhost',
     'port': 8031,
     'database': 'test',
     'collection': 'test',
     'tests': test_all()
 },
-                     default_flow_style=False)
+                     default_flow_style=False))

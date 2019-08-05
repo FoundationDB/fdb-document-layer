@@ -23,7 +23,7 @@ import sys
 
 
 def check_wr_number(collection, number):
-    id = random.randint(0, sys.maxint)
+    id = random.randint(0, sys.maxsize)
     # Make sure we first delete record if it exists
     collection.delete_many({"_id": id})
     # update/insert if needed
@@ -36,11 +36,11 @@ def check_wr_number(collection, number):
 
 
 def test_min_int(fixture_collection):
-    check_wr_number(fixture_collection, int(-1 - sys.maxint))
+    check_wr_number(fixture_collection, int(-1 - sys.maxsize))
 
 
 def test_max_int(fixture_collection):
-    check_wr_number(fixture_collection, int(sys.maxint))
+    check_wr_number(fixture_collection, int(sys.maxsize))
 
 
 def test_min_dbl(fixture_collection):

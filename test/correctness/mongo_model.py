@@ -114,7 +114,7 @@ def expand(field, document, check_last_array, expand_array, add_last_array, chec
             ret.append(None)
 
     if debug:
-        print ret
+        print (ret)
 
     return ret
 
@@ -124,11 +124,11 @@ def evaluate(field, query, document, options, debug=False):
 
     # Transform logical (and effectively logical) operators
     if field == '$and':
-        return False not in [evaluate(q.keys()[0], q.values()[0], document, options, debug) for q in query]
+        return False not in [evaluate(list(q.keys())[0], list(q.values())[0], document, options, debug) for q in query]
     elif field == '$or':
-        return True in [evaluate(q.keys()[0], q.values()[0], document, options) for q in query]
+        return True in [evaluate(list(q.keys())[0], list(q.values())[0], document, options) for q in query]
     elif field == '$nor':
-        return True not in [evaluate(q.keys()[0], q.values()[0], document, options) for q in query]
+        return True not in [evaluate(list(q.keys())[0], list(q.values())[0], document, options) for q in query]
 
     if type(query) == dict:
         if '$not' in query:
@@ -230,7 +230,7 @@ def evaluate(field, query, document, options, debug=False):
             debug=debug)
 
     if debug:
-        print values
+        print (values)
 
     if len(values) == 0:
         return False
@@ -432,12 +432,12 @@ class MongoDatabase(object):
 def getTypeCode(value):
     if value is None:
         return "20"
-    elif isinstance(value, (long, float, int)):
+    elif isinstance(value, (int, float, int)):
         return "30"
     elif isinstance(value, binary.Binary):
         # this needs to come before basestring because `bson.binary.Binary` is also a subtype of `basestring`
         return "70"
-    elif isinstance(value, basestring):
+    elif isinstance(value, str):
         return "40"
     elif isinstance(value, OrderedDict):
         return "51"
@@ -453,7 +453,7 @@ class SortedDict(OrderedDict):
     def __init__(*args, **kwds):
         OrderedDict.__init__(*args, **kwds)
     def __setitem__(self, key, value, dict_setitem=dict.__setitem__):
-        super(SortedDict, self).__setitem__(key, value, dict_setitem=dict_setitem)
+        super(SortedDict, self).__setitem__(key, value)
         items = super(SortedDict, self).items()
         # group them together first
         tmp = OrderedDict()
@@ -464,7 +464,7 @@ class SortedDict(OrderedDict):
         tmp["70"] = []
         tmp["80"] = []
         tmp["100"] = []
-        for kv in items:
+        for kv in list(items):
             tmp[getTypeCode(kv[0])].append(kv)
         # import pprint;pprint.pprint(dict(tmp))
         # sort each group
@@ -479,7 +479,7 @@ class SortedDict(OrderedDict):
         # print str(sortedItems)
         super(SortedDict, self).clear()
         for k, v in sortedItems:
-            super(SortedDict, self).__setitem__(k, v, dict_setitem=dict_setitem)
+            super(SortedDict, self).__setitem__(k, v)
 
     @staticmethod
     def fromOrderedDict(orderedDict):
@@ -521,7 +521,7 @@ class MongoCollection(object):
             doc['_id'] = gen.random_object_id()
         if doc['_id'] in self.data:
             raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
-        tmp = self.data.values() + [doc]
+        tmp = list(self.data.values()) + [doc]
         for index in self.indexes:
             if not index.inError:
                 index.validate_and_build_entry(tmp)
@@ -538,7 +538,7 @@ class MongoCollection(object):
                 for i in input:
                     if '_id' in i:
                         if not self.options.object_field_order_matters and isinstance(i['_id'], HashableOrderedDict):
-                            i['_id'] = HashableOrderedDict(sorted(i['_id'].items(), key=lambda (key, value): key))
+                            i['_id'] = HashableOrderedDict(sorted(i['_id'].items(), key=lambda key, value: key))
                         if i['_id'] in all_ids:
                             # print i['_id']
                             raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
@@ -552,7 +552,7 @@ class MongoCollection(object):
                     if doc['_id'] in self.data:
                         raise MongoModelException("Duplicated value not allowed by unique index", code=11000)
                     buffer.append(doc)
-                tmp = self.data.values() + buffer
+                tmp = list(self.data.values()) + buffer
                 for index in self.indexes:
                     if not index.inError:
                         index.validate_and_build_entry(tmp)
@@ -573,11 +573,11 @@ class MongoCollection(object):
 
     def find(self, query, fields=None, batch_size=None):
         if len(query) == 0:
-            results = self.data.values()
+            results = list(self.data.values())
         else:
             assert len(query) == 1  # FIXME: test weakness
-            k = query.keys()[0]
-            results = [item for item in self.data.values() if evaluate(k, query[k], item, self.options)]
+            k = list(query.keys())[0]
+            results = [item for item in list(self.data.values()) if evaluate(k, query[k], item, self.options)]
 
         if fields is None:
             return results
@@ -639,13 +639,13 @@ class MongoCollection(object):
             if i.name == kwargs["name"]:
                 raise MongoModelException("There is an index with this name and a different key spec", code=29993)
 
-        if "unique" in kwargs.keys() and kwargs["unique"]:
+        if "unique" in list(kwargs.keys()) and kwargs["unique"]:
             newIndex = MongoUniqueIndex(deduplicatedKeys, kwargs)
         else:
             newIndex = MongoIndex(deduplicatedKeys, kwargs)
 
         self.indexes.append(newIndex) # insert first, since an index can be added but in error state if its constraints are violated.
-        newIndex.build(self.data.values())
+        newIndex.build(list(self.data.values()))
         return newIndex.name
 
     @staticmethod
@@ -670,7 +670,7 @@ class MongoCollection(object):
             if operator_name == '$rename':
                 for field_name in update[operator_name]:
                     rename_target = update[operator_name][field_name]
-                    if not isinstance(rename_target, basestring):
+                    if not isinstance(rename_target, str):
                         raise MongoModelException('$rename target must be a string', code=13494)
                     if rename_target in affected_fields:
                         raise MongoModelException('Field name duplication not allowed with modifiers', code=10150)
@@ -687,14 +687,14 @@ class MongoCollection(object):
         # print "Update Operator: $inc ", update
 
         # validation check: if all fields updated are numerical
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             if k in self.data[key]:
                 # print alert("%s: %s" % (self.data[key][k], str(v)))
-                if not isinstance(self.data[key][k], (int, long, float)):
+                if not isinstance(self.data[key][k], (int, int, float)):
                     # print "Filed \"", k, "\" is not numerical type!"
                     raise MongoModelException('Cannot apply $inc to a value of non-numeric type.', code=10140)
 
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Inc: key: ", k, " value: ", v
             if k in self.data[key]:
                 self.data[key][k] = self.data[key][k] + v
@@ -705,13 +705,13 @@ class MongoCollection(object):
         # print "Update Operator: $mul ", update
 
         # validation check: if all fields updated are numerical
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             if k in self.data[key]:
-                if not isinstance(self.data[key][k], (int, long, float)):
+                if not isinstance(self.data[key][k], (int, int, float)):
                     # print "Field \"", k, "\" is not numerical type!"
                     raise MongoModelException('Cannot apply $mul to a value of non-numeric type.', code=16837)
 
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Mul: key: ", k, " value: ", v
             if k in self.data[key]:
                 self.data[key][k] = self.data[key][k] * v
@@ -720,7 +720,7 @@ class MongoCollection(object):
 
     def process_update_operator_rename(self, key, update_expression):
         # print "Update Operator: $rename ", update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Rename: key: ", k, " value: ", v
             if k in self.data[key]:
                 self.data[key][v] = self.data[key][k]
@@ -729,21 +729,21 @@ class MongoCollection(object):
     def process_update_operator_set_on_insert(self, key, update_expression, new_doc=False):
         # print "Update Operator: $setOnInsert ", key, update_expression
         if new_doc:
-            self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
+            self.data[key] = OrderedDict(list(self.data[key].items()) + deepcopy(list(update_expression.items())))
 
     def process_update_operator_set(self, key, update_expression):
         # print "Update Operator: $set ", update
-        self.data[key] = OrderedDict(self.data[key].items() + deepcopy(update_expression.items()))
+        self.data[key] = OrderedDict(list(self.data[key].items())+ deepcopy(list(update_expression.items())))
 
     def process_update_operator_unset(self, key, update_expression):
         # print "Update Operator: $unset ", update
-        for k in update_expression.keys():
+        for k in list(update_expression.keys()):
             if k in self.data[key]:
                 del self.data[key][k]
 
     def process_update_operator_min(self, key, update_expression):
         # print "Update Operator: $min ", update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Inc: key: ", k, " value: ", v
             if k in self.data[key]:
                 # The $min updates the value of the field to a specified value if the
@@ -756,7 +756,7 @@ class MongoCollection(object):
 
     def process_update_operator_max(self, key, update_expression):
         # print "Update Operator: $max ", update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Inc: key: ", k, " value: ", v
             if k in self.data[key]:
                 # The $max operator updates the value of the field to a specified value if the
@@ -769,7 +769,7 @@ class MongoCollection(object):
 
     def process_update_operator_current_date(self, key, update_expression):
         # print "Update Operator: $currentDate", update_expression
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             if v:
                 # mongoDB use the UTC time
                 self.data[key][k] = datetime.datetime.now(tzutc())
@@ -794,7 +794,7 @@ class MongoCollection(object):
 
     def process_update_operator_add_to_set(self, key, update_expression):
         # print "Update Operator: $addToSet ", update_operator, update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Inc: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):
@@ -808,7 +808,7 @@ class MongoCollection(object):
 
     def process_update_operator_pop(self, key, update_expression):
         # print "Update Operator: $pop ", update_operator, update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Inc: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):  # and len(self.data[key][k]) > 0:
@@ -826,7 +826,7 @@ class MongoCollection(object):
 
     def process_update_operator_pull_all(self, key, update_expression):
         # print "Update Operator: $pullAll ", update_operator, update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "pullAll: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):
@@ -840,7 +840,7 @@ class MongoCollection(object):
         acc = True
         if len(query) == 0:
             return len(document) == 0
-        for field in query.keys():
+        for field in list(query.keys()):
             if field == '_id':
                 tmp = OrderedDict()
                 for k,v in sorted(query[field].items(), key= lambda i: i[0]):
@@ -852,7 +852,7 @@ class MongoCollection(object):
 
     def process_update_operator_pull(self, key, update_expression):
         # print "Update Operator: $pull ", update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "$pull: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):
@@ -876,7 +876,7 @@ class MongoCollection(object):
 
     def process_update_operator_push(self, key, update_expression):
         # print "Update Operator: $push ", update
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Push: key: ", k, " value: ", v
             if k in self.data[key]:
                 if isinstance(self.data[key][k], list):
@@ -926,19 +926,19 @@ class MongoCollection(object):
     def process_update_operator_bit(self, key, update_expression):
         # print "Update Operator: $bit ", update_operator, update
         # validation check: if all fields updated are numerical
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             if k in self.data[key]:
-                if not isinstance(self.data[key][k], (int, long)):
+                if not isinstance(self.data[key][k], (int, int)):
                     # print "Filed \"", k, "\" is not numerical type!"
                     raise MongoModelException('Cannot apply $bit to a value of non-integeral type.', code=10138)
 
-        for k, v in update_expression.iteritems():
+        for k, v in update_expression.items():
             # print "Bit: key: ", k, " value: ", v
             if k not in self.data[key]:
                 self.data[key][k] = 0
-            bit_operator = v.keys()[0]
-            bit_num = v[v.keys()[0]]
-            if not isinstance(bit_num, (int, long, float)):
+            bit_operator = list(v.keys())[0]
+            bit_num = v[list(v.keys())[0]]
+            if not isinstance(bit_num, (int, int, float)):
                 raise MongoModelException('$bit field must be a number', code=10139)
             # print "op:", bit_operator, "num:", bit_num, "self.data[key][k]:", self.data[key][k]
             if bit_operator == "and":
@@ -976,7 +976,7 @@ class MongoCollection(object):
         if not selector:
             return None
 
-        for k, v in selector.iteritems():
+        for k, v in selector.items():
             if k in operators['logical']:
                 if isinstance(v, list):
                     if k == '$or' and len(v) > 1:
@@ -986,11 +986,11 @@ class MongoCollection(object):
                     else:
                         for i in v:
                             if isinstance(i, dict):
-                                for kk, vv in i.iteritems():
+                                for kk, vv in i.items():
                                     result = has_operator(kk)
                                     if result:
                                         logical_child = self.deep_transform_logical_operators(i)
-                                        for kkk, vvv in logical_child.iteritems():
+                                        for kkk, vvv in logical_child.items():
                                             new_selector[kkk] = vvv
                                     else:
                                         new_selector[kk] = vv
@@ -1092,19 +1092,19 @@ class MongoCollection(object):
             if operator == '$all':
                 selector = self.deep_transform_logical_operators(deep_convert_compound_string_to_dict(selector))
             else:
-                for k, v in selector.iteritems():
+                for k, v in selector.items():
                     count = 0
                     if isinstance(v, dict):
-                        for kk, vv in v.iteritems():
+                        for kk, vv in v.items():
                             count += 1
                             if kk == operator:
                                 selector = {}
                     if count > 1:
                         raise MongoModelException("bad query!")
         elif (depth == 2 and operator not in operators['logical']):
-            for k, v in selector.iteritems():
+            for k, v in selector.items():
                 if isinstance(v, dict):
-                    for kk, vv in v.iteritems():
+                    for kk, vv in v.items():
                         if kk == operator:
                             selector = {}
                             break
@@ -1125,13 +1125,13 @@ class MongoCollection(object):
             if len(query) == 0:
                 # Update all existing docs. And since the query is empty, do NOT do upsert.
                 any = True
-                for k in self.data.keys():
+                for k in list(self.data.keys()):
                     n +=1
                     self.process_update_operator(k, update)
                     if not multi:
                         break
-            key = query.keys()[0]
-            for k, item in self.data.iteritems():
+            key = list(query.keys())[0]
+            for k, item in self.data.items():
                 if evaluate(key, query[key], item, self.options):
                     any = True
                     n += 1
@@ -1142,7 +1142,7 @@ class MongoCollection(object):
             if any:
                 for index in self.indexes:
                     if not index.inError:
-                        index.validate_and_build_entry(self.data.values())
+                        index.validate_and_build_entry(list(self.data.values()))
         except MongoModelException as e:
             self.data = old_data
             raise e
@@ -1169,7 +1169,7 @@ class MongoCollection(object):
                         del self.data[new_id]
                     for index in self.indexes:
                         if not index.inError:
-                            index.validate_and_build_entry(self.data.values())
+                            index.validate_and_build_entry(list(self.data.values()))
                 except MongoModelException as e:
                     # print "delete new_id", new_id, "because of the exception"
                     if new_id in self.data:
@@ -1181,7 +1181,7 @@ class MongoCollection(object):
                 self.insert(update)
         elif not any:
             # mongoDB raise an exception for the '$setOnInsert' update operator even if the upsert is False
-            if '$setOnInsert' in update.keys() and len(update['$setOnInsert']) == 0:
+            if '$setOnInsert' in list(update.keys()) and len(update['$setOnInsert']) == 0:
                 raise MongoModelException(
                     "'$setOnInsert' is empty. You must specify a field like so: {$mod: {<field>: ...}}", code=26840)
         return {'n': n}

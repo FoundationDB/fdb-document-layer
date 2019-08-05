@@ -25,9 +25,9 @@ import sys
 
 
 def _generate_unique_int(seen):
-    tmp = random.randint(0, sys.maxint)
+    tmp = random.randint(0, sys.maxsize)
     while tmp in seen:
-        tmp = random.randint(0, sys.maxint)
+        tmp = random.randint(0, sys.maxsize)
     seen.add(tmp)
     return tmp
 
@@ -60,7 +60,7 @@ def distinct_test(test_name, collection, field, records, expected_return, query=
         collection.insert_one(record)
     actual_return = map(transform, collection.distinct(field, query))
     expected_return = map(transform, expected_return)
-    assert len(actual_return) == len(expected_return) and set(actual_return) == set(expected_return), \
+    assert len(list(actual_return)) == len(list(expected_return)) and set(actual_return) == set(expected_return), \
         "{} failed. Expected: {}; Actual: {}".format(test_name, expected_return, actual_return)
 
 
@@ -72,7 +72,7 @@ def test_values_with_arrays(fixture_collection):
     # {"k1": 1, "k2": [4, [1]]}
     # when query collection.distinct("k2"), we should get [1,2,3,4,5,[1]]
     number_of_records = random.randint(1, 100)
-    key = "test_key_{}".format(random.randint(0, sys.maxint))
+    key = "test_key_{}".format(random.randint(0, sys.maxsize))
     records = []
     ids = set()
     values = set()
@@ -86,7 +86,7 @@ def test_values_with_arrays(fixture_collection):
             array_value = []
             for _ in range(0, array_size):
                 array_value.append(_generate_unique_int(values))
-            records.append({"_id": random.randint(0, sys.maxint), key: array_value})
+            records.append({"_id": random.randint(0, sys.maxsize), key: array_value})
         elif vType == 1:
             # add an array with ints and arrays as its elements
             array_size = random.randint(1, 5)
@@ -95,13 +95,13 @@ def test_values_with_arrays(fixture_collection):
                 if random.randint(0, 1) == 1:
                     array_value.append(_generate_unique_int(values))
                 else:
-                    tmp = random.randint(0, sys.maxint)
+                    tmp = random.randint(0, sys.maxsize)
                     values.add(tuple([tmp]))
                     array_value.append([tmp])
-            records.append({"_id": random.randint(0, sys.maxint), key: array_value})
+            records.append({"_id": random.randint(0, sys.maxsize), key: array_value})
         else:
             # add ints
-            records.append({"_id": random.randint(0, sys.maxint), key: _generate_unique_int(values)})
+            records.append({"_id": random.randint(0, sys.maxsize), key: _generate_unique_int(values)})
 
     def transform(elm):
         if isinstance(elm, tuple):
@@ -115,21 +115,21 @@ def test_values_with_arrays(fixture_collection):
 
 def test_values_no_duplicates_no_query(fixture_collection):
     number_of_records = random.randint(1, 100)
-    key = "test_key_{}".format(random.randint(0, sys.maxint))
+    key = "test_key_{}".format(random.randint(0, sys.maxsize))
     records = []
     ids = set()
     values = set()
     for _ in range(0, number_of_records):
         id = _generate_unique_int(ids)
         value = _generate_unique_int(values)
-        records.append({"_id": random.randint(0, sys.maxint), key: value})
+        records.append({"_id": random.randint(0, sys.maxsize), key: value})
     distinct_test("[Values with no duplicates; No query]", fixture_collection,
                   key, records, list(values), None)
 
 
 def test_values_no_duplicates_with_query(fixture_collection):
     number_of_records = random.randint(1, 100)
-    key = "test_key_{}".format(random.randint(0, sys.maxint))
+    key = "test_key_{}".format(random.randint(0, sys.maxsize))
     key2 = "test_key_1"
     records = []
     ids = set()
@@ -138,28 +138,28 @@ def test_values_no_duplicates_with_query(fixture_collection):
         key2_val = random.randint(0, 1)
         id = _generate_unique_int(ids)
         value = _generate_unique_int(values[key2_val])
-        records.append({"_id": random.randint(0, sys.maxint), key: value, key2: key2_val})
+        records.append({"_id": random.randint(0, sys.maxsize), key: value, key2: key2_val})
     distinct_test("[Values with no duplicates; With query]", fixture_collection,
                   key, records, list(values[key2_val]), {key2: key2_val})
 
 
 def test_values_with_duplicates_no_query(fixture_collection):
     number_of_records = random.randint(1, 100)
-    key = "test_key_{}".format(random.randint(0, sys.maxint))
+    key = "test_key_{}".format(random.randint(0, sys.maxsize))
     records = []
     ids = set()
     values = set()
     for _ in range(0, number_of_records):
         id = _generate_unique_int(ids)
         value = _generate_random_duplicated_int(values)
-        records.append({"_id": random.randint(0, sys.maxint), key: value})
+        records.append({"_id": random.randint(0, sys.maxsize), key: value})
     distinct_test("[Values with duplicates; No query]",
                   fixture_collection, key, records, list(values), None)
 
 
 def test_values_with_duplicates_with_query(fixture_collection):
     number_of_records = random.randint(1, 100)
-    key = "test_key_{}".format(random.randint(0, sys.maxint))
+    key = "test_key_{}".format(random.randint(0, sys.maxsize))
     key2 = "test_key_1"
     records = []
     ids = set()
@@ -168,7 +168,7 @@ def test_values_with_duplicates_with_query(fixture_collection):
         key2_val = random.randint(0, 1)
         id = _generate_unique_int(ids)
         value = _generate_random_duplicated_int(values[key2_val])
-        records.append({"_id": random.randint(0, sys.maxint), key: value, key2: key2_val})
+        records.append({"_id": random.randint(0, sys.maxsize), key: value, key2: key2_val})
 
     distinct_test("[Values with duplicates; With query]", fixture_collection,
                   key, records, list(values[key2_val]), {key2: key2_val})

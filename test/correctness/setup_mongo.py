@@ -39,12 +39,12 @@ def init_replica_set(shard_port, shard_addresses, index):
 
         repl_set = {"_id": "rs" + str(index) + ".0", "members": members}
         shard.admin.command('replSetInitiate', repl_set)
-        print 'Replica set initialized with: '
-        print repl_set
+        print ('Replica set initialized with: ')
+        print (repl_set)
 
     except errors.OperationFailure as e:
         if 'already initialized' in str(e.message):
-            print 'Replica set already initialized, continuing.'
+            print ('Replica set already initialized, continuing.')
         else:
             raise e
 
@@ -54,12 +54,12 @@ def init_replica_set(shard_port, shard_addresses, index):
 def add_shard(mongos, replSet):
     try:
         mongos.admin.command('addShard', replSet['_id'] + "/" + replSet['members'][0]['host'])
-        print 'Shard added.'
+        print ('Shard added.')
     except errors.OperationFailure as e:
         if 'duplicate key' in str(e.message):
-            print 'Shard already added, continuing.'
+            print ('Shard already added, continuing.')
         elif 'exists in another' in str(e.message):
-            print 'Shard already added and enabled for DB, continuing.'
+            print ('Shard already added and enabled for DB, continuing.')
         else:
             raise e
 
@@ -67,10 +67,10 @@ def add_shard(mongos, replSet):
 def enable_sharding_on_d_b(mongos, db_name):
     try:
         mongos.admin.command('enableSharding', db_name)
-        print 'Sharding enabled on DB.'
+        print ('Sharding enabled on DB.')
     except errors.OperationFailure as e:
         if 'already enabled' in str(e.message):
-            print 'Sharding already enabled on DB, continuing.'
+            print ('Sharding already enabled on DB, continuing.')
         else:
             raise e
 
@@ -80,10 +80,10 @@ def enable_sharding_on_collection(mongos, db_name, collection_name):
         collection = mongos[db_name][collection_name]
         collection.ensure_index([("_id", pymongo.HASHED)])
         mongos.admin.command('shardCollection', db_name + "." + collection_name, key={"_id": "hashed"})
-        print 'Sharded collection.'
+        print ('Sharded collection.')
     except errors.OperationFailure as e:
         if 'already sharded' in str(e.message):
-            print 'Collection already sharded, continuing.'
+            print ('Collection already sharded, continuing.')
         else:
             raise e
 
@@ -147,4 +147,4 @@ if __name__ == "__main__":
                 "big_documents": True
             })
     else:
-        print "Incorrected or missing shard addresses - exiting.."
+        print ("Incorrected or missing shard addresses - exiting..")
