@@ -37,6 +37,20 @@ const std::string INDICES_KEY = "indices";
 const std::string SYSTEM_INDEXES = "system.indexes";
 const std::string SYSTEM_NAMESPACES = "system.namespaces";
 
+const std::string LOCAL_OPLOG_RS = "local.oplog.rs";
+
+const std::string OP_UPDATE = "u";
+const std::string OP_INSERT = "i";
+const std::string OP_DELETE = "d";
+
+const char* OP_FIELD_TS = "ts";
+const char* OP_FIELD_H = "h";
+const char* OP_FIELD_V = "v";
+const char* OP_FIELD_OP = "op";
+const char* OP_FIELD_NS = "ns";
+const char* OP_FIELD_O2 = "o2";
+const char* OP_FIELD_O = "ns";
+
 const char* ID_FIELD = "_id";
 const char* KEY_FIELD = "key";
 const char* BUILD_ID_FIELD = "build id";
