@@ -54,7 +54,7 @@ extern const std::string OP_UPDATE;
 extern const std::string OP_INSERT;
 extern const std::string OP_DELETE;
 
-// Oplog Field name comstants
+// Oplog Field name constants
 extern const char* OP_FIELD_TS;
 extern const char* OP_FIELD_H;
 extern const char* OP_FIELD_V;
