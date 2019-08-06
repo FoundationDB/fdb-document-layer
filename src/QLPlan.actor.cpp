@@ -247,9 +247,9 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 		default:
 			return Optional<Reference<Plan>>();
 		}
-	} else {
-		return Optional<Reference<Plan>>();
 	}
+	// Issue #16: Added return statement in right place to fix the warning during compilation
+	return Optional<Reference<Plan>>();
 }
 
 ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,

@@ -122,7 +122,7 @@ target_compile_options(fdbdoc
             -Werror
             -Wno-error=format
             -Wno-deprecated
-            # -Wreturn-type
+            -Wreturn-type
             -fvisibility=hidden
             -fno-omit-frame-pointer
         )
