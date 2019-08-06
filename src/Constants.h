@@ -46,13 +46,17 @@ extern const std::string INDICES_KEY;
 extern const std::string SYSTEM_INDEXES;
 extern const std::string SYSTEM_NAMESPACES;
 
-// Oplog collection
-extern const std::string LOCAL_OPLOG_RS;
+// Oplog namespace info
+extern const std::string OPLOG_DB;
+extern const std::string OPLOG_COL;
 
 // Oplog operations
 extern const std::string OP_UPDATE;
 extern const std::string OP_INSERT;
 extern const std::string OP_DELETE;
+
+// Delete operation description
+extern const std::string DESCRIBE_DELETE_DOC;
 
 // Oplog Field name constants
 extern const char* OP_FIELD_TS;

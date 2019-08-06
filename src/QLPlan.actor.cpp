@@ -1082,6 +1082,36 @@ FutureStream<Reference<ScanReturnedContext>> FlushChangesPlan::execute(PlanCheck
 	return docs.getFuture();
 }
 
+// ACTOR static Future<Reference<IReadWriteContext>> oplogDeletion(PlanCheckpoint* checkpoint,
+// 									  Reference<ScanReturnedContext> doc, 
+// 									  Reference<DocTransaction> tr,
+// 									  Reference<UnboundCollectionContext> cx, 
+// 									  Reference<MetadataManager> mm) {
+// 	state Namespace ns;
+// 	state PromiseStream<Reference<ScanReturnedContext>> zProm;
+// 	state Optional<IdInfo> encodedIds = Optional<IdInfo>();
+// 	state std::vector<Reference<IInsertOp>> inserts;
+// 	state bson::BSONObj obj = BSON(
+// 		DocLayerConstants::OP_FIELD_H << 1
+// 		<< DocLayerConstants::OP_FIELD_NS << doc->scanId()
+// 		<< DocLayerConstants::OP_FIELD_O << "a"
+// 		<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
+// 	);
+// 	inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
+
+// 	ns.first = DocLayerConstants::OPLOG_DB;
+// 	ns.second = DocLayerConstants::OPLOG_COL;
+
+// 	fprintf(stdout, "<<<<<< ADD OPERATION DO INSERT <<<<<<<< %i\n", doc->scanId());
+
+// 	state Reference<UnboundCollectionContext> mcx = wait(mm->getUnboundCollectionContext(tr, ns));
+// 	state Reference<CollectionContext> rfcx = mcx->bindCollectionContext(tr);
+
+// 	//doInsert(checkpoint, inserts, tr, mm, ns, output2);
+
+// 	return insertDocument(rfcx, obj, encodedIds);
+// }
+
 ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
                                    Reference<DocTransaction> tr,
                                    FutureStream<Reference<ScanReturnedContext>> input,
@@ -1097,7 +1127,14 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 	try {
 		try {
 			loop choose {
-				when(Reference<ScanReturnedContext> doc = waitNext(input)) {
+				when(Reference<ScanReturnedContext> doc = waitNext(input)) {					
+					// TODO:    Все документы для удаления и обновления перебираются здесь
+					// FEATURE: OP_DELETE, OP_UPDATE
+					// fprintf(stdout, "DELETE DOCUMENT (%s)\n", updateOp->describe().c_str());
+					// if (updateOp->describe() == DocLayerConstants::DESCRIBE_DELETE_DOC) {		
+					// 	//oplogDeletion(checkpoint, doc, tr, cx, mm);
+					// }
+
 					futures.push_back(std::make_pair(doc, updateOp->update(doc)));
 					count += 1;
 					if (count >= limit)
@@ -1144,6 +1181,29 @@ FutureStream<Reference<ScanReturnedContext>> UpdatePlan::execute(PlanCheckpoint*
 	PromiseStream<Reference<ScanReturnedContext>> docs;
 	checkpoint->addOperation(
 	    doUpdate(checkpoint, tr, subPlan->execute(checkpoint, tr), docs, updateOp, upsertOp, limit, cx), docs);
+
+	// if (updateOp->describe() == DocLayerConstants::DESCRIBE_DELETE_DOC) {
+	// 	PromiseStream<Reference<ScanReturnedContext>> docsInserts;
+
+	// 	Namespace ns;
+	// 	PromiseStream<Reference<ScanReturnedContext>> zProm;
+	// 	Optional<IdInfo> encodedIds = Optional<IdInfo>();
+	// 	std::vector<Reference<IInsertOp>> inserts;
+	// 	bson::BSONObj obj = BSON(
+	// 		DocLayerConstants::OP_FIELD_H << 1
+	// 		<< DocLayerConstants::OP_FIELD_NS << 100
+	// 		<< DocLayerConstants::OP_FIELD_O << "a"
+	// 		<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
+	// 	);
+	// 	inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
+
+	// 	ns.first = DocLayerConstants::OPLOG_DB;
+	// 	ns.second = DocLayerConstants::OPLOG_COL;
+
+	// 	fprintf(stdout, "<<<<<< ADD OPERATION DO INSERT <<<<<<<< %i\n", 100);
+	// 	checkpoint->addOperation(doInsert(checkpoint, inserts, tr, mm, ns, docsInserts), docsInserts);
+	// }
+
 	return docs.getFuture();
 }
 
@@ -1448,6 +1508,7 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
 				break;
 			choose {
 				when(wait(flowControlLock->take())) {
+					//fprintf(stdout, "================================ INSERTS ->>>>>>>\n%s\n", docs[i]->describe().c_str());
 					f.push_back(docs[i]->insert(ucx->bindCollectionContext(tr)));
 					i++;
 				}

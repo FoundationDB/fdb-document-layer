@@ -51,12 +51,12 @@ struct ConcreteInsertOp : IInsertOp, ReferenceCounted<Concrete>, FastAllocated<C
 };
 
 struct DeleteDocument : ConcreteUpdateOp<DeleteDocument> {
-	Future<Void> update(Reference<IReadWriteContext> document) override {
+	Future<Void> update(Reference<IReadWriteContext> document) override {	
 		document->clearDescendants();
 		document->clearRoot();
 		return Future<Void>(Void());
 	}
-	std::string describe() override { return "delete document"; }
+	std::string describe() override { return DocLayerConstants::DESCRIBE_DELETE_DOC; }
 };
 
 #endif

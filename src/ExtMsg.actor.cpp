@@ -1260,11 +1260,27 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-				plan = ec->wrapOperationPlan(plan, false, cx);
+				plan = ec->wrapOperationPlan(plan, false, cx);					
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
 				nrDeletedRecords += deletedRecords;
+
+				// std::vector<Reference<IInsertOp>> inserts;
+				// Optional<IdInfo> encodedIds = Optional<IdInfo>();
+
+				// bson::BSONObj obj = BSON(
+				// 	DocLayerConstants::OP_FIELD_H << 1
+				// 	<< DocLayerConstants::OP_FIELD_NS << 100
+				// 	<< DocLayerConstants::OP_FIELD_O << "a"
+				// 	<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
+				// );
+
+				// inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
+
+				// Namespace insertNs = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+				// Reference<Plan> secondPlan = ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, insertNs)));
+				// int64_t i = wait(executeUntilCompletionTransactionally(secondPlan, dtr));
 			} catch (Error& e) {
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
 				// clang-format off

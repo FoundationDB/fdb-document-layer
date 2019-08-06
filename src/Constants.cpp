@@ -37,11 +37,14 @@ const std::string INDICES_KEY = "indices";
 const std::string SYSTEM_INDEXES = "system.indexes";
 const std::string SYSTEM_NAMESPACES = "system.namespaces";
 
-const std::string LOCAL_OPLOG_RS = "local.oplog.rs";
+const std::string OPLOG_DB = "local";
+const std::string OPLOG_COL = "oplog.rs";
 
 const std::string OP_UPDATE = "u";
 const std::string OP_INSERT = "i";
 const std::string OP_DELETE = "d";
+
+const std::string DESCRIBE_DELETE_DOC = "delete document";
 
 const char* OP_FIELD_TS = "ts";
 const char* OP_FIELD_H = "h";
