@@ -1112,6 +1112,55 @@ FutureStream<Reference<ScanReturnedContext>> FlushChangesPlan::execute(PlanCheck
 // 	return insertDocument(rfcx, obj, encodedIds);
 // }
 
+ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
+										Reference<DocTransaction> tr,
+										Reference<MetadataManager> mm,
+										Namespace ns,
+										FutureStream<Reference<ScanReturnedContext>> input,
+                                   		PromiseStream<Reference<ScanReturnedContext>> output) {
+	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+
+    try {
+		try {
+			loop choose {
+				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {					
+					Optional<DataValue> dv = wait(
+						doc->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));
+					
+					fprintf(stdout, "Apply Removed doc: %s\n", dv.get().toString().c_str());
+
+					if (dv.present()) {
+						bson::OID id = dv.get().getId();
+						fprintf(stdout, "Removed doc: %s\n", id.toString().c_str());
+					}
+
+					futures.push_back(std::make_pair(doc, Future<Void>(Void())));
+				}
+				when(wait(futures.empty() ? Never() : futures.front().second)) {
+					output.send(futures.front().first);
+					futures.pop_front();
+				}
+			}
+		} catch (Error& e) {
+			if (e.code() != error_code_end_of_stream)
+				throw;
+		}
+
+		while (!futures.empty()) {
+			wait(futures.front().second);
+			output.send(futures.front().first);
+			futures.pop_front();
+		}
+
+		throw end_of_stream();
+	} catch (Error& e) {
+		if (e.code() != error_code_actor_cancelled)
+			output.sendError(e);
+		throw;
+	}
+}
+
 ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
                                    Reference<DocTransaction> tr,
                                    FutureStream<Reference<ScanReturnedContext>> input,
@@ -1174,6 +1223,15 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 			output.sendError(e);
 		throw;
 	}
+}
+
+FutureStream<Reference<ScanReturnedContext>> OplogUpdatePlan::execute(PlanCheckpoint* checkpoint,
+                                                                 	  Reference<DocTransaction> tr) {
+    PromiseStream<Reference<ScanReturnedContext>> docs;
+
+    checkpoint->addOperation(doOplogUpdate(checkpoint, tr, mm, ns, subPlan->execute(checkpoint, tr), docs), docs);
+
+	return docs.getFuture();
 }
 
 FutureStream<Reference<ScanReturnedContext>> UpdatePlan::execute(PlanCheckpoint* checkpoint,
@@ -1508,7 +1566,6 @@ ACTOR static Future<Void> doInsert(PlanCheckpoint* checkpoint,
 				break;
 			choose {
 				when(wait(flowControlLock->take())) {
-					//fprintf(stdout, "================================ INSERTS ->>>>>>>\n%s\n", docs[i]->describe().c_str());
 					f.push_back(docs[i]->insert(ucx->bindCollectionContext(tr)));
 					i++;
 				}
@@ -1863,6 +1920,10 @@ ACTOR Future<int64_t> executeUntilCompletionTransactionally(Reference<Plan> plan
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit) {
 	return Reference<Plan>(
 	    new UpdatePlan(subPlan, Reference<IUpdateOp>(new DeleteDocument()), Reference<IInsertOp>(), limit, cx));
+}
+
+Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm) {
+	return Reference<Plan>(new OplogUpdatePlan(subPlan, mm));
 }
 
 Reference<Plan> flushChanges(Reference<Plan> subPlan) {

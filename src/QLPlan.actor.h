@@ -181,6 +181,31 @@ struct ConcretePlan : Plan, ReferenceCounted<PlanType>, FastAllocated<PlanType> 
 	void delref() override { ReferenceCounted<PlanType>::delref(); }
 };
 
+struct OplogUpdatePlan: ConcretePlan<OplogUpdatePlan> {
+	Reference<Plan> subPlan;
+
+	OplogUpdatePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm) : subPlan(subPlan), mm(mm) {
+		ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+	}
+
+	bson::BSONObj describe() override {
+		return BSON(
+		     // clang-format off
+			"type" << "update oplog"
+		    // clang-format on
+		);
+	}
+
+	PlanType getType() override { return PlanType::Update; }
+
+	FutureStream<Reference<ScanReturnedContext>> execute(PlanCheckpoint* checkpoint,
+	                                                     Reference<DocTransaction> tr) override;														 
+
+	private:
+		Reference<MetadataManager> mm;
+		Namespace ns;
+};
+
 struct TableScanPlan : ConcretePlan<TableScanPlan> {
 	explicit TableScanPlan(Reference<UnboundCollectionContext> cx) : cx(cx) {}
 	bson::BSONObj describe() override {
@@ -706,6 +731,7 @@ ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCom
     Reference<DocTransaction> tr);
 
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit);
+Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm);
 Reference<Plan> flushChanges(Reference<Plan> subPlan);
 
 #endif /* _QL_PLAN_ACTOR_H_ */
