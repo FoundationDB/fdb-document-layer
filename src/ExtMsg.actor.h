@@ -34,6 +34,7 @@
 #include "IDispatched.h"
 #include "QLPlan.actor.h"
 #include "QLPredicate.h"
+#include "QLOperations.h"
 
 #include "flow/flow.h"
 
@@ -235,6 +236,32 @@ struct ExtMsgKillCursors : ExtMsg, FastAllocated<ExtMsgKillCursors> {
 private:
 	ExtMsgKillCursors(ExtMsgHeader*, const uint8_t*);
 	friend struct ExtMsg::Factory<ExtMsgKillCursors>;
+};
+
+struct OplogInserter: ReferenceCounted<OplogInserter> {
+	Namespace ns;
+
+	OplogInserter() {
+		ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+	}
+
+	Future<Reference<IReadWriteContext>> insertOp(Reference<CollectionContext> cx, 
+												 std::string ns, 
+												 bson::BSONObj obj);
+	Future<Reference<IReadWriteContext>> updateOp(Reference<CollectionContext> cx, 
+												  std::string ns, 
+												  bson::OID id, 
+												  bson::BSONObj obj);
+	Future<Reference<IReadWriteContext>> deleteOp(Reference<CollectionContext> cx, 
+												  std::string ns, 
+												  bson::OID id);
+
+	Future<Reference<UnboundCollectionContext>> getUnboundContext(
+		Reference<MetadataManager> mm, Reference<DocTransaction> tr);
+
+	private:
+		void prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns);
+		Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj);
 };
 
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, const bson::BSONObj& query);

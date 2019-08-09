@@ -682,6 +682,57 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 	return dcx;
 }
 
+Future<Reference<IReadWriteContext>> OplogInserter::deleteOp(Reference<CollectionContext> cx, 
+															 std::string ns, 
+															 bson::OID id) {
+	bson::BSONObjBuilder builder;
+	prepareBuilder(&builder, DocLayerConstants::OP_DELETE, ns);
+
+	builder.append(DocLayerConstants::OP_FIELD_O, BSON(DocLayerConstants::ID_FIELD << id.toString()));
+
+	return insert(cx, builder.obj());
+}
+
+Future<Reference<IReadWriteContext>> OplogInserter::insertOp(Reference<CollectionContext> cx, 
+															 std::string ns, 
+															 bson::BSONObj obj) {
+	bson::BSONObjBuilder builder;
+	prepareBuilder(&builder, DocLayerConstants::OP_INSERT, ns);
+
+	builder.append(DocLayerConstants::OP_FIELD_O, obj);
+
+	return insert(cx, builder.obj());
+}
+
+Future<Reference<IReadWriteContext>> OplogInserter::updateOp(Reference<CollectionContext> cx, 
+															 std::string ns, 
+															 bson::OID id, bson::BSONObj obj) {
+	bson::BSONObjBuilder builder;
+	prepareBuilder(&builder, DocLayerConstants::OP_UPDATE, ns);
+
+	builder.append(DocLayerConstants::OP_FIELD_O2, BSON(DocLayerConstants::ID_FIELD << id.toString()))
+		   .append(DocLayerConstants::OP_FIELD_O, BSON("$v" << 1 << "$set" << obj));
+
+	return insert(cx, builder.obj());
+}
+
+void OplogInserter::prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns) {
+	(*builder).append(DocLayerConstants::OP_FIELD_TS, (long long)(timer() * 1000))
+		   	  .append(DocLayerConstants::OP_FIELD_V, int32_t(2))
+		   	  .append(DocLayerConstants::OP_FIELD_H, (long long)(g_random->randomInt64(INT64_MIN, INT64_MAX)))
+		      .append(DocLayerConstants::OP_FIELD_NS, ns)
+		      .append(DocLayerConstants::OP_FIELD_OP, op);
+}
+
+Future<Reference<UnboundCollectionContext>> OplogInserter::getUnboundContext(Reference<MetadataManager> mm, 
+											  				 				 Reference<DocTransaction> tr) {    
+    return mm->getUnboundCollectionContext(tr, ns);
+}
+
+Future<Reference<IReadWriteContext>> OplogInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
+	return insertDocument(cx, obj, Optional<IdInfo>());
+}
+
 struct ExtInsert : ConcreteInsertOp<ExtInsert> {
 	bson::BSONObj obj;
 	Optional<IdInfo> encodedIds;
@@ -893,7 +944,13 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_INSERT_SZ, insertSize);
 	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_DOCS_PER_INSERT, documents->size());
 
-	Reference<Plan> plan = ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, ns)));
+	Reference<Plan> plan = ref(new InsertPlan(inserts, ec->mm, ns));
+
+	if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
+		plan = oplogInsertPlan(plan, documents, ec->mm, ns);
+	}
+
+	plan = ec->isolatedWrapOperationPlan(plan);
 	int64_t i = wait(executeUntilCompletionTransactionally(plan, tr));
 
 	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_INSERT_LATENCY_US,
@@ -1260,28 +1317,16 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-				plan = oplogDeletePlan(plan, ec->mm);
+
+				if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
+					plan = oplogDeletePlan(plan, ec->mm, ns);
+				}
+
 				plan = ec->wrapOperationPlan(plan, false, cx);					
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
-				nrDeletedRecords += deletedRecords;
-
-				// std::vector<Reference<IInsertOp>> inserts;
-				// Optional<IdInfo> encodedIds = Optional<IdInfo>();
-
-				// bson::BSONObj obj = BSON(
-				// 	DocLayerConstants::OP_FIELD_H << 1
-				// 	<< DocLayerConstants::OP_FIELD_NS << 100
-				// 	<< DocLayerConstants::OP_FIELD_O << "a"
-				// 	<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
-				// );
-
-				// inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
-
-				// Namespace insertNs = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-				// Reference<Plan> secondPlan = ec->isolatedWrapOperationPlan(ref(new InsertPlan(inserts, ec->mm, insertNs)));
-				// int64_t i = wait(executeUntilCompletionTransactionally(secondPlan, dtr));
+				nrDeletedRecords += deletedRecords;		
 			} catch (Error& e) {
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
 				// clang-format off

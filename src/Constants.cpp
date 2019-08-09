@@ -52,7 +52,7 @@ const char* OP_FIELD_V = "v";
 const char* OP_FIELD_OP = "op";
 const char* OP_FIELD_NS = "ns";
 const char* OP_FIELD_O2 = "o2";
-const char* OP_FIELD_O = "ns";
+const char* OP_FIELD_O = "o";
 
 const char* ID_FIELD = "_id";
 const char* KEY_FIELD = "key";

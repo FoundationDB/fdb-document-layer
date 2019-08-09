@@ -20,6 +20,7 @@
  * MongoDB is a registered trademark of MongoDB, Inc.
  */
 
+#include "ExtMsg.actor.h"
 #include "QLPlan.actor.h"
 #include "DocumentError.h"
 #include "ExtStructs.h"
@@ -62,6 +63,59 @@ using namespace FDB;
  *  - Filtering plans (those that may not output every document they receive on an input) must
  *  	- PlanCheckpoint::getDocumentFinishedLock()->release() each document that they discard
  */
+struct OplogUpdatePlan: ConcretePlan<OplogUpdatePlan> {
+	OplogUpdatePlan(Reference<Plan> subPlan,
+					Reference<OplogInserter> oplog,
+					Reference<MetadataManager> mm,
+					Namespace ns) : subPlan(subPlan), mm(mm), oplog(oplog), ns(ns) {}
+
+	bson::BSONObj describe() override {
+		return BSON(
+		     // clang-format off
+			"type" << "update oplog"
+		    // clang-format on
+		);
+	}
+
+	PlanType getType() override { return PlanType::Update; }
+
+	FutureStream<Reference<ScanReturnedContext>> execute(PlanCheckpoint* checkpoint,
+	                                                     Reference<DocTransaction> tr) override;
+
+	private:
+		Reference<Plan> subPlan;
+		Reference<OplogInserter> oplog;
+		Reference<MetadataManager> mm;
+		Namespace ns;
+};
+
+struct OplogInsertPlan : ConcretePlan<OplogInsertPlan> {
+	OplogInsertPlan(Reference<Plan> subPlan,
+					std::list<bson::BSONObj>* docs,
+					Reference<OplogInserter> oplog,
+					Reference<MetadataManager> mm,
+					Namespace ns)
+	    : docs(docs), subPlan(subPlan), oplog(oplog), mm(mm), ns(ns) {}
+
+	bson::BSONObj describe() override {
+		return BSON(
+		    // clang-format off
+			"type" << "insert" <<
+			"numDocs" << (int)(*docs).size()
+		    // clang-format on
+		);
+	}
+	PlanType getType() override { return PlanType::Insert; }
+	FutureStream<Reference<ScanReturnedContext>> execute(PlanCheckpoint* checkpoint,
+	                                                     Reference<DocTransaction> tr) override;
+
+	private:
+		Reference<Plan> subPlan;
+		Reference<OplogInserter> oplog;
+		std::list<bson::BSONObj>* docs;
+		Reference<MetadataManager> mm;
+		Namespace ns;
+};
 
 Reference<Plan> FilterPlan::construct_filter_plan(Reference<UnboundCollectionContext> cx,
                                                   Reference<Plan> source,
@@ -1082,75 +1136,122 @@ FutureStream<Reference<ScanReturnedContext>> FlushChangesPlan::execute(PlanCheck
 	return docs.getFuture();
 }
 
-// ACTOR static Future<Reference<IReadWriteContext>> oplogDeletion(PlanCheckpoint* checkpoint,
-// 									  Reference<ScanReturnedContext> doc, 
-// 									  Reference<DocTransaction> tr,
-// 									  Reference<UnboundCollectionContext> cx, 
-// 									  Reference<MetadataManager> mm) {
-// 	state Namespace ns;
-// 	state PromiseStream<Reference<ScanReturnedContext>> zProm;
-// 	state Optional<IdInfo> encodedIds = Optional<IdInfo>();
-// 	state std::vector<Reference<IInsertOp>> inserts;
-// 	state bson::BSONObj obj = BSON(
-// 		DocLayerConstants::OP_FIELD_H << 1
-// 		<< DocLayerConstants::OP_FIELD_NS << doc->scanId()
-// 		<< DocLayerConstants::OP_FIELD_O << "a"
-// 		<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
-// 	);
-// 	inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
-
-// 	ns.first = DocLayerConstants::OPLOG_DB;
-// 	ns.second = DocLayerConstants::OPLOG_COL;
-
-// 	fprintf(stdout, "<<<<<< ADD OPERATION DO INSERT <<<<<<<< %i\n", doc->scanId());
-
-// 	state Reference<UnboundCollectionContext> mcx = wait(mm->getUnboundCollectionContext(tr, ns));
-// 	state Reference<CollectionContext> rfcx = mcx->bindCollectionContext(tr);
-
-// 	//doInsert(checkpoint, inserts, tr, mm, ns, output2);
-
-// 	return insertDocument(rfcx, obj, encodedIds);
-// }
-
-ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
+ACTOR static Future<Void> doOplogInsert(PlanCheckpoint* checkpoint,
 										Reference<DocTransaction> tr,
 										Reference<MetadataManager> mm,
 										Namespace ns,
+										std::list<bson::BSONObj>* docs,
+										Reference<OplogInserter> oplog,
 										FutureStream<Reference<ScanReturnedContext>> input,
-                                   		PromiseStream<Reference<ScanReturnedContext>> output) {
-	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
+										PromiseStream<Reference<ScanReturnedContext>> output) {
+    state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
+	state Deque<Future<Reference<IReadWriteContext>>> inserts;
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
-    try {
+	try {
 		try {
+			state Reference<UnboundCollectionContext> ucx = wait(oplog->getUnboundContext(mm, tr));
+			state Reference<CollectionContext> colCx = ucx->bindCollectionContext(tr);
+
+			for (const auto& d : *docs) {
+				inserts.push_back(oplog->insertOp(colCx, fullCollNameToString(ns), d));
+			}
+
 			loop choose {
-				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {					
-					Optional<DataValue> dv = wait(
-						doc->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));
-					
-					fprintf(stdout, "Apply Removed doc: %s\n", dv.get().toString().c_str());
-
-					if (dv.present()) {
-						bson::OID id = dv.get().getId();
-						fprintf(stdout, "Removed doc: %s\n", id.toString().c_str());
-					}
-
+				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {
 					futures.push_back(std::make_pair(doc, Future<Void>(Void())));
 				}
+
+				when(Reference<IReadWriteContext> _doc = wait(inserts.empty() ? Never() : inserts.front())) {
+					wait(_doc->commitChanges());
+					inserts.pop_front();
+				}
+
 				when(wait(futures.empty() ? Never() : futures.front().second)) {
 					output.send(futures.front().first);
 					futures.pop_front();
-				}
-			}
+				}				
+			}			
 		} catch (Error& e) {
 			if (e.code() != error_code_end_of_stream)
 				throw;
 		}
 
+		state int j = 0;
+		for (; j < inserts.size(); j++) {
+			Reference<IReadWriteContext> _doc = wait(inserts[j]);
+			wait(_doc->commitChanges());			
+		}
+		
 		while (!futures.empty()) {
 			wait(futures.front().second);
 			output.send(futures.front().first);
-			futures.pop_front();
+			futures.pop_front();			
+		}
+
+		throw end_of_stream();
+	} catch (Error& e) {
+		if (e.code() != error_code_actor_cancelled)
+			output.sendError(e);
+		throw;
+	}
+}
+
+ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
+										Reference<DocTransaction> tr,
+										Reference<MetadataManager> mm,
+										Namespace ns,
+										Reference<OplogInserter> oplog,
+										FutureStream<Reference<ScanReturnedContext>> input,
+                                   		PromiseStream<Reference<ScanReturnedContext>> output) {
+	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
+	state Deque<Future<Reference<IReadWriteContext>>> inserts;
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+
+    try {
+		try {
+			state Reference<UnboundCollectionContext> ucx = wait(oplog->getUnboundContext(mm, tr));
+			state Reference<CollectionContext> colCx = ucx->bindCollectionContext(tr);
+
+			loop choose {
+				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {				
+					Optional<DataValue> dv = wait(
+						doc->get(DataValue(DocLayerConstants::ID_FIELD, DVTypeCode::STRING).encode_key_part()));				
+
+					if (dv.present()) {
+						state bson::OID id = dv.get().getId();
+						wait(flowControlLock->take());
+						inserts.push_back(oplog->deleteOp(colCx, fullCollNameToString(ns), id));
+					}
+
+					futures.push_back(std::make_pair(doc, Future<Void>(Void())));
+				}			
+
+				when(Reference<IReadWriteContext> _doc = wait(inserts.empty() ? Never() : inserts.front())) {
+					wait(_doc->commitChanges());
+					inserts.pop_front();
+				}
+
+				when(wait(futures.empty() ? Never() : futures.front().second)) {
+					output.send(futures.front().first);
+					futures.pop_front();
+				}				
+			}			
+		} catch (Error& e) {
+			if (e.code() != error_code_end_of_stream)
+				throw;
+		}
+
+		state int j = 0;
+		for (; j < inserts.size(); j++) {
+			Reference<IReadWriteContext> _doc = wait(inserts[j]);
+			wait(_doc->commitChanges());			
+		}
+		
+		while (!futures.empty()) {
+			wait(futures.front().second);
+			output.send(futures.front().first);
+			futures.pop_front();			
 		}
 
 		throw end_of_stream();
@@ -1176,14 +1277,7 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 	try {
 		try {
 			loop choose {
-				when(Reference<ScanReturnedContext> doc = waitNext(input)) {					
-					// TODO:    Все документы для удаления и обновления перебираются здесь
-					// FEATURE: OP_DELETE, OP_UPDATE
-					// fprintf(stdout, "DELETE DOCUMENT (%s)\n", updateOp->describe().c_str());
-					// if (updateOp->describe() == DocLayerConstants::DESCRIBE_DELETE_DOC) {		
-					// 	//oplogDeletion(checkpoint, doc, tr, cx, mm);
-					// }
-
+				when(Reference<ScanReturnedContext> doc = waitNext(input)) {
 					futures.push_back(std::make_pair(doc, updateOp->update(doc)));
 					count += 1;
 					if (count >= limit)
@@ -1225,11 +1319,22 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 	}
 }
 
+FutureStream<Reference<ScanReturnedContext>> OplogInsertPlan::execute(PlanCheckpoint* checkpoint,
+																	  Reference<DocTransaction> tr) {
+    PromiseStream<Reference<ScanReturnedContext>> output;
+
+	checkpoint->addOperation(
+		doOplogInsert(checkpoint, tr, mm, ns, docs, oplog, subPlan->execute(checkpoint, tr), output), output);
+
+	return output.getFuture();
+}
+
 FutureStream<Reference<ScanReturnedContext>> OplogUpdatePlan::execute(PlanCheckpoint* checkpoint,
                                                                  	  Reference<DocTransaction> tr) {
     PromiseStream<Reference<ScanReturnedContext>> docs;
 
-    checkpoint->addOperation(doOplogUpdate(checkpoint, tr, mm, ns, subPlan->execute(checkpoint, tr), docs), docs);
+    checkpoint->addOperation(
+		doOplogUpdate(checkpoint, tr, mm, ns, oplog, subPlan->execute(checkpoint, tr), docs), docs);
 
 	return docs.getFuture();
 }
@@ -1239,28 +1344,6 @@ FutureStream<Reference<ScanReturnedContext>> UpdatePlan::execute(PlanCheckpoint*
 	PromiseStream<Reference<ScanReturnedContext>> docs;
 	checkpoint->addOperation(
 	    doUpdate(checkpoint, tr, subPlan->execute(checkpoint, tr), docs, updateOp, upsertOp, limit, cx), docs);
-
-	// if (updateOp->describe() == DocLayerConstants::DESCRIBE_DELETE_DOC) {
-	// 	PromiseStream<Reference<ScanReturnedContext>> docsInserts;
-
-	// 	Namespace ns;
-	// 	PromiseStream<Reference<ScanReturnedContext>> zProm;
-	// 	Optional<IdInfo> encodedIds = Optional<IdInfo>();
-	// 	std::vector<Reference<IInsertOp>> inserts;
-	// 	bson::BSONObj obj = BSON(
-	// 		DocLayerConstants::OP_FIELD_H << 1
-	// 		<< DocLayerConstants::OP_FIELD_NS << 100
-	// 		<< DocLayerConstants::OP_FIELD_O << "a"
-	// 		<< DocLayerConstants::OP_FIELD_OP << DocLayerConstants::OP_DELETE
-	// 	);
-	// 	inserts.push_back(Reference<IInsertOp>(new ExtInsert(obj, encodedIds)));
-
-	// 	ns.first = DocLayerConstants::OPLOG_DB;
-	// 	ns.second = DocLayerConstants::OPLOG_COL;
-
-	// 	fprintf(stdout, "<<<<<< ADD OPERATION DO INSERT <<<<<<<< %i\n", 100);
-	// 	checkpoint->addOperation(doInsert(checkpoint, inserts, tr, mm, ns, docsInserts), docsInserts);
-	// }
 
 	return docs.getFuture();
 }
@@ -1922,8 +2005,17 @@ Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionC
 	    new UpdatePlan(subPlan, Reference<IUpdateOp>(new DeleteDocument()), Reference<IInsertOp>(), limit, cx));
 }
 
-Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm) {
-	return Reference<Plan>(new OplogUpdatePlan(subPlan, mm));
+Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm, Namespace ns) {
+	Reference<OplogInserter> oplog = ref(new OplogInserter());
+	return Reference<Plan>(new OplogUpdatePlan(subPlan, oplog, mm, ns));
+}
+
+Reference<Plan> oplogInsertPlan(Reference<Plan> subPlan, 
+								std::list<bson::BSONObj>* docs,
+								Reference<MetadataManager> mm, 
+								Namespace ns) {
+	Reference<OplogInserter> oplog = ref(new OplogInserter());
+	return Reference<Plan>(new OplogInsertPlan(subPlan, docs, oplog, mm, ns));
 }
 
 Reference<Plan> flushChanges(Reference<Plan> subPlan) {
