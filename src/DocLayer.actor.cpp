@@ -143,7 +143,7 @@ Future<Void> processRequest(Reference<ExtConnection> ec,
 	try {
 		Reference<ExtMsg> msg = ExtMsg::create(header, body, finished);
 		if (verboseLogging)
-			TraceEvent("BD_processRequest").detail("Message", msg->toString());
+			TraceEvent("BD_processRequest").detail("Message", msg->toString()).detail("connId", ec->connectionId);
 		if (verboseConsoleOutput)
 			fprintf(stderr, "C -> S: %s\n\n", msg->toString().c_str());
 		return msg->run(ec);
@@ -169,7 +169,7 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId) {
 	if (verboseLogging)
-		TraceEvent("BD_serverNewConnection");
+		TraceEvent("BD_serverNewConnection").detail("connId", connectionId);
 
 	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
@@ -187,7 +187,7 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 			choose {
 				when(wait(onError)) {
 					if (verboseLogging)
-						TraceEvent("BD_serverClosedConnection");
+						TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
 					throw connection_failed();
 				}
 				when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
