@@ -1192,7 +1192,6 @@ ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
 										Reference<OplogInserter> oplog,
 										FutureStream<Reference<ScanReturnedContext>> input,
                                    		PromiseStream<Reference<ScanReturnedContext>> output) {
-	state Deque<std::pair<Reference<ScanReturnedContext>, Future<Void>>> futures;
 	state Deque<Future<Reference<IReadWriteContext>>> inserts;
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
@@ -1212,18 +1211,13 @@ ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
 						inserts.push_back(oplog->deleteOp(colCx, fullCollNameToString(ns), id));
 					}
 
-					futures.push_back(std::make_pair(doc, Future<Void>(Void())));
+					output.send(doc);
 				}			
 
 				when(Reference<IReadWriteContext> _doc = wait(inserts.empty() ? Never() : inserts.front())) {
 					wait(_doc->commitChanges());
 					inserts.pop_front();
-				}
-
-				when(wait(futures.empty() ? Never() : futures.front().second)) {
-					output.send(futures.front().first);
-					futures.pop_front();
-				}				
+				}			
 			}			
 		} catch (Error& e) {
 			if (e.code() != error_code_end_of_stream)
@@ -1234,12 +1228,6 @@ ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
 		for (; j < inserts.size(); j++) {
 			Reference<IReadWriteContext> _doc = wait(inserts[j]);
 			wait(_doc->commitChanges());			
-		}
-		
-		while (!futures.empty()) {
-			wait(futures.front().second);
-			output.send(futures.front().first);
-			futures.pop_front();			
 		}
 
 		throw end_of_stream();
