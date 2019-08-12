@@ -165,6 +165,22 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	}
 }
 
+ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
+	try {
+		loop {
+			wait(delay(DOCLAYER_KNOBS->CURSOR_EXPIRY));
+			Cursor::prune(ec->cursors, false);
+		}
+	} catch (Error &e) {
+		// This is the only actor responsible for all the cursors created
+		// through this connection. Prune all the cursors before cancelling
+		// this actor.
+		if (e.code() == error_code_actor_cancelled)
+			Cursor::prune(ec->cursors, true);
+		throw;
+	}
+}
+
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId) {
@@ -174,12 +190,11 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
+	state Future<Void> connHousekeeping = housekeeping(ec);
 
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 	                                            ++docLayer->nrConnections);
 	try {
-		ec->startHousekeeping();
-
 		loop {
 			// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer
 			// needed and can be popped

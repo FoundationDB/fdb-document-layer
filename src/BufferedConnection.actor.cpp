@@ -40,6 +40,14 @@ struct BCBlock : FastAllocated<BCBlock> /*See below, NonCopyable */ {
 struct BufferedConnectionData {
 	explicit BufferedConnectionData(Reference<IConnection> connection);
 	~BufferedConnectionData() {
+		// Free left over buffers.
+		for (auto blk : deadlist) {
+			delete blk;
+		}
+		for (auto blk : buffer) {
+			delete blk;
+		}
+
 		conn.cancel();
 		connection->close();
 	}
