@@ -845,7 +845,15 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 						choose {
 							when(state Reference<ScanReturnedContext> doc =
 							         waitNext(docs)) { // throws end_of_stream when totally finished
-								committingDocs.push_back(std::make_pair(doc, doc->commitChanges()));
+
+								/*
+									UPDATE работает через этот план @UPDATE
+									Документ в исходном состоянии (SRC)
+								 */
+								// DataValue dv2 = wait(doc->toDataValue());
+								// fprintf(stdout, "0. COMMITED SOURCE: %s\n", dv2.getPackedObject().toString().c_str());
+
+								committingDocs.push_back(std::make_pair(doc, doc->commitChanges()));						
 								if (first) {
 									timeout = delay(DOCLAYER_KNOBS->NONISOLATED_INTERNAL_TIMEOUT,
 									                g_network->getCurrentTask() + 1);
@@ -853,6 +861,13 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 								}
 							}
 							when(wait(committingDocs.empty() ? Never() : committingDocs.front().second)) {
+								/*
+									UPDATE работает через этот план @UPDATE
+									Документ в финальном состоянии (1) (DEST)
+								 */
+								// DataValue dv2 = wait(committingDocs.front().first->toDataValue());
+								// fprintf(stdout, "1. COMMITED FINIDSHED DOCS: %s\n", dv2.getPackedObject().toString().c_str());
+
 								bufferedDocs.push_back(committingDocs.front().first);
 								committingDocs.pop_front();
 								innerLock->release();
@@ -876,6 +891,14 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 				// refer to documents that we are considering committed.
 				while (!committingDocs.empty()) {
 					wait(committingDocs.front().second);
+
+					/*
+						UPDATE работает через этот план @UPDATE
+						Документ в финальном состоянии (2) (DEST)
+					*/
+					// DataValue dv2 = wait(committingDocs.front().first->toDataValue());
+					// fprintf(stdout, "2. COMMITED DOCS: %s\n", dv2.getPackedObject().toString().c_str());
+
 					bufferedDocs.push_back(committingDocs.front().first);
 					committingDocs.pop_front();
 				}
@@ -1209,7 +1232,7 @@ ACTOR static Future<Void> doOplogUpdate(PlanCheckpoint* checkpoint,
 						state bson::OID id = dv.get().getId();
 						wait(flowControlLock->take());
 						inserts.push_back(oplog->deleteOp(colCx, fullCollNameToString(ns), id));
-					}
+					}		
 
 					output.send(doc);
 				}			
@@ -1271,9 +1294,6 @@ ACTOR static Future<Void> doUpdate(PlanCheckpoint* checkpoint,
 
 		while (!futures.empty()) {
 			wait(futures.front().second);
-			// DataValue dvv = wait(futures.front().first->toDataValue());
-			//fprintf(stdout, "Doc results: %s\n", futures.front().first->toDbgString().c_str());
-			//fprintf(stdout, "Doc results: %s\n", dvv.getPackedObject().toString().c_str());
 			output.send(futures.front().first);
 			futures.pop_front();
 		}
@@ -1415,7 +1435,19 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 		}
 
 		if (any || upsertOp) {
+			/*
+				FindAndModify работает через этот план @FINDANDMODIFY
+				Документ в исходном состоянии (1) (SRC)
+			*/
+			// DataValue dv2 = wait(firstDoc->toDataValue());
+			// fprintf(stdout, "1. FIND AND MODIFY: %s\n", dv2.getPackedObject().toString().c_str());
 			wait(firstDoc->commitChanges());
+			/*
+				FindAndModify работает через этот план @FINDANDMODIFY
+				Документ в финальном состоянии (1) (DEST)
+			*/
+			// DataValue dv2 = wait(firstDoc->toDataValue());
+			// fprintf(stdout, "1. FIND AND MODIFY: %s\n", dv2.getPackedObject().toString().c_str());		
 		}
 
 		if (projectNew && (any || upsertOp)) {
@@ -1492,7 +1524,19 @@ ACTOR static Future<Void> projectAndUpdate(PlanCheckpoint* checkpoint,
 		}
 
 		if (any || upsertOp) {
+			/*
+				ProjectAndUpdate работает через этот план @PROJECTANDUPDATE
+				Документ в исходном состоянии (1) (SRC)
+			*/
+			// DataValue dv2 = wait(firstDoc->toDataValue());
+			// fprintf(stdout, "1. PROJECT AND UPDATE: %s\n", dv2.getPackedObject().toString().c_str());
 			wait(firstDoc->commitChanges());
+			/*
+				ProjectAndUpdate работает через этот план @PROJECTANDUPDATE
+				Документ в финальном состоянии (1) (DEST)
+			*/
+			// DataValue dv2 = wait(firstDoc->toDataValue());
+			// fprintf(stdout, "1. PROJECT AND UPDATE: %s\n", dv2.getPackedObject().toString().c_str());	
 		}
 
 		if (projectNew && (any || upsertOp)) {
