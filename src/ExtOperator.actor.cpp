@@ -381,9 +381,9 @@ ACTOR static Future<Void> getValueAndAdd(Reference<IReadWriteContext> cx,
 		DataValue actualValue = valueInDatabase.get();
 		if (actualValue.getSortType() != DVTypeCode::NUMBER)
 			throw inc_applied_to_non_number();
-		cx->set(path,
-		        doubleDispatchArithmetic(actualValue, valueToAdd, [](LongDouble a, LongDouble b) { return a + b; })
-		            .encode_value());
+		cx->set(path, doubleDispatchArithmetic(actualValue, valueToAdd, [](LongDouble a, LongDouble b) {
+			              return a + b;
+		              }).encode_value());
 		return Void();
 	} else {
 		cx->set(path, valueToAdd.encode_value());
@@ -413,9 +413,9 @@ ACTOR static Future<Void> getValueAndMultiply(Reference<IReadWriteContext> cx,
 		DataValue actualValue = valueInDatabase.get();
 		if (actualValue.getSortType() != DVTypeCode::NUMBER)
 			throw mul_applied_to_non_number();
-		cx->set(path,
-		        doubleDispatchArithmetic(actualValue, valueToMultiply, [](LongDouble a, LongDouble b) { return a * b; })
-		            .encode_value());
+		cx->set(path, doubleDispatchArithmetic(actualValue, valueToMultiply, [](LongDouble a, LongDouble b) {
+			              return a * b;
+		              }).encode_value());
 		return Void();
 	} else {
 		cx->set(path, DataValue(0).encode_value());

@@ -40,7 +40,7 @@ int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneA
 			(void)pluck(i);
 			pruned++;
 		}
-	} catch (Error &e) {
+	} catch (Error& e) {
 		TraceEvent(SevError, "BD_cursor_prune_failed").error(e);
 		// Ignoring error just to keep the code consistent with previous behaviour.
 		// Cursor design could be made lot better than this.

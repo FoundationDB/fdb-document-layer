@@ -171,7 +171,7 @@ ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
 			wait(delay(DOCLAYER_KNOBS->CURSOR_EXPIRY));
 			Cursor::prune(ec->cursors, false);
 		}
-	} catch (Error &e) {
+	} catch (Error& e) {
 		// This is the only actor responsible for all the cursors created
 		// through this connection. Prune all the cursors before cancelling
 		// this actor.

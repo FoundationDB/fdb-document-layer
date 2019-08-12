@@ -69,12 +69,13 @@ ACTOR void statusUpdateActor(std::string version,
 			FDB::Tuple tuple;
 			tuple.append(newStatus, true);
 			FDB::Value v = tuple.pack();
-			Future<Void> watch = wait(runTransactionAsync(docLayer->database,
-			                                              [&, v](Reference<DocTransaction> tr) {
-				                                              tr->tr->set(instanceKey, v);
-				                                              return tr->tr->watch(instanceKey);
-			                                              },
-			                                              3, 5000));
+			Future<Void> watch = wait(runTransactionAsync(
+			    docLayer->database,
+			    [&, v](Reference<DocTransaction> tr) {
+				    tr->tr->set(instanceKey, v);
+				    return tr->tr->watch(instanceKey);
+			    },
+			    3, 5000));
 			wait(watch || delay(10.0));
 		} catch (Error& e) {
 			TraceEvent(SevWarnAlways, "Unable to write status").detail("Error", e.what());

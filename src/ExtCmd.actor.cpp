@@ -114,11 +114,12 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 	try {
 		// No need to wait on lastWrite. The ranges we write ensure that this will conflict with anything it needs to
 		// conflict with.
-		wait(runRYWTransaction(ec->docLayer->database,
-		                       [=](Reference<DocTransaction> tr) {
-			                       return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
-		                       },
-		                       ec->options.retryLimit, ec->options.timeoutMillies));
+		wait(runRYWTransaction(
+		    ec->docLayer->database,
+		    [=](Reference<DocTransaction> tr) {
+			    return Internal_doDropDatabase(tr, query, ec->docLayer->rootDirectory);
+		    },
+		    ec->options.retryLimit, ec->options.timeoutMillies));
 
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
@@ -477,9 +478,10 @@ ACTOR static Future<Reference<ExtMsgReply>> doRenameCollection(Reference<ExtConn
 	try {
 		// No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict with
 		// anything it needs to conflict with.
-		wait(runRYWTransaction(ec->docLayer->database,
-		                       [=](Reference<DocTransaction> tr) { return Internal_doRenameCollection(tr, query, ec); },
-		                       ec->options.retryLimit, ec->options.timeoutMillies));
+		wait(runRYWTransaction(
+		    ec->docLayer->database,
+		    [=](Reference<DocTransaction> tr) { return Internal_doRenameCollection(tr, query, ec); },
+		    ec->options.retryLimit, ec->options.timeoutMillies));
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
@@ -664,11 +666,12 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				if (el.String() == "*") {
 					// No need to wait on lastWrite in either case. The ranges we write ensure that this will conflict
 					// with anything it needs to conflict with.
-					int result = wait(runRYWTransaction(ec->docLayer->database,
-					                                    [=](Reference<DocTransaction> tr) {
-						                                    return internal_doDropIndexesActor(tr, query->ns, ec->mm);
-					                                    },
-					                                    ec->options.retryLimit, ec->options.timeoutMillies));
+					int result = wait(runRYWTransaction(
+					    ec->docLayer->database,
+					    [=](Reference<DocTransaction> tr) {
+						    return internal_doDropIndexesActor(tr, query->ns, ec->mm);
+					    },
+					    ec->options.retryLimit, ec->options.timeoutMillies));
 					dropped = result;
 
 					reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "msg"
@@ -689,13 +692,13 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 					return reply;
 				}
 			} else if (el.type() == bson::BSONType::Object) {
-				std::pair<int, int> result =
-				    wait(runRYWTransaction(ec->docLayer->database,
-				                           [=](Reference<DocTransaction> tr) {
-					                           return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD,
-					                                                    DataValue(el.Obj()), ec->mm);
-				                           },
-				                           ec->options.retryLimit, ec->options.timeoutMillies));
+				std::pair<int, int> result = wait(runRYWTransaction(
+				    ec->docLayer->database,
+				    [=](Reference<DocTransaction> tr) {
+					    return dropIndexMatching(tr, query->ns, DocLayerConstants::KEY_FIELD, DataValue(el.Obj()),
+					                             ec->mm);
+				    },
+				    ec->options.retryLimit, ec->options.timeoutMillies));
 				dropped = result.first;
 
 				reply->addDocument(BSON("nIndexesWas" << dropped + 1 << "ok" << 1.0));
@@ -1343,20 +1346,21 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		state FutureStream<Reference<ScanReturnedContext>> queryResults = qrPlan->execute(checkpoint.getPtr(), dtr);
 		state PromiseStream<Reference<ScanReturnedContext>> filteredResults;
 
-		wait(asyncFilter(queryResults,
-		                 [=](Reference<ScanReturnedContext> queryResult) mutable {
-			                 scanned++;
-			                 return map(predicate->evaluate(queryResult), [=](bool keep) mutable {
-				                 if (keep)
-					                 filtered++;
-				                 // For `distinct`, accumulated distinct values are already held in the
-				                 // distinctPredicate, and the returned kv is no longer needed by any
-				                 // upstream caller after this point. Thus release it immediately.
-				                 flowControlLock->release();
-				                 return keep;
-			                 });
-		                 },
-		                 filteredResults));
+		wait(asyncFilter(
+		    queryResults,
+		    [=](Reference<ScanReturnedContext> queryResult) mutable {
+			    scanned++;
+			    return map(predicate->evaluate(queryResult), [=](bool keep) mutable {
+				    if (keep)
+					    filtered++;
+				    // For `distinct`, accumulated distinct values are already held in the
+				    // distinctPredicate, and the returned kv is no longer needed by any
+				    // upstream caller after this point. Thus release it immediately.
+				    flowControlLock->release();
+				    return keep;
+			    });
+		    },
+		    filteredResults));
 
 		bson::BSONArrayBuilder arrayBuilder;
 		distinctPredicate->collectDataValues(arrayBuilder);
