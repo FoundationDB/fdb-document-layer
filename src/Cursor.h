@@ -43,7 +43,7 @@ struct Cursor : ReferenceCounted<Cursor>, NonCopyable {
 
 	void refresh() { expiry = time(nullptr) + DOCLAYER_KNOBS->CURSOR_EXPIRY; }
 
-	static int32_t prune(std::map<int64_t, Reference<Cursor>>& cursors);
+	static int32_t prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneAll);
 
 	static void pluck(Reference<Cursor> cursor);
 	static Reference<Cursor> add(std::map<int64_t, Reference<Cursor>>& siblings, Reference<Cursor> cursor);

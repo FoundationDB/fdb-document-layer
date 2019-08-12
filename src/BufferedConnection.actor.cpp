@@ -40,6 +40,14 @@ struct BCBlock : FastAllocated<BCBlock> /*See below, NonCopyable */ {
 struct BufferedConnectionData {
 	explicit BufferedConnectionData(Reference<IConnection> connection);
 	~BufferedConnectionData() {
+		// Free left over buffers.
+		for (auto blk : deadlist) {
+			delete blk;
+		}
+		for (auto blk : buffer) {
+			delete blk;
+		}
+
 		conn.cancel();
 		connection->close();
 	}
@@ -137,25 +145,6 @@ BufferedConnection::BufferedConnection(Reference<IConnection> connection)
 
 BufferedConnection::~BufferedConnection() {
 	delete self;
-}
-
-StringRef BufferedConnection::peekSome(int count, int offset) {
-	ASSERT(count + offset <= self->total_bytes.get());
-
-	auto it = self->buffer.begin();
-	int block_offset = self->buffer_begin_offset;
-
-	while (offset) {
-		int advance = std::min(offset, BCBlock::DATA_SIZE - block_offset);
-		offset -= advance;
-		block_offset += advance;
-		if (block_offset == BCBlock::DATA_SIZE) {
-			block_offset = 0;
-			++it;
-		}
-	}
-
-	return {(*it)->data + block_offset, std::min(count, BCBlock::DATA_SIZE - block_offset)};
 }
 
 void BufferedConnectionData::copyInto(uint8_t* buf, int count) {
@@ -305,10 +294,6 @@ Future<Void> BufferedConnection::onClosed() {
 
 Future<Void> BufferedConnection::onWritable() {
 	return self->connection->onWritable();
-}
-
-int BufferedConnection::bytesAvailable() {
-	return self->total_bytes.get();
 }
 
 NetworkAddress BufferedConnection::getPeerAddress() {

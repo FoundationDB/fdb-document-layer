@@ -143,7 +143,7 @@ Future<Void> processRequest(Reference<ExtConnection> ec,
 	try {
 		Reference<ExtMsg> msg = ExtMsg::create(header, body, finished);
 		if (verboseLogging)
-			TraceEvent("BD_processRequest").detail("Message", msg->toString());
+			TraceEvent("BD_processRequest").detail("Message", msg->toString()).detail("connId", ec->connectionId);
 		if (verboseConsoleOutput)
 			fprintf(stderr, "C -> S: %s\n\n", msg->toString().c_str());
 		return msg->run(ec);
@@ -165,21 +165,36 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	}
 }
 
+ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
+	try {
+		loop {
+			wait(delay(DOCLAYER_KNOBS->CURSOR_EXPIRY));
+			Cursor::prune(ec->cursors, false);
+		}
+	} catch (Error& e) {
+		// This is the only actor responsible for all the cursors created
+		// through this connection. Prune all the cursors before cancelling
+		// this actor.
+		if (e.code() == error_code_actor_cancelled)
+			Cursor::prune(ec->cursors, true);
+		throw;
+	}
+}
+
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId) {
 	if (verboseLogging)
-		TraceEvent("BD_serverNewConnection");
+		TraceEvent("BD_serverNewConnection").detail("connId", connectionId);
 
 	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
+	state Future<Void> connHousekeeping = housekeeping(ec);
 
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 	                                            ++docLayer->nrConnections);
 	try {
-		ec->startHousekeeping();
-
 		loop {
 			// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer
 			// needed and can be popped
@@ -187,7 +202,7 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 			choose {
 				when(wait(onError)) {
 					if (verboseLogging)
-						TraceEvent("BD_serverClosedConnection");
+						TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
 					throw connection_failed();
 				}
 				when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {

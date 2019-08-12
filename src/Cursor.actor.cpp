@@ -23,21 +23,27 @@
 #include "Knobs.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
-int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors) {
+int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneAll) {
 	time_t now = time(nullptr);
 	int32_t pruned = 0;
 	std::vector<Reference<Cursor>> to_be_pruned;
 
-	for (auto it = cursors.begin(); it != cursors.end();) {
-		if (it->second && now >= it->second->expiry) {
-			to_be_pruned.push_back(it->second);
+	try {
+		for (auto it = cursors.begin(); it != cursors.end();) {
+			if (it->second && (pruneAll || now >= it->second->expiry)) {
+				to_be_pruned.push_back(it->second);
+			}
+			++it;
 		}
-		++it;
-	}
 
-	for (const auto& i : to_be_pruned) {
-		(void)pluck(i);
-		pruned++;
+		for (const auto& i : to_be_pruned) {
+			(void)pluck(i);
+			pruned++;
+		}
+	} catch (Error& e) {
+		TraceEvent(SevError, "BD_cursor_prune_failed").error(e);
+		// Ignoring error just to keep the code consistent with previous behaviour.
+		// Cursor design could be made lot better than this.
 	}
 
 	return pruned;
