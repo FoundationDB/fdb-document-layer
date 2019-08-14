@@ -711,7 +711,7 @@ Future<Reference<IReadWriteContext>> OplogInserter::updateOp(Reference<Collectio
 	prepareBuilder(&builder, DocLayerConstants::OP_UPDATE, ns);
 
 	builder.append(DocLayerConstants::OP_FIELD_O2, BSON(DocLayerConstants::ID_FIELD << id.toString()))
-		   .append(DocLayerConstants::OP_FIELD_O, BSON("$v" << 1 << "$set" << obj));
+		   .append(DocLayerConstants::OP_FIELD_O, BSON("v" << 1 << "set" << obj));
 
 	return insert(cx, builder.obj());
 }
@@ -731,6 +731,10 @@ Future<Reference<UnboundCollectionContext>> OplogInserter::getUnboundContext(Ref
 
 Future<Reference<IReadWriteContext>> OplogInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
 	return insertDocument(cx, obj, Optional<IdInfo>());
+}
+
+bool OplogInserter::isValidNs(std::string ns) {
+	return strcasecmp(ns.c_str(), fullCollNameToString(this->ns).c_str()) != 0;
 }
 
 struct ExtInsert : ConcreteInsertOp<ExtInsert> {
@@ -1317,12 +1321,7 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-
-				if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
-					plan = oplogDeletePlan(plan, ec->mm, ns);
-				}
-
-				plan = ec->wrapOperationPlan(plan, false, cx);					
+				plan = ec->wrapOperationPlan(plan, false, cx);			
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));

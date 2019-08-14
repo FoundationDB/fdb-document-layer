@@ -63,32 +63,6 @@ using namespace FDB;
  *  - Filtering plans (those that may not output every document they receive on an input) must
  *  	- PlanCheckpoint::getDocumentFinishedLock()->release() each document that they discard
  */
-struct OplogUpdatePlan: ConcretePlan<OplogUpdatePlan> {
-	OplogUpdatePlan(Reference<Plan> subPlan,
-					Reference<OplogInserter> oplog,
-					Reference<MetadataManager> mm,
-					Namespace ns) : subPlan(subPlan), mm(mm), oplog(oplog), ns(ns) {}
-
-	bson::BSONObj describe() override {
-		return BSON(
-		     // clang-format off
-			"type" << "update oplog"
-		    // clang-format on
-		);
-	}
-
-	PlanType getType() override { return PlanType::Update; }
-
-	FutureStream<Reference<ScanReturnedContext>> execute(PlanCheckpoint* checkpoint,
-	                                                     Reference<DocTransaction> tr) override;
-
-	private:
-		Reference<Plan> subPlan;
-		Reference<OplogInserter> oplog;
-		Reference<MetadataManager> mm;
-		Namespace ns;
-};
-
 struct OplogInsertPlan : ConcretePlan<OplogInsertPlan> {
 	OplogInsertPlan(Reference<Plan> subPlan,
 					std::list<bson::BSONObj>* docs,
@@ -809,6 +783,37 @@ ACTOR static Future<Void> doNonIsolatedRO(PlanCheckpoint* outerCheckpoint,
 	}
 }
 
+void gatherObjectsInfo(
+	const DataValue *dv, 
+	std::map<std::string, std::pair<bson::BSONObj, bson::BSONObj>> *updates,
+	bool isSource
+) {
+	bson::BSONObj oObj = dv->getPackedObject().getOwned();
+	if (oObj.isEmpty()) {
+		return;
+	}
+
+	bson::BSONElement oId;
+	oObj.getObjectID(oId);
+
+	if (oId.isNull()) {
+		return;
+	}
+
+	if (isSource) {
+		(*updates)[oId.OID().toString()] = std::make_pair(oObj, bson::BSONObj());
+		return;
+	}
+
+	auto oIdStr = oId.OID().toString();	
+	if (updates->count(oIdStr) > 0) {
+		(*updates)[oIdStr].second = oObj;
+		return;
+	}
+	
+	(*updates)[oIdStr] = std::make_pair(bson::BSONObj(), oObj);
+}
+
 ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
                                           Reference<Plan> subPlan,
                                           PromiseStream<Reference<ScanReturnedContext>> output,
@@ -822,6 +827,15 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state int oCount = 0;
 	state int nTransactions = 1;
+
+	// #Oplog. Objects for oplogger start
+	state Namespace targetNs = Namespace(cx->databaseName(), cx->collectionName());
+	state std::string targetNsStr = fullCollNameToString(targetNs);
+	state Reference<OplogInserter> opIns = ref(new OplogInserter());
+	state std::map<std::string, std::pair<bson::BSONObj, bson::BSONObj>> updates;
+	state bool oplogEnabled = opIns->isValidNs(targetNsStr);
+	// #Oplog. Objects for oplogger end
+
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
 		loop {
@@ -844,14 +858,13 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 							timeout = delay(0);
 						choose {
 							when(state Reference<ScanReturnedContext> doc =
-							         waitNext(docs)) { // throws end_of_stream when totally finished
-
-								/*
-									UPDATE работает через этот план @UPDATE
-									Документ в исходном состоянии (SRC)
-								 */
-								// DataValue dv2 = wait(doc->toDataValue());
-								// fprintf(stdout, "0. COMMITED SOURCE: %s\n", dv2.getPackedObject().toString().c_str());
+							         waitNext(docs)) { // throws end_of_stream when totally finished	
+								if (oplogEnabled) {
+									// #Oplog. Start original information gathering: Update/Upsert
+									DataValue oDv = wait(doc->toDataValue());
+									gatherObjectsInfo(&oDv, &updates, true);
+									// #Oplog. End original information gathering: Update/Upsert
+								}
 
 								committingDocs.push_back(std::make_pair(doc, doc->commitChanges()));						
 								if (first) {
@@ -861,12 +874,12 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 								}
 							}
 							when(wait(committingDocs.empty() ? Never() : committingDocs.front().second)) {
-								/*
-									UPDATE работает через этот план @UPDATE
-									Документ в финальном состоянии (1) (DEST)
-								 */
-								// DataValue dv2 = wait(committingDocs.front().first->toDataValue());
-								// fprintf(stdout, "1. COMMITED FINIDSHED DOCS: %s\n", dv2.getPackedObject().toString().c_str());
+								if (oplogEnabled) {
+									// #Oplog. Start result infromation gathering: Update/Upsert
+									DataValue oDv = wait(committingDocs.front().first->toDataValue());
+									gatherObjectsInfo(&oDv, &updates, false);
+									// #Oplog. End result information gathering: Update/Upsert
+								}
 
 								bufferedDocs.push_back(committingDocs.front().first);
 								committingDocs.pop_front();
@@ -892,16 +905,45 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 				while (!committingDocs.empty()) {
 					wait(committingDocs.front().second);
 
-					/*
-						UPDATE работает через этот план @UPDATE
-						Документ в финальном состоянии (2) (DEST)
-					*/
-					// DataValue dv2 = wait(committingDocs.front().first->toDataValue());
-					// fprintf(stdout, "2. COMMITED DOCS: %s\n", dv2.getPackedObject().toString().c_str());
+					if (oplogEnabled) {
+						// #Oplog. Start result infromation gathering: Update/Upsert
+						DataValue oDv = wait(committingDocs.front().first->toDataValue());
+						gatherObjectsInfo(&oDv, &updates, false);
+						// #Oplog. End result information gathering: Update/Upsert
+					}
 
 					bufferedDocs.push_back(committingDocs.front().first);
 					committingDocs.pop_front();
+				}	
+
+				if (oplogEnabled) {
+					// #Oplog. Start commits
+					state Deque<Future<Reference<IReadWriteContext>>> oplogs;				
+					state Reference<UnboundCollectionContext> ucx = wait(opIns->getUnboundContext(mm, dtr));
+					state Reference<CollectionContext> colCx = ucx->bindCollectionContext(dtr);			
+
+					for(auto o : updates) {
+						if (o.second.second.isEmpty()) {
+							oplogs.push_back(opIns->deleteOp(colCx, targetNsStr, bson::OID(o.first)));
+							continue;
+						}
+
+						if (o.second.first.isEmpty()) {
+							oplogs.push_back(opIns->insertOp(colCx, targetNsStr, o.second.second));
+							continue;
+						}
+
+						oplogs.push_back(opIns->updateOp(colCx, targetNsStr, bson::OID(o.first), o.second.second));
+					}
+
+					state int opJ = 0;
+					for (; opJ < oplogs.size(); opJ++) {
+						Reference<IReadWriteContext> _doc = wait(oplogs[opJ]);
+						wait(_doc->commitChanges());
+					}				
+					// #Oplog. End commits
 				}
+
 
 				// In this case (but not in the case of NonIsolatedRO, Retry, or FindAndModify), we must keep the
 				// reference to the transaction alive (because we're going to commit it), but have not necessarily
@@ -1326,16 +1368,6 @@ FutureStream<Reference<ScanReturnedContext>> OplogInsertPlan::execute(PlanCheckp
 		doOplogInsert(checkpoint, tr, mm, ns, docs, oplog, subPlan->execute(checkpoint, tr), output), output);
 
 	return output.getFuture();
-}
-
-FutureStream<Reference<ScanReturnedContext>> OplogUpdatePlan::execute(PlanCheckpoint* checkpoint,
-                                                                 	  Reference<DocTransaction> tr) {
-    PromiseStream<Reference<ScanReturnedContext>> docs;
-
-    checkpoint->addOperation(
-		doOplogUpdate(checkpoint, tr, mm, ns, oplog, subPlan->execute(checkpoint, tr), docs), docs);
-
-	return docs.getFuture();
 }
 
 FutureStream<Reference<ScanReturnedContext>> UpdatePlan::execute(PlanCheckpoint* checkpoint,
@@ -2026,11 +2058,6 @@ ACTOR Future<int64_t> executeUntilCompletionTransactionally(Reference<Plan> plan
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit) {
 	return Reference<Plan>(
 	    new UpdatePlan(subPlan, Reference<IUpdateOp>(new DeleteDocument()), Reference<IInsertOp>(), limit, cx));
-}
-
-Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm, Namespace ns) {
-	Reference<OplogInserter> oplog = ref(new OplogInserter());
-	return Reference<Plan>(new OplogUpdatePlan(subPlan, oplog, mm, ns));
 }
 
 Reference<Plan> oplogInsertPlan(Reference<Plan> subPlan, 

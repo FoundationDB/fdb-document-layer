@@ -259,6 +259,8 @@ struct OplogInserter: ReferenceCounted<OplogInserter> {
 	Future<Reference<UnboundCollectionContext>> getUnboundContext(
 		Reference<MetadataManager> mm, Reference<DocTransaction> tr);
 
+	bool isValidNs(std::string ns);
+
 	private:
 		void prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns);
 		Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj);

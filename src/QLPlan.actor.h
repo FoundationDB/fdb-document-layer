@@ -706,8 +706,13 @@ ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCom
     Reference<DocTransaction> tr);
 
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit);
-Reference<Plan> oplogDeletePlan(Reference<Plan> subPlan, Reference<MetadataManager> mm, Namespace ns);
 Reference<Plan> oplogInsertPlan(Reference<Plan> subPlan, std::list<bson::BSONObj>* docs, Reference<MetadataManager> mm, Namespace ns);
 Reference<Plan> flushChanges(Reference<Plan> subPlan);
+
+void gatherObjectsInfo(
+	const DataValue *dv, 
+	std::map<std::string, std::pair<bson::BSONObj, bson::BSONObj>> *updates,
+	std::vector<bson::BSONObj> *inserts,
+	bool isSource);
 
 #endif /* _QL_PLAN_ACTOR_H_ */
