@@ -29,6 +29,8 @@ add_library(bsoncpp
         "util/hex.h"
         "util/misc.h"
         "util/optime.h"
+        "system_info.h"
+        "system_info.cpp"
         "util/time_support.h"
         )
 
