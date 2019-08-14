@@ -4,6 +4,7 @@
 
 * [#94](https://github.com/FoundationDB/fdb-document-layer/issues/94) - Added `renameCollection` command
 * [#129](https://github.com/FoundationDB/fdb-document-layer/issues/129) - Moved to FDB dependency 6.0 -> 6.1
+* [#194](https://github.com/FoundationDB/fdb-document-layer/pull/194) - Fixed unnecessary memory copies with `DataKey` and `DataValue`. This should help with performance a bit.
 * [#202](https://github.com/FoundationDB/fdb-document-layer/issues/202) - Fix for a memory leak on new connections
 
 ### 1.7.2
