@@ -125,6 +125,11 @@ Reference<IPredicate> re_predicate(const bson::BSONElement& el, const std::strin
 bson::BSONObj sortBsonObj(bson::BSONObj obj);
 
 /**
+ * Return a difference between bson objects `original` and `updated`
+ */
+bson::BSONObj getUpdatedObjectsDifference(bson::BSONObj original, bson::BSONObj updated, bool isSet = true);
+
+/**
  * Return a pair of key-encoded and value-encoded strings of whatever was in the _id
  * field of `obj`, plus the value itself if it was a bson object.
  */

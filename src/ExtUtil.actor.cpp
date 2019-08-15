@@ -594,6 +594,42 @@ bson::BSONObj deepTransformLogicalOperators(bson::BSONObj obj) {
 	return builder.obj();
 }
 
+bson::BSONObj getUpdatedObjectsDifference(bson::BSONObj original, bson::BSONObj updated, bool isSet) {
+	bson::BSONObjBuilder builder;
+
+	for (auto entries = updated.begin(); entries.more();) {
+		auto next = entries.next();
+		auto nextField = next.fieldName();
+
+		if(!original.hasElement(nextField)) {
+			if (isSet) {
+				builder.append(next);
+			} else {
+				builder.appendNull(nextField);
+			}
+			continue;
+		}
+
+		auto sibbling = original.getField(nextField);
+
+		if (next.isSimpleType() || next.type() == bson::Array) {
+			if (!next.valuesEqual(sibbling)) {
+				builder.append(next);				
+			}
+			continue;
+		}
+
+		if (next.type() == bson::Object) {
+			auto child = getUpdatedObjectsDifference(sibbling.Obj(), next.Obj(), isSet);
+			if (!child.isEmpty()) {
+				builder.append(nextField, child);
+			}
+		}
+	}
+
+	return builder.obj();
+}
+
 bson::BSONObj convertCompoundStringToObj(bson::BSONObj obj) {
 	bson::BSONObjBuilder builder1;
 

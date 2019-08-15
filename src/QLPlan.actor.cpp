@@ -807,7 +807,18 @@ void gatherObjectsInfo(
 
 	auto oIdStr = oId.OID().toString();	
 	if (updates->count(oIdStr) > 0) {
-		(*updates)[oIdStr].second = oObj;
+		auto bobDiff = getUpdatedObjectsDifference((*updates)[oIdStr].first, oObj);
+		
+		if (bobDiff.isEmpty()) {
+			bobDiff = getUpdatedObjectsDifference(oObj, (*updates)[oIdStr].first, false);
+		}
+
+		if (bobDiff.isEmpty()) {
+			(*updates).erase(oIdStr);
+			return;
+		}
+
+		(*updates)[oIdStr].second = bobDiff;
 		return;
 	}
 	
