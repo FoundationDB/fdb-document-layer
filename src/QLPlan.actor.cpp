@@ -1443,20 +1443,8 @@ ACTOR static Future<Void> projectAndUpdate(PlanCheckpoint* checkpoint,
 			firstDoc = ref(new ScanReturnedContext(inserted, -1, FDB::Key()));
 		}
 
-		if (any || upsertOp) {
-			/*
-				ProjectAndUpdate работает через этот план @PROJECTANDUPDATE
-				Документ в исходном состоянии (1) (SRC)
-			*/
-			// DataValue dv2 = wait(firstDoc->toDataValue());
-			// fprintf(stdout, "1. PROJECT AND UPDATE: %s\n", dv2.getPackedObject().toString().c_str());
-			wait(firstDoc->commitChanges());
-			/*
-				ProjectAndUpdate работает через этот план @PROJECTANDUPDATE
-				Документ в финальном состоянии (1) (DEST)
-			*/
-			// DataValue dv2 = wait(firstDoc->toDataValue());
-			// fprintf(stdout, "1. PROJECT AND UPDATE: %s\n", dv2.getPackedObject().toString().c_str());	
+		if (any || upsertOp) {			
+			wait(firstDoc->commitChanges());			
 		}
 
 		if (projectNew && (any || upsertOp)) {
