@@ -1255,6 +1255,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
                                         Reference<MetadataManager> mm,
                                         Reference<Database> database,
                                         Reference<UnboundCollectionContext> cx,
+										Reference<IOplogInserter> oplogInserter,
                                         Reference<IUpdateOp> updateOp,
                                         Reference<IInsertOp> upsertOp,
                                         Reference<Projection> projection,
@@ -1262,13 +1263,18 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
                                         bool projectNew,
                                         PromiseStream<Reference<ScanReturnedContext>> output) {
 	if (!dtr)
-		dtr = NonIsolatedPlan::newTransaction(database);
+		dtr = NonIsolatedPlan::newTransaction(database);		
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int nTransactions = 1;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
 	state Reference<ScanReturnedContext> firstDoc;
 	state bool any = false;
 	state bson::BSONObj proj;
+	state Reference<Oplogger> oplogger = ref(new Oplogger(
+		Namespace(cx->databaseName(), cx->collectionName()),
+		oplogInserter
+	));
+
 	try {
 		state uint64_t metadataVersion = wait(cx->bindCollectionContext(dtr)->getMetadataVersion());
 		loop {
@@ -1337,19 +1343,30 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 		}
 
 		if (any || upsertOp) {
-			/*
-				FindAndModify работает через этот план @FINDANDMODIFY
-				Документ в исходном состоянии (1) (SRC)
-			*/
-			// DataValue dv2 = wait(firstDoc->toDataValue());
-			// fprintf(stdout, "1. FIND AND MODIFY: %s\n", dv2.getPackedObject().toString().c_str());
+			if (oplogger->isEnabled()) {
+				// Oplog. Add original doc.
+				DataValue dv = wait(firstDoc->toDataValue());
+				oplogger->addOriginalDoc(&dv);
+			}
+
 			wait(firstDoc->commitChanges());
-			/*
-				FindAndModify работает через этот план @FINDANDMODIFY
-				Документ в финальном состоянии (1) (DEST)
-			*/
-			// DataValue dv2 = wait(firstDoc->toDataValue());
-			// fprintf(stdout, "1. FIND AND MODIFY: %s\n", dv2.getPackedObject().toString().c_str());		
+
+			if (oplogger->isEnabled()) {
+				// Oplog. Add updated doc.
+				DataValue dv = wait(firstDoc->toDataValue());
+				oplogger->addUpdatedDoc(&dv);
+
+				state Reference<UnboundCollectionContext> ucx = wait(oplogger->getUnboundContext(mm, dtr));
+				state Reference<CollectionContext> opCtx = ucx->bindCollectionContext(dtr);
+
+				state int i = 0;
+				state Deque<Future<Reference<IReadWriteContext>>> logs = oplogger->buildOplogs(opCtx);
+				// Oplog. Commit docs.
+				for (; i < logs.size(); i++) {
+					Reference<IReadWriteContext> _doc = wait(logs[i]);
+					wait(_doc->commitChanges());
+				}
+			}			
 		}
 
 		if (projectNew && (any || upsertOp)) {
@@ -1380,7 +1397,8 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
 FutureStream<Reference<ScanReturnedContext>> FindAndModifyPlan::execute(PlanCheckpoint* checkpoint,
                                                                         Reference<DocTransaction> tr) {
 	PromiseStream<Reference<ScanReturnedContext>> docs;
-	checkpoint->addOperation(findAndModify(checkpoint, tr, subPlan, mm, database, cx, updateOp, upsertOp, projection,
+	checkpoint->addOperation(findAndModify(checkpoint, tr, subPlan, mm, database, cx, 
+										   oplogInserter, updateOp, upsertOp, projection,
 	                                       ordering, projectNew, docs),
 	                         docs);
 	return docs.getFuture();

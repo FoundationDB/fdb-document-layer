@@ -518,6 +518,7 @@ struct FindAndModifyPlan : ConcretePlan<FindAndModifyPlan> {
 	Reference<UnboundCollectionContext> cx;
 	Reference<FDB::Database> database;
 	Reference<MetadataManager> mm;
+	Reference<IOplogInserter> oplogInserter;
 
 	FindAndModifyPlan(Reference<Plan> subPlan,
 	                  Reference<IUpdateOp> updateOp,
@@ -526,6 +527,7 @@ struct FindAndModifyPlan : ConcretePlan<FindAndModifyPlan> {
 	                  Optional<bson::BSONObj> ordering,
 	                  bool projectNew,
 	                  Reference<UnboundCollectionContext> cx,
+					  Reference<IOplogInserter> oplogInserter,
 	                  Reference<FDB::Database> database,
 	                  Reference<MetadataManager> mm)
 	    : subPlan(subPlan),
@@ -535,6 +537,7 @@ struct FindAndModifyPlan : ConcretePlan<FindAndModifyPlan> {
 	      projectNew(projectNew),
 	      ordering(ordering),
 	      cx(cx),
+		  oplogInserter(oplogInserter),
 	      database(database),
 	      mm(mm) {}
 

@@ -682,61 +682,6 @@ ACTOR Future<Reference<IReadWriteContext>> insertDocument(Reference<CollectionCo
 	return dcx;
 }
 
-Future<Reference<IReadWriteContext>> OplogInserter::deleteOp(Reference<CollectionContext> cx, 
-															 std::string ns, 
-															 bson::OID id) {
-	bson::BSONObjBuilder builder;
-	prepareBuilder(&builder, DocLayerConstants::OP_DELETE, ns);
-
-	builder.append(DocLayerConstants::OP_FIELD_O, BSON(DocLayerConstants::ID_FIELD << id.toString()));
-
-	return insert(cx, builder.obj());
-}
-
-Future<Reference<IReadWriteContext>> OplogInserter::insertOp(Reference<CollectionContext> cx, 
-															 std::string ns, 
-															 bson::BSONObj obj) {
-	bson::BSONObjBuilder builder;
-	prepareBuilder(&builder, DocLayerConstants::OP_INSERT, ns);
-
-	builder.append(DocLayerConstants::OP_FIELD_O, obj);
-
-	return insert(cx, builder.obj());
-}
-
-Future<Reference<IReadWriteContext>> OplogInserter::updateOp(Reference<CollectionContext> cx, 
-															 std::string ns, 
-															 bson::OID id, bson::BSONObj obj) {
-	bson::BSONObjBuilder builder;
-	prepareBuilder(&builder, DocLayerConstants::OP_UPDATE, ns);
-
-	builder.append(DocLayerConstants::OP_FIELD_O2, BSON(DocLayerConstants::ID_FIELD << id.toString()))
-		   .append(DocLayerConstants::OP_FIELD_O, BSON("v" << 1 << "set" << obj));
-
-	return insert(cx, builder.obj());
-}
-
-void OplogInserter::prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns) {
-	(*builder).append(DocLayerConstants::OP_FIELD_TS, (long long)(timer() * 1000))
-		   	  .append(DocLayerConstants::OP_FIELD_V, int32_t(2))
-		   	  .append(DocLayerConstants::OP_FIELD_H, (long long)(g_random->randomInt64(INT64_MIN, INT64_MAX)))
-		      .append(DocLayerConstants::OP_FIELD_NS, ns)
-		      .append(DocLayerConstants::OP_FIELD_OP, op);
-}
-
-Future<Reference<UnboundCollectionContext>> OplogInserter::getUnboundContext(Reference<MetadataManager> mm, 
-											  				 				 Reference<DocTransaction> tr) {    
-    return mm->getUnboundCollectionContext(tr, ns);
-}
-
-Future<Reference<IReadWriteContext>> OplogInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
-	return insertDocument(cx, obj, Optional<IdInfo>());
-}
-
-bool OplogInserter::isValidNs(std::string ns) {
-	return strcasecmp(ns.c_str(), fullCollNameToString(this->ns).c_str()) != 0;
-}
-
 struct ExtInsert : ConcreteInsertOp<ExtInsert> {
 	bson::BSONObj obj;
 	Optional<IdInfo> encodedIds;

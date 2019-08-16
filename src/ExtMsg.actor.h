@@ -246,34 +246,6 @@ struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter> {
 	Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj) override;
 };
 
-struct OplogInserter: ReferenceCounted<OplogInserter> {
-	Namespace ns;
-
-	OplogInserter() {
-		ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-	}
-
-	Future<Reference<IReadWriteContext>> insertOp(Reference<CollectionContext> cx, 
-												 std::string ns, 
-												 bson::BSONObj obj);
-	Future<Reference<IReadWriteContext>> updateOp(Reference<CollectionContext> cx, 
-												  std::string ns, 
-												  bson::OID id, 
-												  bson::BSONObj obj);
-	Future<Reference<IReadWriteContext>> deleteOp(Reference<CollectionContext> cx, 
-												  std::string ns, 
-												  bson::OID id);
-
-	Future<Reference<UnboundCollectionContext>> getUnboundContext(
-		Reference<MetadataManager> mm, Reference<DocTransaction> tr);
-
-	bool isValidNs(std::string ns);
-
-	private:
-		void prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns);
-		Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj);
-};
-
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, const bson::BSONObj& query);
 std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool multi, bool upsert);
 ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj firstDoc,
