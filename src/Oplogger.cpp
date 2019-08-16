@@ -36,12 +36,12 @@ Future<Reference<IReadWriteContext>> OplogActor::insertOp(Reference<CollectionCo
 
 Future<Reference<IReadWriteContext>> OplogActor::updateOp(Reference<CollectionContext> cx, 
                                                 std::string ns, 
-                                                bson::OID id, 
+                                                std::string id,
                                                 bson::BSONObj obj) {
     bson::BSONObjBuilder builder;
 	prepareBuilder(&builder, DocLayerConstants::OP_UPDATE, ns);
 
-	builder.append(DocLayerConstants::OP_FIELD_O2, BSON(DocLayerConstants::ID_FIELD << id.toString()))
+	builder.append(DocLayerConstants::OP_FIELD_O2, BSON(DocLayerConstants::ID_FIELD << id))
 		   .append(DocLayerConstants::OP_FIELD_O, BSON("v" << 1 << "set" << obj));
 
 	return inserter->insert(cx, builder.obj());
@@ -49,11 +49,11 @@ Future<Reference<IReadWriteContext>> OplogActor::updateOp(Reference<CollectionCo
 
 Future<Reference<IReadWriteContext>> OplogActor::deleteOp(Reference<CollectionContext> cx, 
                                                 std::string ns, 
-                                                bson::OID id) {
+                                                std::string id) {
     bson::BSONObjBuilder builder;
 	prepareBuilder(&builder, DocLayerConstants::OP_DELETE, ns);
 
-	builder.append(DocLayerConstants::OP_FIELD_O, BSON(DocLayerConstants::ID_FIELD << id.toString()));
+	builder.append(DocLayerConstants::OP_FIELD_O, BSON(DocLayerConstants::ID_FIELD << id));
 
 	return inserter->insert(cx, builder.obj());
 }
@@ -86,7 +86,7 @@ Deque<Future<Reference<IReadWriteContext>>> Oplogger::buildOplogs(Reference<Coll
 
     for(auto o : operations) {
         if (o.second.second.isEmpty()) {
-            oplogs.push_back(actor->deleteOp(ctx, ns, bson::OID(o.first)));
+            oplogs.push_back(actor->deleteOp(ctx, ns, o.first));
             continue;
         }
 
@@ -95,7 +95,7 @@ Deque<Future<Reference<IReadWriteContext>>> Oplogger::buildOplogs(Reference<Coll
             continue;
         }
 
-        oplogs.push_back(actor->updateOp(ctx, ns, bson::OID(o.first), o.second.second));
+        oplogs.push_back(actor->updateOp(ctx, ns, o.first, o.second.second));
     }
 
     return oplogs;
@@ -129,21 +129,28 @@ void Oplogger::gatherObjectsInfo(bson::BSONObj oObj, bool isSource) {
 		return;
 	}
 
-	bson::BSONElement oId;    
-	if (!oObj.getObjectID(oId)) {
-        return;
-    }
+	if(!oObj.hasElement(DocLayerConstants::ID_FIELD)) {
+		return;
+	}
 
+	bson::BSONElement oId = oObj.getField(DocLayerConstants::ID_FIELD);
 	if (oId.isNull()) {
 		return;
 	}
+	
+	std::string oIdStr;
+
+	if (oId.isString()) {
+		oIdStr = oId.String();
+	} else if (oId.type() == bson::jstOID) {
+		oIdStr = oId.OID().toString();
+	}
 
 	if (isSource) {
-		operations[oId.OID().toString()] = std::make_pair(oObj, bson::BSONObj());
+		operations[oIdStr] = std::make_pair(oObj, bson::BSONObj());
 		return;
 	}
 
-	auto oIdStr = oId.OID().toString();	
 	if (operations.count(oIdStr) > 0) {
 		auto bobDiff = getUpdatedObjectsDifference(operations[oIdStr].first, oObj);
 		

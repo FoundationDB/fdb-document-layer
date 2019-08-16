@@ -41,15 +41,15 @@ struct OplogActor: ReferenceCounted<OplogActor> {
 	OplogActor(Reference<IOplogInserter> inserter) : inserter(inserter) {}
 
 	Future<Reference<IReadWriteContext>> insertOp(Reference<CollectionContext> cx, 
-												 std::string ns, 
+												 std::string ns,
 												 bson::BSONObj obj);
 	Future<Reference<IReadWriteContext>> updateOp(Reference<CollectionContext> cx, 
 												  std::string ns, 
-												  bson::OID id, 
+												  std::string id,
 												  bson::BSONObj obj);
 	Future<Reference<IReadWriteContext>> deleteOp(Reference<CollectionContext> cx, 
-												  std::string ns, 
-												  bson::OID id);
+												  std::string ns,
+												  std::string id);
 
 	private:
 		void prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns);
@@ -71,7 +71,7 @@ struct Oplogger: ReferenceCounted<Oplogger> {
     void addOriginalDoc(const DataValue *dv);
     void addUpdatedDoc(const DataValue *dv);
 	void addOriginalDoc(bson::BSONObj doc);
-	void addUpdatedDoc(bson::BSONObj doc);	
+	void addUpdatedDoc(bson::BSONObj doc);
 
 	private:
 		void gatherObjectsInfo(bson::BSONObj oObj, bool isSource);

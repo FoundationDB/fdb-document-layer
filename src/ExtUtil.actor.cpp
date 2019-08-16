@@ -612,18 +612,16 @@ bson::BSONObj getUpdatedObjectsDifference(bson::BSONObj original, bson::BSONObj 
 
 		auto sibbling = original.getField(nextField);
 
-		if (next.isSimpleType() || next.type() == bson::Array) {
-			if (!next.valuesEqual(sibbling)) {
-				builder.append(next);				
-			}
-			continue;
-		}
-
 		if (next.type() == bson::Object) {
 			auto child = getUpdatedObjectsDifference(sibbling.Obj(), next.Obj(), isSet);
 			if (!child.isEmpty()) {
 				builder.append(nextField, child);
 			}
+			continue;
+		}
+
+		if (!next.valuesEqual(sibbling)) {
+			builder.append(next);
 		}
 	}
 
