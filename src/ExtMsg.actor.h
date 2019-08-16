@@ -35,6 +35,7 @@
 #include "QLPlan.actor.h"
 #include "QLPredicate.h"
 #include "QLOperations.h"
+#include "Oplogger.h"
 
 #include "flow/flow.h"
 
@@ -236,6 +237,13 @@ struct ExtMsgKillCursors : ExtMsg, FastAllocated<ExtMsgKillCursors> {
 private:
 	ExtMsgKillCursors(ExtMsgHeader*, const uint8_t*);
 	friend struct ExtMsg::Factory<ExtMsgKillCursors>;
+};
+
+struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter> {
+	void addref() override { ReferenceCounted<DocInserter>::addref(); }
+	void delref() override { ReferenceCounted<DocInserter>::delref(); }
+	
+	Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj) override;
 };
 
 struct OplogInserter: ReferenceCounted<OplogInserter> {

@@ -31,6 +31,7 @@
 #include "QLOperations.h"
 #include "QLPredicate.h"
 #include "QLProjection.actor.h"
+#include "Oplogger.h"
 
 /**
  * Represents a plan running in a particular transaction(al try) and its bounds in the keyspace
@@ -334,6 +335,15 @@ struct NonIsolatedPlan : ConcretePlan<NonIsolatedPlan> {
 	Reference<Plan> subPlan;
 	bool isReadOnly;
 	Reference<MetadataManager> mm;
+	Reference<IOplogInserter> oplogInserter;
+
+	NonIsolatedPlan(Reference<Plan> subPlan,
+	                bool isReadOnly,
+	                Reference<UnboundCollectionContext> cx,
+	                Reference<FDB::Database> database,
+					Reference<IOplogInserter> oplogInserter,
+	                Reference<MetadataManager> mm)
+	    : subPlan(subPlan), isReadOnly(isReadOnly), cx(cx), database(database), oplogInserter(oplogInserter), mm(mm) {}
 
 	NonIsolatedPlan(Reference<Plan> subPlan,
 	                bool isReadOnly,
@@ -592,6 +602,30 @@ private:
 	Namespace ns;
 };
 
+struct OplogInsertPlan : ConcretePlan<OplogInsertPlan> {
+	OplogInsertPlan(Reference<Plan> subPlan,
+					std::list<bson::BSONObj>* docs,
+					Reference<IOplogInserter> oplogInserter,
+					Reference<MetadataManager> mm,
+					Namespace ns)
+	    : docs(docs), subPlan(subPlan), oplogInserter(oplogInserter), mm(mm), ns(ns) {}
+
+	bson::BSONObj describe() override {
+		return subPlan->describe();
+	}
+
+	PlanType getType() override { return PlanType::Insert; }
+	FutureStream<Reference<ScanReturnedContext>> execute(PlanCheckpoint* checkpoint,
+	                                                     Reference<DocTransaction> tr) override;
+
+	private:
+		Reference<Plan> subPlan;
+		Reference<IOplogInserter> oplogInserter;
+		std::list<bson::BSONObj>* docs;
+		Reference<MetadataManager> mm;
+		Namespace ns;
+};
+
 struct SortPlan : ConcretePlan<SortPlan> {
 	Reference<Plan> subPlan;
 	bson::BSONObj orderObj; // FIXME: Belongs in sort key
@@ -706,13 +740,11 @@ ACTOR Future<std::pair<int64_t, Reference<ScanReturnedContext>>> executeUntilCom
     Reference<DocTransaction> tr);
 
 Reference<Plan> deletePlan(Reference<Plan> subPlan, Reference<UnboundCollectionContext> cx, int64_t limit);
-Reference<Plan> oplogInsertPlan(Reference<Plan> subPlan, std::list<bson::BSONObj>* docs, Reference<MetadataManager> mm, Namespace ns);
 Reference<Plan> flushChanges(Reference<Plan> subPlan);
-
-void gatherObjectsInfo(
-	const DataValue *dv, 
-	std::map<std::string, std::pair<bson::BSONObj, bson::BSONObj>> *updates,
-	std::vector<bson::BSONObj> *inserts,
-	bool isSource);
+Reference<Plan> oplogInsertPlan(Reference<Plan> subPlan,
+								std::list<bson::BSONObj>* docs,
+								Reference<IOplogInserter> oplogInserter,
+								Reference<MetadataManager> mm,
+								Namespace ns);
 
 #endif /* _QL_PLAN_ACTOR_H_ */

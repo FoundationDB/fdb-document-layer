@@ -16,6 +16,8 @@ add_executable(fdbdoc
         Knobs.cpp
         Knobs.h
         MetadataManager.h
+        Oplogger.h
+        Oplogger.cpp
         QLContext.h
         QLExpression.h
         QLOperations.h

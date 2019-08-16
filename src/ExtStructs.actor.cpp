@@ -26,6 +26,12 @@ Reference<DocTransaction> ExtConnection::getOperationTransaction() {
 	return NonIsolatedPlan::newTransaction(docLayer->database);
 }
 
+Reference<Plan> ExtConnection::wrapOperationPlanOplog(Reference<Plan> plan,
+												   	  Reference<IOplogInserter> oplogInserter,
+                                                      Reference<UnboundCollectionContext> cx) {
+   return Reference<Plan>(new NonIsolatedPlan(plan, false, cx, docLayer->database, oplogInserter, mm));
+}
+
 Reference<Plan> ExtConnection::wrapOperationPlan(Reference<Plan> plan,
                                                  bool isReadOnly,
                                                  Reference<UnboundCollectionContext> cx) {

@@ -30,6 +30,7 @@
 #include "BufferedConnection.h"
 #include "DocLayer.h"
 #include "MetadataManager.h"
+#include "Oplogger.h"
 
 #include "QLPlan.actor.h"
 
@@ -109,10 +110,13 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Reference<BufferedConnection> bc;
 	Future<WriteResult> lastWrite;
 
-	Reference<DocTransaction> getOperationTransaction();
+	Reference<DocTransaction> getOperationTransaction();	
 	Reference<Plan> wrapOperationPlan(Reference<Plan> plan, bool isReadOnly, Reference<UnboundCollectionContext> cx);
 	Reference<Plan> isolatedWrapOperationPlan(Reference<Plan> plan);
 	Reference<Plan> isolatedWrapOperationPlan(Reference<Plan> plan, int64_t timeout, int64_t retryLimit);
+	Reference<Plan> wrapOperationPlanOplog(Reference<Plan> plan,
+										Reference<IOplogInserter> oplogInserter, 
+										Reference<UnboundCollectionContext> cx);
 	void startHousekeeping();
 	Future<Void> beforeWrite(int desiredPermits = 1);
 	Future<Void> afterWrite(Future<WriteResult> result, int releasePermits = 1);

@@ -951,7 +951,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	Reference<Plan> plan = ref(new InsertPlan(inserts, ec->mm, ns));
 
 	if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
-		plan = oplogInsertPlan(plan, documents, ec->mm, ns);
+		plan = oplogInsertPlan(plan, documents, ref(new DocInserter()), ec->mm, ns);
 	}
 
 	plan = ec->isolatedWrapOperationPlan(plan);
@@ -1162,7 +1162,7 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 			Reference<Plan> plan = planQuery(cx, cmd->selector);
 			plan =
 			    ref(new UpdatePlan(plan, updater, upserter, cmd->multi ? std::numeric_limits<int64_t>::max() : 1, cx));
-			plan = ec->wrapOperationPlan(plan, false, cx);
+			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter()), cx);
 
 			std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 			    wait(executeUntilCompletionAndReturnLastTransactionally(plan, dtr));
@@ -1514,4 +1514,8 @@ Reference<IInsertOp> simpleUpsert(bson::BSONObj const& selector, bson::BSONObj c
 }
 Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj const& update) {
 	return ref(new ExtOperatorUpsert(selector, update));
+}
+
+Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
+	return insertDocument(cx, obj, Optional<IdInfo>());
 }
