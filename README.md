@@ -26,16 +26,39 @@ Document Layer build depends on the following projects. If you are building usin
 
 We depend on Boost 1.67 for Boost.DLL. Even though the DLL is a header only library, it depends on the non-header only libraries - filesystem and system. You can setup Boost as below:
 
+The flag `-fvisibility` is set to `hidden` to avoid boost library related warnings in Mac OS.
 ```
 cd /tmp/ && \
 curl -L -J -O https://dl.bintray.com/boostorg/release/1.67.0/source/boost_1_67_0.tar.gz && \
 tar -xzf boost_1_67_0.tar.gz && \
 cd boost_1_67_0 && \
 ./bootstrap.sh --prefix=./ && \
-./b2 install --with-filesystem --with-system
+./b2 cxxflags=-fvisibility=hidden install --with-filesystem --with-system
 ```
 
 and set the `BOOST_ROOT` environment variable to be `/tmp/boost_1_67_0/`. This is how CMake build picks the Boost packages. Since Boost is statically linked, it does not matter where you installed it.
+
+#### Framework
+While building document layer in Mac platform, warnings might be thrown like 'library out of sync'. This can be avoided by doing either one of following methods,
+
+##### Method-1
+This step will guide to remove existing xcode libraries and install latest xcode libraries. This is permanent fix for framework related warnings. Make sure backup the existing libraries and remove this backup only if latest installtion works.
+
+```
+$ sudo mv /Library/Developer/CommandLineTools /Library/Developer/CommandLineTools.old
+$ xcode-select --install
+$ sudo rm -rf /Library/Developer/CommandLineTools.old
+```
+
+##### Method-2
+Without disturbing existing libraries and add proper SDK path for framework libraries. Make sure this path set whenever opening a new terminal.
+
+```
+$ Xcrun –show-sdk-path
+  --> The above command will show the sdk-path
+  --> copy sdk-path and paste it below in double quotes
+$ export SDKROOT=<sdk-path>
+```
 
 #### FoundationDB
 
