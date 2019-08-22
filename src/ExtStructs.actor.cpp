@@ -22,6 +22,41 @@
 #include "QLPlan.actor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
+// Create connection change stream
+FutureStream<Standalone<StringRef>> ExtChangeStream::newConnection(int64_t connectionId) {
+	PromiseStream<Standalone<StringRef>> changeStream;
+	connections[connectionId] = changeStream;
+	return changeStream.getFuture();
+}
+
+// Delete connection change stream
+void ExtChangeStream::deleteConnection(int64_t connectionId) {
+	connections[connectionId].sendError(end_of_stream());
+	connections.erase(connectionId);
+}
+
+// Write message to change stream
+void ExtChangeStream::writeMessage(Standalone<StringRef> msg) {
+	for(auto &c : connections) {
+		c.second.send(msg);
+	}
+}
+
+// Delete all connections
+void ExtChangeStream::clear() {
+	connections.clear();
+}
+
+// Get change stream for connection
+Reference<ExtChangeStream> ExtConnection::getChangeStream() {
+	return changeStream;
+}
+
+// Set change stream for connection
+void ExtConnection::setChangeStream(Reference<ExtChangeStream> stream) {
+	changeStream = stream;
+}
+
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {
 	return NonIsolatedPlan::newTransaction(docLayer->database);
 }

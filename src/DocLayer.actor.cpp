@@ -85,7 +85,8 @@ enum {
 	OPT_BUGGIFY_INTENSITY,
 	OPT_METRIC_PLUGIN,
 	OPT_METRIC_CONFIG,
-	OPT_FDB_DC_ID
+	OPT_FDB_DC_ID,
+	OPT_NSNOTIFYLISTEN
 };
 CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_CONNFILE, "--cluster_file", SO_REQ_SEP},
@@ -120,6 +121,8 @@ CSimpleOpt::SOption g_rgOptions[] = {{OPT_CONNFILE, "-C", SO_REQ_SEP},
                                      {OPT_METRIC_PLUGIN, "--metric_plugin", SO_OPT},
                                      {OPT_METRIC_CONFIG, "--metric_plugin_config", SO_OPT},
                                      {OPT_FDB_DC_ID, "--fdb_datacenter_id", SO_OPT},
+									 {OPT_NSNOTIFYLISTEN, "-nl", SO_REQ_SEP},
+									 {OPT_NSNOTIFYLISTEN, "--ns_listen", SO_REQ_SEP},
 #ifndef TLS_DISABLED
                                      TLS_OPTION_FLAGS
 #endif
@@ -167,11 +170,12 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
-                                       int64_t connectionId) {
+                                       int64_t connectionId,
+									   Reference<ExtChangeStream> changeStream) {
 	if (verboseLogging)
 		TraceEvent("BD_serverNewConnection");
 
-	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId));
+	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId, changeStream));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
 
@@ -223,7 +227,7 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	}
 }
 
-ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr) {
+ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr, Reference<ExtChangeStream> changeStream) {
 	state ActorCollection connections(false);
 	state int64_t nextConnectionId = 1;
 	try {
@@ -235,7 +239,7 @@ ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr) {
 		loop choose {
 			when(Reference<IConnection> conn = wait(listener->accept())) {
 				Reference<BufferedConnection> bc(new BufferedConnection(conn));
-				connections.add(extServerConnection(docLayer, bc, nextConnectionId));
+				connections.add(extServerConnection(docLayer, bc, nextConnectionId, changeStream));
 				nextConnectionId++;
 			}
 			when(wait(connections.getResult())) { ASSERT(false); }
@@ -429,7 +433,8 @@ ACTOR void setup(NetworkAddress na,
                  std::string unitTestPattern,
                  std::vector<std::pair<std::string, std::string>> client_knobs,
                  NetworkOptionsT client_network_options,
-                 std::string fdbDatacenterID) {
+                 std::string fdbDatacenterID,
+				 Reference<ExtChangeStream> changeStream) {
 	state FDB::API* fdb;
 	try {
 		fdb = FDB::API::selectAPIVersion(510);
@@ -538,13 +543,69 @@ ACTOR void setup(NetworkAddress na,
 			}
 		}
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
-		extServer(docLayer, na);
+		extServer(docLayer, na, changeStream);
 
 		if (!unitTestPattern.empty())
 			Tests::g_docLayer = docLayer;
 	} else {
 		extProxy(na, NetworkAddress::parse(format("127.0.0.1:%d", proxyto.get())));
 	}
+}
+
+// Change stream connection handler
+ACTOR Future<Void> extChangeConnection(Reference<BufferedConnection> bc,
+                                       int64_t connectionId,
+									   Reference<ExtChangeStream> changeStream) {
+	state Future<Void> onError = bc->onClosed();
+	state FutureStream<Standalone<StringRef>> messages = changeStream->newConnection(connectionId);
+
+	try {
+		loop {			
+			choose {
+				when(wait(onError)) {
+					throw success();
+				}
+				when(Standalone<StringRef>msg = waitNext(messages)) {
+					int64_t mSize = msg.size();
+					bc->write(StringRef((uint8_t*)&(mSize), sizeof(int64_t)));
+					bc->write(LiteralStringRef("\n"));
+					bc->write(msg);
+				}
+			}
+		}
+	} catch (Error& e) {
+		changeStream->deleteConnection(connectionId);
+		return Void();
+	}
+}
+
+// Change stream server
+ACTOR void extChangeServer(NetworkAddress addr, Reference<ExtChangeStream> changeStream) {
+	state ActorCollection connections(false);
+	state int64_t nextConnectionId = 1;
+	try {
+		state Reference<IListener> listener = INetworkConnections::net()->listen(addr);
+
+		fprintf(stdout, "FdbChangeServer: listening on %s\n", addr.toString().c_str());
+
+		loop choose {
+			when(Reference<IConnection> conn = wait(listener->accept())) {
+				Reference<BufferedConnection> bc(new BufferedConnection(conn));
+				connections.add(extChangeConnection(bc, nextConnectionId, changeStream));
+				nextConnectionId++;
+			}
+			when(wait(connections.getResult())) { ASSERT(false); }
+		}
+	} catch (Error& e) {
+		fprintf(stderr, "FdbChangeServer: fatal error: %s\n", e.what());
+		g_network->stop();
+		throw;
+	}
+}
+
+// Change stream setup
+void setupChangeListener(NetworkAddress na, Reference<ExtChangeStream> changeStream) {
+	extChangeServer(na, changeStream);
 }
 
 static void printVersion() {
@@ -624,6 +685,16 @@ void setThreadName(const char* name) {
 #endif
 }
 
+// Determine network address for listening
+NetworkAddress parseAddress(const std::string addr) {
+	bool autoAddress = (addr.find(':') == std::string::npos);
+	if (autoAddress) {
+		return NetworkAddress::parse("127.0.0.1:" + addr);
+	}
+
+	return NetworkAddress::parse(addr);
+}
+
 int main(int argc, char** argv) {
 	CSimpleOpt args(argc, argv, g_rgOptions, SO_O_EXACT);
 
@@ -635,8 +706,10 @@ int main(int argc, char** argv) {
 	std::string logGroup = "default";
 	std::string connFile;
 	std::string listenAddr;
+	std::string listenChangesAddr;
 	std::string unitTestPattern;
 	NetworkAddress na = NetworkAddress::parse("127.0.0.1:27016");
+	NetworkAddress changeStreamNa = NetworkAddress::parse("127.0.0.1:8081");
 	uint64_t rollsize = 10 << 20;
 	uint64_t maxLogsSize = rollsize * 10;
 	bool pipelineCompatMode = false;
@@ -693,6 +766,9 @@ int main(int argc, char** argv) {
 		case OPT_LISTEN:
 			listenAddr = args.OptionArg();
 			break;
+		case OPT_NSNOTIFYLISTEN:
+			listenChangesAddr = args.OptionArg();
+			break;	
 		case OPT_PROXYPORTS:
 			proxyports = args.MultiArg(1);
 
@@ -966,19 +1042,26 @@ int main(int argc, char** argv) {
 
 	if (proxyfrom.present()) {
 		na.port = proxyfrom.get();
-	} else if (!listenAddr.empty()) {
-		bool autoAddress = (listenAddr.find(':') == std::string::npos);
-		if (autoAddress) {
-			na = NetworkAddress::parse("127.0.0.1:" + listenAddr);
-		} else {
-			try {
-				na = NetworkAddress::parse(listenAddr);
-			} catch (Error&) {
-				fprintf(stderr, "ERROR: Could not parse network address `%s' (specify as [IP_ADDRESS:]PORT)\n",
-				        listenAddr.c_str());
-				printHelpTeaser(argv[0]);
-				return FDB_EXIT_ERROR;
-			}
+	} else if (!listenAddr.empty()) {		
+		try {
+			na = parseAddress(listenAddr);
+		} catch (Error&) {
+			fprintf(stderr, "ERROR: Could not parse network address `%s' (specify as [IP_ADDRESS:]PORT)\n",
+					listenAddr.c_str());
+			printHelpTeaser(argv[0]);
+			return FDB_EXIT_ERROR;
+		}
+	}
+
+	if (!listenChangesAddr.empty()) {
+		try {
+			changeStreamNa = parseAddress(listenChangesAddr);
+		} catch (Error&) {
+			fprintf(stderr, 
+					"ERROR: Could not parse notify network address `%s' (specify as [IP_ADDRESS:]PORT)\n",
+					listenChangesAddr.c_str());
+			printHelpTeaser(argv[0]);
+			return FDB_EXIT_ERROR;
 		}
 	}
 
@@ -1018,8 +1101,11 @@ int main(int argc, char** argv) {
 	    .detail("FlowSourceVersion", getFlowGitVersion())
 	    .detail("CommandLine", commandLine);
 
-	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs, client_network_options,
-	      fdbDatacenterID);
+	Reference<ExtChangeStream> changeStream = ref(new ExtChangeStream());
+	if (!listenChangesAddr.empty()) setupChangeListener(changeStreamNa, changeStream);
+	setup(na, proxyto, connFile, options, rootDirectory, unitTestPattern, client_knobs,
+		  client_network_options, fdbDatacenterID, changeStream);
+
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
 

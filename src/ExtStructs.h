@@ -101,6 +101,15 @@ Future<WriteResult> lastErrorOrLastResult(Future<WriteResult> const& previous,
                                           Future<WriteResult> const& next,
                                           FlowLock* const& lock);
 
+struct ExtChangeStream : ReferenceCounted<ExtChangeStream>, NonCopyable {
+	std::map<int64_t, PromiseStream<Standalone<StringRef>>> connections;
+
+	FutureStream<Standalone<StringRef>> newConnection(int64_t connectionId);
+	void deleteConnection(int64_t connectionId);
+	void writeMessage(Standalone<StringRef> msg);
+	void clear();
+};
+
 struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Reference<DocumentLayer> docLayer;
 	Reference<MetadataManager> mm;
@@ -109,6 +118,10 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	int64_t connectionId;
 	Reference<BufferedConnection> bc;
 	Future<WriteResult> lastWrite;
+	Reference<ExtChangeStream> changeStream;
+
+	Reference<ExtChangeStream> getChangeStream();
+	void setChangeStream(Reference<ExtChangeStream> stream);
 
 	Reference<DocTransaction> getOperationTransaction();	
 	Reference<Plan> wrapOperationPlan(Reference<Plan> plan, bool isReadOnly, Reference<UnboundCollectionContext> cx);
@@ -121,7 +134,10 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Future<Void> beforeWrite(int desiredPermits = 1);
 	Future<Void> afterWrite(Future<WriteResult> result, int releasePermits = 1);
 
-	ExtConnection(Reference<DocumentLayer> docLayer, Reference<BufferedConnection> bc, int64_t connectionId)
+	ExtConnection(Reference<DocumentLayer> docLayer, 
+				  Reference<BufferedConnection> bc, 
+				  int64_t connectionId, 
+				  Reference<ExtChangeStream> changeStream)
 	    : docLayer(docLayer),
 	      bc(bc),
 	      lastWrite(WriteResult()),
@@ -130,6 +146,7 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	      cursors(),
 	      mm(docLayer->mm),
 	      connectionId(connectionId),
+		  changeStream(changeStream),
 	      maxReceivedRequestID(0),
 	      nextServerGeneratedRequestID(0) {}
 
