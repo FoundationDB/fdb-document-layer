@@ -124,9 +124,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropDatabase(Reference<ExtConnecti
 		return reply;
 	} catch (Error& e) {
 		// clang-format off
-		reply->addDocument(BSON("ok" << 1.0 <<
-		                        "err" << e.what() <<
-		                        "code" << e.code()));
+		reply->setError(e);
 		// clang-format on
 		return reply;
 	}
@@ -187,7 +185,7 @@ struct GetlasterrorCmd {
 		try {
 			WriteResult res = wait(lastWrite);
 			bob.appendNumber("n", (long long)res.n); //< FIXME: ???
-			bob << "err" << BSONNULL << "ok" << 1.0;
+			bob << "$err" << BSONNULL << "ok" << 1.0;
 			if (!res.upsertedOIDList.empty()) {
 				bob.appendElements(DataValue::decode_key_part(res.upsertedOIDList[0]).wrap("upserted"));
 			}
@@ -195,8 +193,9 @@ struct GetlasterrorCmd {
 				bob << "updatedExisting" << (res.nModified > 0 && res.upsertedOIDList.empty());
 			}
 		} catch (Error& e) {
-			bob.append("err", e.what());
+			bob.append("$err", e.name());
 			bob.append("code", e.code());
+			bob.append("errmsg", e.what());
 			bob.appendNumber("n", (long long)0);
 			bob.append("ok", 1.0);
 		}
@@ -226,13 +225,10 @@ struct GetLogCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		bson::BSONObjBuilder bob;
 
 		if (query->ns.first != "admin") {
 			// clang-format off
-			reply->addDocument((bob << "ok" << 0.0 <<
-			                           "errmsg" << "access denied; use admin db" <<
-			                           "$err" << "access denied; use admin db").obj());
+			reply->setError(access_denied_use_admin_db());
 			// clang-format on
 			return reply;
 		}
@@ -283,15 +279,9 @@ struct ReplSetGetStatusCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> nmc,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		bson::BSONObjBuilder bob;
 
 		// FIXME: what do we really want to report here?
-		bob.append("ok", 0.0);
-		bob.append("errmsg", "not really talking to mongodb");
-		bob.append("$err", "not really talking to mongodb");
-
-		reply->addDocument(bob.obj());
-
+		reply->setError(not_really_talking_to_mongodb());
 		return reply;
 	}
 };
@@ -391,7 +381,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropCollection(Reference<ExtConnec
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 1.0 << "err" << e.what() << "code" << e.code()));
+		reply->setError(e);
 		return reply;
 	}
 }
@@ -483,7 +473,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doRenameCollection(Reference<ExtConn
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 0.0 << "errmsg" << e.what() << "code" << e.code()));
+		reply->setError(e);
 		return reply;
 	}
 }
@@ -518,7 +508,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnecti
 		reply->addDocument(BSON("n" << (double)std::max<int64_t>(count - skip, 0) << "ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("$err" << e.what() << "code" << e.code() << "ok" << 1.0));
+		reply->setError(e);
 		reply->setResponseFlags(2);
 		return reply;
 	}
@@ -632,10 +622,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		reply->addDocument(replyObj);
 	} catch (Error& e) {
 		// clang-format off
-		reply->addDocument(BSON("errmsg" << e.what() <<
-		                        "$err" << e.what() <<
-		                        "code" << e.code() <<
-		                        "ok" << 1.0));
+		reply->setError(e);
 		// clang-format on
 	}
 
@@ -702,9 +689,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 				return reply;
 			} else {
 				// clang-format off
-				reply->addDocument(BSON("ok" << 0.0 <<
-				"$err" << "'index' must be a string or an object" <<
-				"errmsg" << "'index' must be a string or an object"));
+				reply->setError(index_must_be_a_string_or_an_object());
 				// clang-format on
 				return reply;
 			}
@@ -724,9 +709,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doDropIndexesActor(Reference<ExtConn
 		}
 	} catch (Error& e) {
 		// clang-format off
-		reply->addDocument(BSON("ok" << 0.0 <<
-		                        "err" << e.what() <<
-		                        "code" << e.code()));
+		reply->setError(e);
 		// clang-format on
 		return reply;
 	}
@@ -767,10 +750,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateIndexes(Reference<ExtConnect
 		reply->addDocument(BSON("ok" << 1.0));
 	} catch (Error& e) {
 		// clang-format off
-		reply->addDocument(BSON("ok" << 0.0 <<
-		                        "$err" << e.what() <<
-		                        "errmsg" << e.what() <<
-		                        "code" << e.code()));
+		reply->setError(e);
 		// clang-format on
 	}
 	return reply;
@@ -917,7 +897,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doCreateCollection(Reference<ExtConn
 		reply->addDocument(BSON("ok" << 1.0));
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("ok" << 1.0 << "err" << e.what() << "code" << e.code()));
+		reply->setError(e);
 		return reply;
 	}
 }
@@ -945,11 +925,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doGetKVStatusActor(Reference<ExtConn
 			              << vv.encode_value().toString()) /*bson::fromjson(vv.encode_value().c_str())*/);
 		}
 	} catch (Error& e) {
-		reply->addDocument(
-		    BSON("ok" << 1.0 << "err"
-		              << "This command is supported only with version 3.0 and above of the KV Store, if you are using "
-		                 "an older FDB version please use the fdbcli utility to check its status."
-		              << "code" << e.code()));
+		reply->setError(unsupported_fdb_version_for_kvstatus());
 	}
 
 	return reply;
@@ -1067,8 +1043,8 @@ ACTOR static Future<Reference<ExtMsgReply>> insertAndReply(Reference<ExtConnecti
 		for (int i = 0; i < docs.size(); i++) {
 			// clang-format off
 			arrayBuilder << BSON("index" << i <<
+			                     "$err" << e.name() <<
 			                     "code" << e.code() <<
-			                     "$err" << e.what() <<
 			                     "errmsg" << e.what());
 			// clang-format on
 		}
@@ -1379,7 +1355,7 @@ ACTOR static Future<Reference<ExtMsgReply>> getStreamDistinct(Reference<ExtConne
 		// clang-format on
 		return reply;
 	} catch (Error& e) {
-		reply->addDocument(BSON("$err" << e.what() << "code" << e.code() << "ok" << 1.0));
+		reply->setError(e);
 		reply->setResponseFlags(2 /*0b0010*/);
 		return reply;
 	}
