@@ -48,7 +48,6 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double
 	FDB::Value tsVal = tupleVal.pack();
 
 	try {
-		fprintf(stdout, "SET: %lf\n", ts);
 		Future<Void> fwrite = wait(runTransactionAsync(docLayer->database,
 							[&, tsVal](Reference<DocTransaction> tr) {								
 								tr->tr->set(tsKey, tsVal);
@@ -93,9 +92,6 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 			if (lastTs == newTs) {
 				continue;
 			}
-
-			fprintf(stdout, "TS Last: %lf, New: %lf\n", lastTs, newTs);
-			fprintf(stdout, "TODO: SCAN COLLECTION\n");
 
 			Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
 			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
