@@ -20,6 +20,7 @@
 
 #include "ExtStructs.h"
 #include "ExtUtil.actor.h"
+#include "ExtMsg.actor.h"
 #include "QLPlan.actor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
@@ -38,7 +39,7 @@ FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
 }
 
 ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double ts) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));	
+	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
 	FDB::Key tsKey = watcherGetTSKey(timestampDir);
 
 	FDB::Tuple tupleVal;
@@ -46,7 +47,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double
 
 	FDB::Value tsVal = tupleVal.pack();
 
-	try {		
+	try {
 		fprintf(stdout, "SET: %lf\n", ts);
 		Future<Void> fwrite = wait(runTransactionAsync(docLayer->database,
 							[&, tsVal](Reference<DocTransaction> tr) {								
@@ -60,7 +61,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double
 	}
 }
 
-ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer) {
+ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
 	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
 	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
 
@@ -94,6 +95,38 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer) {
 			}
 
 			fprintf(stdout, "TS Last: %lf, New: %lf\n", lastTs, newTs);
+			fprintf(stdout, "TODO: SCAN COLLECTION\n");
+
+			Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
+			state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
+			bson::BSONObj selectors = BSON("$gt" << lastTs << "$lte" << newTs);
+			bson::BSONObj query = BSON("ts" << selectors);
+
+			state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
+			state Reference<Plan> plan = planQuery(cx, query);
+			plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
+			state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
+			state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+
+			try {
+				loop {
+					choose {
+						when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
+							DataValue oDv = wait(doc->toDataValue());
+							bson::BSONObj obj = oDv.getPackedObject().getOwned();
+							changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
+							flowControlLock->release();							
+						}
+					}
+				}
+			} catch (Error& e) {
+				checkpoint->stop();
+				if (e.code() != error_code_end_of_stream) {
+					throw;
+				}
+			}
+
 			lastTs = newTs;
 		} catch(Error &e) {
 			fprintf(stdout, "ERRROR: %s\n", e.what());
@@ -144,7 +177,7 @@ void ExtChangeWatcher::update(double timestamp) {
 
 // Watching for updates
 void ExtChangeWatcher::watch() {
-	watcherTimestampWatchingActor(docLayer);
+	watcherTimestampWatchingActor(docLayer, changeStream);
 }
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {

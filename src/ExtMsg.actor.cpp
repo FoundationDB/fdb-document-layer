@@ -414,6 +414,7 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 		                                : msg->query.hasField(DocLayerConstants::QUERY_OPERATOR.c_str())
 		                                      ? msg->query.getObjectField(DocLayerConstants::QUERY_OPERATOR.c_str())
 		                                      : msg->query;
+		fprintf(stdout, "===== QQQ OOOO: %s\n", queryObject.toString().c_str());
 
 		// Plan needs to be state in case we have a sort plan, which in turn holds a reference to the actor that does
 		// the sorting
