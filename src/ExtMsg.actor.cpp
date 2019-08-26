@@ -896,7 +896,7 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	Reference<Plan> plan = ref(new InsertPlan(inserts, ec->mm, ns));
 
 	if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
-		plan = oplogInsertPlan(plan, documents, ref(new DocInserter(ec->getChangeStream())), ec->mm, ns);
+		plan = oplogInsertPlan(plan, documents, ref(new DocInserter(ec->getWatcher())), ec->mm, ns);
 	}
 
 	plan = ec->isolatedWrapOperationPlan(plan);
@@ -1107,7 +1107,7 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 			Reference<Plan> plan = planQuery(cx, cmd->selector);
 			plan =
 			    ref(new UpdatePlan(plan, updater, upserter, cmd->multi ? std::numeric_limits<int64_t>::max() : 1, cx));
-			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getChangeStream())), cx);
+			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getWatcher())), cx);
 
 			std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 			    wait(executeUntilCompletionAndReturnLastTransactionally(plan, dtr));
@@ -1266,7 +1266,7 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-				plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getChangeStream())), cx);
+				plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getWatcher())), cx);
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
@@ -1461,7 +1461,7 @@ Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj
 	return ref(new ExtOperatorUpsert(selector, update));
 }
 
-Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
-	changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
+Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {	
+	watcher->update((double)obj.getField(DocLayerConstants::OP_FIELD_TS)._numberLong());
 	return insertDocument(cx, obj, Optional<IdInfo>());
 }

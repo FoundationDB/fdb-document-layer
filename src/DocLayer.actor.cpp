@@ -171,11 +171,11 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId,
-									   Reference<ExtChangeStream> changeStream) {
+									   Reference<ExtChangeWatcher> watcher) {
 	if (verboseLogging)
 		TraceEvent("BD_serverNewConnection");
 
-	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId, changeStream));
+	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId, watcher));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
 
@@ -227,7 +227,7 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	}
 }
 
-ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr, Reference<ExtChangeStream> changeStream) {
+ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr, Reference<ExtChangeWatcher> watcher) {
 	state ActorCollection connections(false);
 	state int64_t nextConnectionId = 1;
 	try {
@@ -238,8 +238,8 @@ ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr, Ref
 
 		loop choose {
 			when(Reference<IConnection> conn = wait(listener->accept())) {
-				Reference<BufferedConnection> bc(new BufferedConnection(conn));
-				connections.add(extServerConnection(docLayer, bc, nextConnectionId, changeStream));
+				Reference<BufferedConnection> bc(new BufferedConnection(conn));						
+				connections.add(extServerConnection(docLayer, bc, nextConnectionId, watcher));
 				nextConnectionId++;
 			}
 			when(wait(connections.getResult())) { ASSERT(false); }
@@ -542,8 +542,13 @@ ACTOR void setup(NetworkAddress na,
 				_exit(FDB_EXIT_ERROR);
 			}
 		}
+		
+		
+		Reference<ExtChangeWatcher> watcher = ref(new ExtChangeWatcher(docLayer, changeStream));
+		watcher->watch();
+
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
-		extServer(docLayer, na, changeStream);
+		extServer(docLayer, na, watcher);
 
 		if (!unitTestPattern.empty())
 			Tests::g_docLayer = docLayer;

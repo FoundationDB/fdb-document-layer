@@ -240,12 +240,12 @@ private:
 };
 
 struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter> {
-	Reference<ExtChangeStream> changeStream;
+	Reference<ExtChangeWatcher> watcher;
 
 	void addref() override { ReferenceCounted<DocInserter>::addref(); }
 	void delref() override { ReferenceCounted<DocInserter>::delref(); }
 	
-	DocInserter(Reference<ExtChangeStream> changeStream): changeStream(changeStream) {};
+	DocInserter(Reference<ExtChangeWatcher> watcher): watcher(watcher) {};
 	Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj) override;
 };
 

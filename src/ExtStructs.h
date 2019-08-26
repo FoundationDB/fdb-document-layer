@@ -110,6 +110,18 @@ struct ExtChangeStream : ReferenceCounted<ExtChangeStream>, NonCopyable {
 	void clear();
 };
 
+struct ExtChangeWatcher: ReferenceCounted<ExtChangeWatcher>, NonCopyable {
+	Reference<DocumentLayer> docLayer;
+	Reference<ExtChangeStream> changeStream;
+	FDB::Key tsKey;
+
+	ExtChangeWatcher(Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream): 
+	docLayer(docLayer), changeStream(changeStream) {};
+
+	void update(double timestamp);
+	void watch();
+};
+
 struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Reference<DocumentLayer> docLayer;
 	Reference<MetadataManager> mm;
@@ -118,10 +130,10 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	int64_t connectionId;
 	Reference<BufferedConnection> bc;
 	Future<WriteResult> lastWrite;
-	Reference<ExtChangeStream> changeStream;
+	Reference<ExtChangeWatcher> watcher;
 
-	Reference<ExtChangeStream> getChangeStream();
-	void setChangeStream(Reference<ExtChangeStream> stream);
+	Reference<ExtChangeWatcher> getWatcher();
+	void setWatcher(Reference<ExtChangeWatcher> watcher);
 
 	Reference<DocTransaction> getOperationTransaction();	
 	Reference<Plan> wrapOperationPlan(Reference<Plan> plan, bool isReadOnly, Reference<UnboundCollectionContext> cx);
@@ -137,7 +149,7 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	ExtConnection(Reference<DocumentLayer> docLayer, 
 				  Reference<BufferedConnection> bc, 
 				  int64_t connectionId, 
-				  Reference<ExtChangeStream> changeStream)
+				  Reference<ExtChangeWatcher> watcher)
 	    : docLayer(docLayer),
 	      bc(bc),
 	      lastWrite(WriteResult()),
@@ -146,7 +158,7 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	      cursors(),
 	      mm(docLayer->mm),
 	      connectionId(connectionId),
-		  changeStream(changeStream),
+		  watcher(watcher),
 	      maxReceivedRequestID(0),
 	      nextServerGeneratedRequestID(0) {}
 

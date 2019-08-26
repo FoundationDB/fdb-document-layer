@@ -19,8 +19,88 @@
  */
 
 #include "ExtStructs.h"
+#include "ExtUtil.actor.h"
 #include "QLPlan.actor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
+
+ACTOR Future<Reference<DirectorySubspace>> watcherGetTSDirectory(Reference<DocumentLayer> docLayer) {
+	Reference<DirectoryLayer> d = Reference<DirectoryLayer>(new DirectoryLayer());
+	Reference<DirectorySubspace> ds = wait(runRYWTransaction(docLayer->database, [d](Reference<DocTransaction> tr) {
+		    return d->createOrOpen(tr->tr, {LiteralStringRef("Oplog"), LiteralStringRef("Updates")});
+	    },
+	    -1, 0));
+
+	return ds;
+}
+
+FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
+	return dir->pack(LiteralStringRef("timestamp"), true);
+}
+
+ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double ts) {
+	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));	
+	FDB::Key tsKey = watcherGetTSKey(timestampDir);
+
+	FDB::Tuple tupleVal;
+	tupleVal.append(ts);
+
+	FDB::Value tsVal = tupleVal.pack();
+
+	try {		
+		fprintf(stdout, "SET: %lf\n", ts);
+		Future<Void> fwrite = wait(runTransactionAsync(docLayer->database,
+							[&, tsVal](Reference<DocTransaction> tr) {								
+								tr->tr->set(tsKey, tsVal);
+								return Future<Void>(Void());
+							},
+							3, 5000));
+		wait(fwrite);
+	} catch(Error &e) {
+		fprintf(stdout, "ERRROR: %s\n", e.what());
+	}
+}
+
+ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer) {
+	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
+	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
+
+	state double lastTs = -1.0;
+	state double newTs = 0.0;
+
+	loop {		
+		try {
+			Future<Void> watch = wait(runTransactionAsync(docLayer->database, [&](Reference<DocTransaction> tr) {
+										return tr->tr->watch(tsKey);
+									}, 3, 5000));
+			wait(watch || delay(10.0));
+
+			Future<Optional<FDBStandalone<StringRef>>> tsRef = wait(runTransactionAsync(
+									docLayer->database,
+									[&](Reference<DocTransaction> tr) {					
+										return tr->tr->get(tsKey);
+									}, 3, 5000));
+
+			Optional<FDBStandalone<StringRef>> ts = wait(tsRef);
+			if (ts.present()) {
+				newTs = Tuple::unpack(ts.get()).getDouble(0);
+			}
+
+			if (lastTs == -1.0) {
+				lastTs = newTs;
+			}
+			
+			if (lastTs == newTs) {
+				continue;
+			}
+
+			fprintf(stdout, "TS Last: %lf, New: %lf\n", lastTs, newTs);
+			lastTs = newTs;
+		} catch(Error &e) {
+			fprintf(stdout, "ERRROR: %s\n", e.what());
+			wait(delay(5.0));
+		}
+	}
+}
 
 // Create connection change stream
 FutureStream<Standalone<StringRef>> ExtChangeStream::newConnection(int64_t connectionId) {
@@ -47,14 +127,24 @@ void ExtChangeStream::clear() {
 	connections.clear();
 }
 
-// Get change stream for connection
-Reference<ExtChangeStream> ExtConnection::getChangeStream() {
-	return changeStream;
+// Get updates watcher
+Reference<ExtChangeWatcher> ExtConnection::getWatcher() {
+	return watcher;
 }
 
-// Set change stream for connection
-void ExtConnection::setChangeStream(Reference<ExtChangeStream> stream) {
-	changeStream = stream;
+// Set updates watcher
+void ExtConnection::setWatcher(Reference<ExtChangeWatcher> watcher) {
+	this->watcher = watcher;
+}
+
+// Update timestamp key
+void ExtChangeWatcher::update(double timestamp) {
+	watcherTimestampUpdateActor(docLayer, timestamp);
+}
+
+// Watching for updates
+void ExtChangeWatcher::watch() {
+	watcherTimestampWatchingActor(docLayer);
 }
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {
