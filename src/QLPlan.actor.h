@@ -241,6 +241,7 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 	              std::vector<std::string> matchedPrefix)
 	    : cx(cx), index(index), begin(begin), end(end), matchedPrefix(matchedPrefix) {}
 	bson::BSONObj describe() override {
+		// #17: Added decode_key_part to update explain output with user readable keys
 		std::string bound_begin = begin.present() ? DataValue::decode_key_part(begin.get()).toString() : "-inf";
 		std::string bound_end = end.present() ? DataValue::decode_key_part(begin.get()).toString() : "+inf";
 		return BSON(
