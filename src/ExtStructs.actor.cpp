@@ -56,7 +56,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double
 							3, 5000));
 		wait(fwrite);
 	} catch(Error &e) {
-		fprintf(stdout, "ERRROR: %s\n", e.what());
+		fprintf(stderr, "Unable to update timestamp: %s\n", e.what());
 	}
 }
 
