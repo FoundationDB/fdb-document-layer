@@ -195,43 +195,52 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 	                                            ++docLayer->nrConnections);
 	try {
-		loop {
-			// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer
-			// needed and can be popped
-			state Promise<Void> finished;
-			choose {
-				when(wait(onError)) {
-					if (verboseLogging)
-						TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
-					throw connection_failed();
-				}
-				when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
-					auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
+		try {
+			loop {
+				// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer needed and can be popped
+				state Promise<Void> finished;
+				choose {
+					when(wait(onError)) {
+						if (verboseLogging)
+							TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
+						throw connection_failed();
+					}
+					when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
+						auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
 
-					state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
+						state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
 
-					// FIXME: Check for unreasonable lengths
+						// FIXME: Check for unreasonable lengths
 
-					wait(ec->bc->onBytesAvailable(header->messageLength));
-					auto messageBytes = ec->bc->peekExact(header->messageLength);
+						wait(ec->bc->onBytesAvailable(header->messageLength));
+						auto messageBytes = ec->bc->peekExact(header->messageLength);
 
-					DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
-					                                                header->messageLength);
+						DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
+						                                                header->messageLength);
 
-					/* We don't use hdr in this call because the second peek may
-					   have triggered a copy that the first did not, but it's nice
-					   for everything at and below processRequest to assume that
-					   body - header == sizeof(ExtMsgHeader) */
-					ec->updateMaxReceivedRequestID(header->requestID);
-					wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
-					                    messageBytes.begin() + sizeof(ExtMsgHeader), finished));
+						/* We don't use hdr in this call because the second peek may
+						   have triggered a copy that the first did not, but it's nice
+						   for everything at and below processRequest to assume that
+						   body - header == sizeof(ExtMsgHeader) */
+						ec->updateMaxReceivedRequestID(header->requestID);
+						wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
+						                    messageBytes.begin() + sizeof(ExtMsgHeader), finished));
 
-					ec->bc->advance(header->messageLength);
-					msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
+						ec->bc->advance(header->messageLength);
+						msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
+					}
 				}
 			}
+		} catch (Error& e) {
+			if (e.code() != error_code_connection_failed)
+				TraceEvent(SevError, "BD_unexpectedConnFailure").detail("connId", connectionId).error(e);
+
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
+			                                            --docLayer->nrConnections);
+			return Void();
 		}
-	} catch (Error& e) {
+	} catch (...) {
+		TraceEvent(SevError, "BD_unknownConnFailure").detail("connId", connectionId).error(unknown_error());
 		DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 		                                            --docLayer->nrConnections);
 		return Void();
