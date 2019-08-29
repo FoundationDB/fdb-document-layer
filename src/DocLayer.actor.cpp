@@ -456,6 +456,25 @@ ACTOR static void runUnitTests(StringRef testPattern) {
 
 } // namespace Tests
 
+ACTOR void publishProcessMetrics() {
+	TraceEvent("BD_processMetricsPublisher")
+	try {
+		loop {
+			wait(delay(1.0));
+			auto processMetrics = latestEventCache.get("ProcessMetrics");
+			double processMetricsElapsed = processMetrics.getDouble("Elapsed");
+			double cpuSeconds = processMetrics.getDouble("CPUSeconds");
+			double cpu_usage = std::max(0.0, cpuSeconds / processMetricsElapsed) * 100;
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_CPU_PERCENTAGE, cpu_usage);
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MEMORY_USAGE,
+			                                            processMetrics.getInt64("Memory"));
+		};
+	} catch(...) {
+		TraceEvent("BD_processMetricsPublisherException");
+		throw;
+	}
+}
+
 typedef std::vector<std::pair<FDBNetworkOption, Standalone<StringRef>>> NetworkOptionsT;
 
 ACTOR void setup(NetworkAddress na,
@@ -1059,6 +1078,7 @@ int main(int argc, char** argv) {
 	      fdbDatacenterID);
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
+	publishProcessMetrics();
 
 	g_network->run();
 }

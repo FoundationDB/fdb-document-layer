@@ -78,5 +78,7 @@ const char* MT_HIST_TR_PER_REQUEST = "dl_tr_per_request";
 const char* MT_RATE_IDX_REBUILD = "dl_index_rebuild_rate";
 const char* MT_RATE_TABLE_SCAN_DOCS = "dl_table_scan_rate";
 const char* MT_RATE_IDX_SCAN_DOCS = "dl_index_scan_rate";
+const char* MT_GUAGE_CPU_PERCENTAGE = "dl_cpu_percentage";
+const char* MT_GUAGE_MEMORY_USAGE = "dl_memory_usage_bytes";
 
 } // namespace DocLayerConstants

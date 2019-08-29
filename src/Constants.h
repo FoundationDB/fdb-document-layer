@@ -91,6 +91,8 @@ extern const char* MT_HIST_TR_PER_REQUEST;
 extern const char* MT_RATE_IDX_REBUILD;
 extern const char* MT_RATE_TABLE_SCAN_DOCS;
 extern const char* MT_RATE_IDX_SCAN_DOCS;
+extern const char* MT_GUAGE_CPU_PERCENTAGE;
+extern const char* MT_GUAGE_MEMORY_USAGE;
 
 } // namespace DocLayerConstants
 
