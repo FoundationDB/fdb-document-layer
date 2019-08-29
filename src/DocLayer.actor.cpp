@@ -165,10 +165,23 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	}
 }
 
+// Splitting the delay into smaller delay(). For each delay(), DelayedTask is created and added
+// to the queue. This task stays in queue until delay is expired, even if all the futures are
+// cancelled. In the connection churn it is possible we are leaving too many long delays
+// in the queues.
+ACTOR Future<Void> delayCursorExpiry() {
+	state int remaining = DOCLAYER_KNOBS->CURSOR_EXPIRY;
+	while (remaining > 0) {
+		wait(delay(1.0));
+		remaining--;
+	}
+	return Void();
+}
+
 ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
 	try {
 		loop {
-			wait(delay(DOCLAYER_KNOBS->CURSOR_EXPIRY));
+			wait(delayCursorExpiry());
 			Cursor::prune(ec->cursors, false);
 		}
 	} catch (Error& e) {
