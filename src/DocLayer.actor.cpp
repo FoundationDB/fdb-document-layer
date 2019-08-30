@@ -457,10 +457,13 @@ ACTOR static void runUnitTests(StringRef testPattern) {
 } // namespace Tests
 
 ACTOR void publishProcessMetrics() {
-	TraceEvent("BD_processMetricsPublisher")
+	// Give time to systemMonitor to log events.
+	wait(delay(5.0));
+
+	TraceEvent("BD_processMetricsPublisher");
 	try {
 		loop {
-			wait(delay(1.0));
+			wait(delay(5.0));
 			auto processMetrics = latestEventCache.get("ProcessMetrics");
 			double processMetricsElapsed = processMetrics.getDouble("Elapsed");
 			double cpuSeconds = processMetrics.getDouble("CPUSeconds");
@@ -601,6 +604,7 @@ ACTOR void setup(NetworkAddress na,
 	} else {
 		extProxy(na, NetworkAddress::parse(format("127.0.0.1:%d", proxyto.get())));
 	}
+	publishProcessMetrics();
 }
 
 static void printVersion() {
@@ -1078,7 +1082,6 @@ int main(int argc, char** argv) {
 	      fdbDatacenterID);
 	systemMonitor();
 	uncancellable(recurring(&systemMonitor, 5.0, TaskMaxPriority));
-	publishProcessMetrics();
 
 	g_network->run();
 }

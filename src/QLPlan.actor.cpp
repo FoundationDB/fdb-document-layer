@@ -334,7 +334,6 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
 			dis.send(output);
 			nrDocs++;
 		}
-		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_IDX_SCAN_DOCS, nrDocs);
 	} catch (Error& e) {
 		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_IDX_SCAN_DOCS, nrDocs);
 		if (e.code() == error_code_actor_cancelled) {
@@ -549,7 +548,6 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
 			// failing to get the lock.
 			lastKey = Key(kv.key, kv.arena());
 		}
-		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_TABLE_SCAN_DOCS, nrDocs);
 	} catch (Error& e) {
 		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_TABLE_SCAN_DOCS, nrDocs);
 		if (e.code() == error_code_actor_cancelled) {
