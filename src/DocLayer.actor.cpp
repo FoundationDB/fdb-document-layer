@@ -210,7 +210,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	try {
 		try {
 			loop {
-				// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer needed and can be popped
+				// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no
+				// longer needed and can be popped
 				state Promise<Void> finished;
 				choose {
 					when(wait(onError)) {
@@ -472,7 +473,7 @@ ACTOR void publishProcessMetrics() {
 			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MEMORY_USAGE,
 			                                            processMetrics.getInt64("Memory"));
 		};
-	} catch(...) {
+	} catch (...) {
 		TraceEvent("BD_processMetricsPublisherException");
 		throw;
 	}
