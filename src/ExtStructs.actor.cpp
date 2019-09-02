@@ -67,12 +67,12 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 	state double lastTs = -1.0;
 	state double newTs = 0.0;
 
-	loop {		
+	loop {
 		try {
 			Future<Void> watch = wait(runTransactionAsync(docLayer->database, [&](Reference<DocTransaction> tr) {
 										return tr->tr->watch(tsKey);
 									}, 3, 5000));
-			wait(watch || delay(10.0));
+			wait(watch || delay(5.0));
 
 			Future<Optional<FDBStandalone<StringRef>>> tsRef = wait(runTransactionAsync(
 									docLayer->database,
@@ -92,34 +92,36 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 			if (lastTs == newTs) {
 				continue;
 			}
+			
+			if (changeStream->countConnections() > 0) {
+				Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+				state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
+				state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
+				bson::BSONObj selectors = BSON("$gt" << lastTs << "$lte" << newTs);
+				bson::BSONObj query = BSON("ts" << selectors);
 
-			Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-			state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
-			bson::BSONObj selectors = BSON("$gt" << lastTs << "$lte" << newTs);
-			bson::BSONObj query = BSON("ts" << selectors);
+				state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
+				state Reference<Plan> plan = planQuery(cx, query);
+				plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
+				state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
+				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
-			state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
-			state Reference<Plan> plan = planQuery(cx, query);
-			plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
-			state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
-			state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-
-			try {
-				loop {
-					choose {
-						when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-							DataValue oDv = wait(doc->toDataValue());
-							bson::BSONObj obj = oDv.getPackedObject().getOwned();
-							changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-							flowControlLock->release();							
+				try {
+					loop {
+						choose {
+							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
+								DataValue oDv = wait(doc->toDataValue());
+								bson::BSONObj obj = oDv.getPackedObject().getOwned();
+								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
+								flowControlLock->release();							
+							}
 						}
 					}
-				}
-			} catch (Error& e) {
-				checkpoint->stop();
-				if (e.code() != error_code_end_of_stream) {
-					throw;
+				} catch (Error& e) {
+					checkpoint->stop();
+					if (e.code() != error_code_end_of_stream) {
+						throw;
+					}
 				}
 			}
 
@@ -154,6 +156,11 @@ void ExtChangeStream::writeMessage(Standalone<StringRef> msg) {
 // Delete all connections
 void ExtChangeStream::clear() {
 	connections.clear();
+}
+
+// Get connections count
+int ExtChangeStream::countConnections() {
+	return connections.size();
 }
 
 // Get updates watcher

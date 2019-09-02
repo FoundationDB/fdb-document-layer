@@ -108,6 +108,7 @@ struct ExtChangeStream : ReferenceCounted<ExtChangeStream>, NonCopyable {
 	void deleteConnection(int64_t connectionId);
 	void writeMessage(Standalone<StringRef> msg);
 	void clear();
+	int countConnections();
 };
 
 struct ExtChangeWatcher: ReferenceCounted<ExtChangeWatcher>, NonCopyable {
