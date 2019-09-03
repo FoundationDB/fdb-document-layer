@@ -468,8 +468,14 @@ ACTOR void publishProcessMetrics() {
 			auto processMetrics = latestEventCache.get("ProcessMetrics");
 			double processMetricsElapsed = processMetrics.getDouble("Elapsed");
 			double cpuSeconds = processMetrics.getDouble("CPUSeconds");
-			double cpu_usage = std::max(0.0, cpuSeconds / processMetricsElapsed) * 100;
-			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_CPU_PERCENTAGE, cpu_usage);
+			double mainThreadCPUSeconds = processMetrics.getDouble("MainThreadCPUSeconds");
+
+			double cpuUsage = std::max(0.0, cpuSeconds / processMetricsElapsed) * 100;
+			double mainThreadCPUUsage = std::max(0.0, mainThreadCPUSeconds / processMetricsElapsed) * 100;
+
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_CPU_PERCENTAGE, cpuUsage);
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MAIN_THREAD_CPU_PERCENTAGE,
+			                                            mainThreadCPUUsage);
 			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MEMORY_USAGE,
 			                                            processMetrics.getInt64("Memory"));
 		};
@@ -551,7 +557,8 @@ ACTOR void setup(NetworkAddress na,
 					when(wait(t)) {
 						TraceEvent(SevError, "StartupFailure")
 						    .detail("phase", "ConnectToCluster")
-						    .detail("timeout", soFar);
+						    .detail("timeout", soFar)
+						    .error(timed_out());
 					}
 				}
 			} catch (Error& e) {
