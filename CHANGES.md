@@ -1,5 +1,10 @@
 ## Release notes
 
+### 1.8.1
+
+* [#209](https://github.com/FoundationDB/fdb-document-layer/pull/209) - CPU and memory usage metris. And Table/Index scan metrics
+* [#210](https://github.com/FoundationDB/fdb-document-layer/pull/210) - Network thread CPU usage metrics
+
 ### 1.8.0
 
 * [#94](https://github.com/FoundationDB/fdb-document-layer/issues/94) - Added `renameCollection` command
