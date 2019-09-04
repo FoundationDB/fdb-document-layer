@@ -158,9 +158,11 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	loop {
 		state std::pair<int, Future<Void>> s = waitNext(msg_size_inuse);
 		try {
+			fprintf(stderr, "Waiting for message of size: %d\n", s.first);
 			wait(s.second);
 		} catch (...) {
 		}
+		fprintf(stderr, "Popping message of size: %d\n", s.first);
 		bc->pop(s.first);
 	}
 }
@@ -194,6 +196,31 @@ ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
 	}
 }
 
+ACTOR Future<int32_t> processMessage(Reference<ExtConnection> ec, Promise<Void> finished) {
+	wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)));
+	auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
+
+	state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
+
+	wait(ec->bc->onBytesAvailable(header->messageLength));
+	auto messageBytes = ec->bc->peekExact(header->messageLength);
+	fprintf(stderr, "Processing message of size: %d\n", header->messageLength);
+
+	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ, header->messageLength);
+
+	/* We don't use hdr in this call because the second peek may
+	   have triggered a copy that the first did not, but it's nice
+	   for everything at and below processRequest to assume that
+	   body - header == sizeof(ExtMsgHeader) */
+	ec->updateMaxReceivedRequestID(header->requestID);
+	wait(
+	    processRequest(ec, (ExtMsgHeader*)messageBytes.begin(), messageBytes.begin() + sizeof(ExtMsgHeader), finished));
+
+	ec->bc->advance(header->messageLength);
+
+	return header->messageLength;
+}
+
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId) {
@@ -221,29 +248,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 							TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
 						throw connection_failed();
 					}
-					when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
-						auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
-
-						state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
-
-						// FIXME: Check for unreasonable lengths
-
-						wait(ec->bc->onBytesAvailable(header->messageLength));
-						auto messageBytes = ec->bc->peekExact(header->messageLength);
-
-						DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
-						                                                header->messageLength);
-
-						/* We don't use hdr in this call because the second peek may
-						   have triggered a copy that the first did not, but it's nice
-						   for everything at and below processRequest to assume that
-						   body - header == sizeof(ExtMsgHeader) */
-						ec->updateMaxReceivedRequestID(header->requestID);
-						wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
-						                    messageBytes.begin() + sizeof(ExtMsgHeader), finished));
-
-						ec->bc->advance(header->messageLength);
-						msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
+					when(int32_t messageLength = wait(processMessage(ec, finished))) {
+						msg_size_inuse.send(std::make_pair(messageLength, finished.getFuture()));
 					}
 				}
 			}
