@@ -207,6 +207,8 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 	                                            ++docLayer->nrConnections);
+	DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_NEW_CONNECTIONS, 1);
+
 	try {
 		try {
 			loop {
