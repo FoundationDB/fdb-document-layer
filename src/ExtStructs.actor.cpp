@@ -40,23 +40,19 @@ FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
 
 ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double ts) {
 	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	FDB::Key tsKey = watcherGetTSKey(timestampDir);
-
-	FDB::Tuple tupleVal;
-	tupleVal.append(ts);
-
-	FDB::Value tsVal = tupleVal.pack();
+	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
 
 	try {
+		FDB::Value tsVal = StringRef((const uint8_t*)&ts, sizeof(double));
 		Future<Void> fwrite = wait(runTransactionAsync(docLayer->database,
-							[&, tsVal](Reference<DocTransaction> tr) {								
-								tr->tr->set(tsKey, tsVal);
+							[&, tsVal](Reference<DocTransaction> tr) {
+								tr->tr->atomicOp(tsKey, tsVal, FDBMutationType::FDB_MUTATION_TYPE_MAX);
 								return Future<Void>(Void());
 							},
 							3, 5000));
 		wait(fwrite);
 	} catch(Error &e) {
-		fprintf(stderr, "Unable to update timestamp: %s\n", e.what());
+		fprintf(stderr, "Update streamer error. Unable to update timestamp: %s\n", e.what());
 	}
 }
 
@@ -82,17 +78,17 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 
 			Optional<FDBStandalone<StringRef>> ts = wait(tsRef);
 			if (ts.present()) {
-				newTs = Tuple::unpack(ts.get()).getDouble(0);
+				newTs = *(double*)ts.get().begin();
 			}
 
 			if (lastTs == -1.0) {
 				lastTs = newTs;
 			}
-			
+
 			if (lastTs == newTs) {
 				continue;
 			}
-			
+
 			if (changeStream->countConnections() > 0) {
 				Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
 				state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
@@ -107,13 +103,13 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 				try {
-					loop {
+					loop {				
 						choose {
 							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
 								DataValue oDv = wait(doc->toDataValue());
 								bson::BSONObj obj = oDv.getPackedObject().getOwned();
 								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-								flowControlLock->release();							
+								flowControlLock->release();
 							}
 						}
 					}
@@ -127,7 +123,7 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 
 			lastTs = newTs;
 		} catch(Error &e) {
-			fprintf(stdout, "ERRROR: %s\n", e.what());
+			fprintf(stdout, "Update streamer error: %s\n", e.what());
 			wait(delay(5.0));
 		}
 	}
