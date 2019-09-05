@@ -472,7 +472,9 @@ ACTOR void publishProcessMetrics() {
 	TraceEvent("BD_processMetricsPublisher");
 	try {
 		loop {
-			wait(delay(5.0));
+			// Update metrics at high priority.
+			wait(delay(5.0, TaskMaxPriority));
+
 			auto processMetrics = latestEventCache.get("ProcessMetrics");
 			double processMetricsElapsed = processMetrics.getDouble("Elapsed");
 			double cpuSeconds = processMetrics.getDouble("CPUSeconds");

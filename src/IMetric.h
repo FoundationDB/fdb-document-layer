@@ -42,6 +42,11 @@ public:
 	IMetricReporter() = delete;
 	virtual ~IMetricReporter() = default;
 
+	/**
+	 * Its very important implementation of this function is fast. For example, if the plugin
+	 * is publishing to remote endpoint it shouldn't happen part of this call. Publishing
+	 * should happen aynchronous to this call.
+	 */
 	virtual void captureMetric(const char* metricName, int64_t metricValue, IMetricType metricType) = 0;
 
 	void captureCount(const char* metricName);
