@@ -32,7 +32,7 @@ setup(
     packages=find_packages(),
 
     install_requires=[
-        'pytest',
+        'pytest==4.6.5',
         'pymongo==3.6.1',
         'python-dateutil',
         'PyYAML==4.2b4',
