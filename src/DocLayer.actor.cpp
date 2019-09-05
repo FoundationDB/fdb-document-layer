@@ -158,11 +158,9 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	loop {
 		state std::pair<int, Future<Void>> s = waitNext(msg_size_inuse);
 		try {
-			fprintf(stderr, "Waiting for message of size: %d\n", s.first);
 			wait(s.second);
 		} catch (...) {
 		}
-		fprintf(stderr, "Popping message of size: %d\n", s.first);
 		bc->pop(s.first);
 	}
 }
@@ -204,7 +202,6 @@ ACTOR Future<int32_t> processMessage(Reference<ExtConnection> ec, Promise<Void> 
 
 	wait(ec->bc->onBytesAvailable(header->messageLength));
 	auto messageBytes = ec->bc->peekExact(header->messageLength);
-	fprintf(stderr, "Processing message of size: %d\n", header->messageLength);
 
 	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ, header->messageLength);
 
