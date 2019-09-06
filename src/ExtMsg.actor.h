@@ -239,7 +239,7 @@ private:
 	friend struct ExtMsg::Factory<ExtMsgKillCursors>;
 };
 
-struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter> {
+struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter>, FastAllocated<DocInserter> {
 	Reference<ExtChangeWatcher> watcher;
 
 	void addref() override { ReferenceCounted<DocInserter>::addref(); }

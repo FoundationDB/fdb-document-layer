@@ -114,10 +114,16 @@ struct ExtChangeStream : ReferenceCounted<ExtChangeStream>, NonCopyable {
 struct ExtChangeWatcher: ReferenceCounted<ExtChangeWatcher>, NonCopyable {
 	Reference<DocumentLayer> docLayer;
 	Reference<ExtChangeStream> changeStream;
-	FDB::Key tsKey;
+	FutureStream<double> tsStreamReader;
+	PromiseStream<double> tsStreamWriter;
+	PromiseStream<double> tsScanPromise;
+	FutureStream<double> tsScanFuture;
 
 	ExtChangeWatcher(Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream): 
-	docLayer(docLayer), changeStream(changeStream) {};
+	docLayer(docLayer), changeStream(changeStream) {
+		tsStreamReader = tsStreamWriter.getFuture();
+		tsScanFuture = tsScanPromise.getFuture();
+	};
 
 	void update(double timestamp);
 	void watch();
@@ -132,9 +138,6 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Reference<BufferedConnection> bc;
 	Future<WriteResult> lastWrite;
 	Reference<ExtChangeWatcher> watcher;
-
-	Reference<ExtChangeWatcher> getWatcher();
-	void setWatcher(Reference<ExtChangeWatcher> watcher);
 
 	Reference<DocTransaction> getOperationTransaction();	
 	Reference<Plan> wrapOperationPlan(Reference<Plan> plan, bool isReadOnly, Reference<UnboundCollectionContext> cx);

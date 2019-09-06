@@ -238,7 +238,7 @@ ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr, Ref
 
 		loop choose {
 			when(Reference<IConnection> conn = wait(listener->accept())) {
-				Reference<BufferedConnection> bc(new BufferedConnection(conn));						
+				Reference<BufferedConnection> bc(new BufferedConnection(conn));				
 				connections.add(extServerConnection(docLayer, bc, nextConnectionId, watcher));
 				nextConnectionId++;
 			}
@@ -544,7 +544,7 @@ ACTOR void setup(NetworkAddress na,
 		}
 		
 		
-		Reference<ExtChangeWatcher> watcher = ref(new ExtChangeWatcher(docLayer, changeStream));
+		state Reference<ExtChangeWatcher> watcher = Reference<ExtChangeWatcher>(new ExtChangeWatcher(docLayer, changeStream));
 		watcher->watch();
 
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);

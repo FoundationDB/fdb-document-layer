@@ -37,7 +37,9 @@ struct IOplogInserter {
 };
 
 // OploagActor - documents inserter
-struct OplogActor: ReferenceCounted<OplogActor> {
+struct OplogActor: ReferenceCounted<OplogActor>, NonCopyable {
+	
+
 	OplogActor(Reference<IOplogInserter> inserter) : inserter(inserter) {}
 
 	Future<Reference<IReadWriteContext>> insertOp(Reference<CollectionContext> cx, 
@@ -57,7 +59,7 @@ struct OplogActor: ReferenceCounted<OplogActor> {
 };
 
 // Oplogger - documents processor
-struct Oplogger: ReferenceCounted<Oplogger> {
+struct Oplogger: ReferenceCounted<Oplogger>, NonCopyable {
     Oplogger(Namespace operationNs, Reference<IOplogInserter> oplogInserter);
 
 	// Clean operations

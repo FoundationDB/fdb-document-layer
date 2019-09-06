@@ -592,7 +592,7 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 
 		state Reference<Plan> plan = planQuery(ucx, selector);
 		plan = ref(new FindAndModifyPlan(plan, updater, upserter, projection, ordering, isnew, ucx,
-		                                 ref(new DocInserter(ec->getWatcher())), ec->docLayer->database, ec->mm));
+		                                 ref(new DocInserter(ec->watcher)), ec->docLayer->database, ec->mm));
 
 		state std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 		    wait(executeUntilCompletionAndReturnLastTransactionally(plan, tr));

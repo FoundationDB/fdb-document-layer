@@ -38,64 +38,81 @@ FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
 	return dir->pack(LiteralStringRef("timestamp"), true);
 }
 
-ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, double ts) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-
+void sendTimestamp(PromiseStream<double> times, double ts) {
 	try {
-		FDB::Value tsVal = StringRef((const uint8_t*)&ts, sizeof(double));
-		Future<Void> fwrite = wait(runTransactionAsync(docLayer->database,
-							[&, tsVal](Reference<DocTransaction> tr) {
-								tr->tr->atomicOp(tsKey, tsVal, FDBMutationType::FDB_MUTATION_TYPE_MAX);
-								return Future<Void>(Void());
-							},
-							3, 5000));
-		wait(fwrite);
+		times.send(ts);
 	} catch(Error &e) {
-		fprintf(stderr, "Update streamer error. Unable to update timestamp: %s\n", e.what());
+		fprintf(stdout, "Timestamp send error: %s\n", e.what());
 	}
 }
 
-ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
+ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, FutureStream<double> times) {
 	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
 	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-
-	state double lastTs = -1.0;
-	state double newTs = 0.0;
+	state double ts = 0.0;
 
 	loop {
 		try {
-			Future<Void> watch = wait(runTransactionAsync(docLayer->database, [&](Reference<DocTransaction> tr) {
-										return tr->tr->watch(tsKey);
-									}, 3, 5000));
-			wait(watch || delay(5.0));
+			try {
+				state Future<Void> timeout = Never();
+				state int cnt = 0;
 
-			Future<Optional<FDBStandalone<StringRef>>> tsRef = wait(runTransactionAsync(
-									docLayer->database,
-									[&](Reference<DocTransaction> tr) {					
-										return tr->tr->get(tsKey);
-									}, 3, 5000));
+				loop choose {
+					when(double tmpTs = waitNext(times)) {																
+						ts = tmpTs;
+						cnt++;
 
-			Optional<FDBStandalone<StringRef>> ts = wait(tsRef);
-			if (ts.present()) {
-				newTs = *(double*)ts.get().begin();
+						if (cnt == 1) {
+							timeout = delay(0.1, TaskMaxPriority);
+						}
+
+						if (cnt == 5) {
+							timeout = delay(0.3, TaskMaxPriority);
+						}
+
+						if (cnt >= 500) {
+							throw end_of_stream();
+						}
+					}										
+					when(wait(timeout)) {
+						throw end_of_stream();
+					}
+				}
+			} catch (Error& e) {
+				if (e.code() != error_code_end_of_stream)
+					throw;
 			}
 
+			state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
+			updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
+			wait(updTr->tr->commit());
+		} catch(Error &e) {
+			fprintf(stderr, "Watcher ts update error: %s\n", e.what());
+		}
+	}
+}
+
+ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
+	state double lastTs = -1.0;
+	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+
+	loop {
+		try {
+			state double newTs = waitNext(times);
 			if (lastTs == -1.0) {
 				lastTs = newTs;
+				continue;
 			}
-
 			if (lastTs == newTs) {
 				continue;
 			}
 
 			if (changeStream->countConnections() > 0) {
-				Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
 				state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
 				state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
 				bson::BSONObj selectors = BSON("$gt" << lastTs << "$lte" << newTs);
 				bson::BSONObj query = BSON("ts" << selectors);
-
+		
 				state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 				state Reference<Plan> plan = planQuery(cx, query);
 				plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
@@ -103,19 +120,19 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
 
 				try {
-					loop {				
+					loop {
 						choose {
 							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
 								DataValue oDv = wait(doc->toDataValue());
 								bson::BSONObj obj = oDv.getPackedObject().getOwned();
-								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
 								flowControlLock->release();
+								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
 							}
 						}
 					}
 				} catch (Error& e) {
 					checkpoint->stop();
-					if (e.code() != error_code_end_of_stream) {
+					if (e.code() != error_code_end_of_stream) {						
 						throw;
 					}
 				}
@@ -123,8 +140,52 @@ ACTOR void watcherTimestampWatchingActor(Reference<DocumentLayer> docLayer, Refe
 
 			lastTs = newTs;
 		} catch(Error &e) {
-			fprintf(stdout, "Update streamer error: %s\n", e.what());
-			wait(delay(5.0));
+			fprintf(stderr, "Watcher scan error: %s\n", e.what());
+		}
+	}
+}
+
+ACTOR void watcherTimestampWatchingActor(
+	PromiseStream<double> times, 
+	Reference<DocumentLayer> docLayer) {
+	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
+	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
+	state double ts = 0.0;
+	state double prevTs = -1.0;
+
+	loop {
+		try {
+			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
+			state Future<Void> watch = dtr->tr->watch(tsKey);
+			state Future<Optional<FDBStandalone<StringRef>>> futureTs = dtr->tr->get(tsKey);			
+			wait(dtr->tr->commit());
+			dtr->tr->reset();
+
+			Optional<FDBStandalone<StringRef>> tsBefore = wait(futureTs);
+			if (tsBefore.present()) {
+				ts = *(double*)tsBefore.get().begin();
+			}
+
+			if (ts == prevTs) {
+				wait(watch || delay(5.0));
+				futureTs = dtr->tr->get(tsKey);
+				wait(dtr->tr->commit());
+
+				Optional<FDBStandalone<StringRef>> tsAfter = wait(futureTs);
+				if (tsAfter.present()) {
+					ts = *(double*)tsAfter.get().begin();
+				}
+
+				if (ts == prevTs) {
+					continue;
+				}
+			}
+	
+			prevTs = ts;
+			sendTimestamp(times, ts);
+		} catch(Error &e) {
+			fprintf(stderr, "Watcher watching error: %s\n", e.what());
+			wait(delay(1.0, TaskMaxPriority));
 		}
 	}
 }
@@ -159,24 +220,16 @@ int ExtChangeStream::countConnections() {
 	return connections.size();
 }
 
-// Get updates watcher
-Reference<ExtChangeWatcher> ExtConnection::getWatcher() {
-	return watcher;
-}
-
-// Set updates watcher
-void ExtConnection::setWatcher(Reference<ExtChangeWatcher> watcher) {
-	this->watcher = watcher;
-}
-
 // Update timestamp key
 void ExtChangeWatcher::update(double timestamp) {
-	watcherTimestampUpdateActor(docLayer, timestamp);
+	sendTimestamp(tsStreamWriter, timestamp);
 }
 
 // Watching for updates
 void ExtChangeWatcher::watch() {
-	watcherTimestampWatchingActor(docLayer, changeStream);
+	watcherScanUpdates(tsScanFuture, docLayer, changeStream);	
+	watcherTimestampUpdateActor(docLayer, tsStreamReader);
+	watcherTimestampWatchingActor(tsScanPromise, docLayer);	
 }
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {

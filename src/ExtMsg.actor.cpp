@@ -896,7 +896,8 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	Reference<Plan> plan = ref(new InsertPlan(inserts, ec->mm, ns));
 
 	if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
-		plan = oplogInsertPlan(plan, documents, ref(new DocInserter(ec->getWatcher())), ec->mm, ns);
+		Reference<IOplogInserter> opInserter(new DocInserter(ec->watcher));
+		plan = oplogInsertPlan(plan, documents, opInserter, ec->mm, ns);
 	}
 
 	plan = ec->isolatedWrapOperationPlan(plan);
@@ -1107,7 +1108,7 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 			Reference<Plan> plan = planQuery(cx, cmd->selector);
 			plan =
 			    ref(new UpdatePlan(plan, updater, upserter, cmd->multi ? std::numeric_limits<int64_t>::max() : 1, cx));
-			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getWatcher())), cx);
+			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->watcher)), cx);
 
 			std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 			    wait(executeUntilCompletionAndReturnLastTransactionally(plan, dtr));
@@ -1266,7 +1267,7 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-				plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->getWatcher())), cx);
+				plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->watcher)), cx);
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
