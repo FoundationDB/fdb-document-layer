@@ -93,5 +93,10 @@ const char* MT_TIME_INSERT_LATENCY_US = "dl_insert_latency_useconds";
 const char* MT_HIST_INSERT_SZ = "dl_insert_size_bytes";
 const char* MT_HIST_TR_PER_REQUEST = "dl_tr_per_request";
 const char* MT_RATE_IDX_REBUILD = "dl_index_rebuild_rate";
+const char* MT_RATE_TABLE_SCAN_DOCS = "dl_table_scan_rate";
+const char* MT_RATE_IDX_SCAN_DOCS = "dl_index_scan_rate";
+const char* MT_GUAGE_CPU_PERCENTAGE = "dl_cpu_percentage";
+const char* MT_GUAGE_MAIN_THREAD_CPU_PERCENTAGE = "dl_main_th_cpu_percentage";
+const char* MT_GUAGE_MEMORY_USAGE = "dl_memory_usage_bytes";
 
 } // namespace DocLayerConstants

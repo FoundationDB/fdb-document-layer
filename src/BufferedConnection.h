@@ -37,20 +37,8 @@ struct BufferedConnection : ReferenceCounted<BufferedConnection> {
 	Future<Void> onBytesAvailable(int count);
 
 	/**
-	 * Returns the number of bytes in the buffer.
-	 */
-	int bytesAvailable();
-
-	/**
-	 * Returns up to count bytes starting at offset. The returned memory is
-	 * guaranteed to be valid until the next call to pop() or read().
-	 *
-	 * NOTE: count + offset MUST BE no greater than bytesAvailable().
-	 */
-	StringRef peekSome(int count, int offset = 0);
-
-	/**
-	 * Returns exactly count bytes. The returned memory is guaranteed to be
+	 * Returns exactly count bytes. The returned memor
+	 * y is guaranteed to be
 	 * valid until the next call to pop() or read().
 	 *
 	 * NOTE: count MUST BE no greater than bytesAvailable()

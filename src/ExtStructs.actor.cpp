@@ -256,21 +256,6 @@ Reference<Plan> ExtConnection::isolatedWrapOperationPlan(Reference<Plan> plan, i
 	return Reference<Plan>(new RetryPlan(plan, timeout, retryLimit, docLayer->database));
 }
 
-ACTOR Future<Void> housekeeping_impl(Reference<ExtConnection> ec) {
-	loop {
-		wait(delay(DOCLAYER_KNOBS->CURSOR_EXPIRY));
-		try {
-			Cursor::prune(ec->cursors);
-		} catch (Error& e) {
-			TraceEvent(SevError, "BD_Cursor_housekeeping").error(e);
-		}
-	}
-}
-
-void ExtConnection::startHousekeeping() {
-	housekeeping = housekeeping_impl(Reference<ExtConnection>::addRef(this));
-}
-
 ACTOR Future<WriteResult> lastErrorOrLastResult(Future<WriteResult> previous,
                                                 Future<WriteResult> next,
                                                 FlowLock* lock,

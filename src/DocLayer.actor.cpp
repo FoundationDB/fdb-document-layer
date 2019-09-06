@@ -146,7 +146,7 @@ Future<Void> processRequest(Reference<ExtConnection> ec,
 	try {
 		Reference<ExtMsg> msg = ExtMsg::create(header, body, finished);
 		if (verboseLogging)
-			TraceEvent("BD_processRequest").detail("Message", msg->toString());
+			TraceEvent("BD_processRequest").detail("Message", msg->toString()).detail("connId", ec->connectionId);
 		if (verboseConsoleOutput)
 			fprintf(stderr, "C -> S: %s\n\n", msg->toString().c_str());
 		return msg->run(ec);
@@ -168,59 +168,97 @@ ACTOR Future<Void> popDisposedMessages(Reference<BufferedConnection> bc,
 	}
 }
 
+// Splitting the delay into smaller delay(). For each delay(), DelayedTask is created and added
+// to the queue. This task stays in queue until delay is expired, even if all the futures are
+// cancelled. In the connection churn it is possible we are leaving too many long delays
+// in the queues.
+ACTOR Future<Void> delayCursorExpiry() {
+	state int remaining = DOCLAYER_KNOBS->CURSOR_EXPIRY;
+	while (remaining > 0) {
+		wait(delay(1.0));
+		remaining--;
+	}
+	return Void();
+}
+
+ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
+	try {
+		loop {
+			wait(delayCursorExpiry());
+			Cursor::prune(ec->cursors, false);
+		}
+	} catch (Error& e) {
+		// This is the only actor responsible for all the cursors created
+		// through this connection. Prune all the cursors before cancelling
+		// this actor.
+		if (e.code() == error_code_actor_cancelled)
+			Cursor::prune(ec->cursors, true);
+		throw;
+	}
+}
+
 ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
                                        Reference<BufferedConnection> bc,
                                        int64_t connectionId,
 									   Reference<ExtChangeWatcher> watcher) {
 	if (verboseLogging)
-		TraceEvent("BD_serverNewConnection");
+		TraceEvent("BD_serverNewConnection").detail("connId", connectionId);
 
 	state Reference<ExtConnection> ec = Reference<ExtConnection>(new ExtConnection(docLayer, bc, connectionId, watcher));
 	state PromiseStream<std::pair<int, Future<Void>>> msg_size_inuse;
 	state Future<Void> onError = ec->bc->onClosed() || popDisposedMessages(bc, msg_size_inuse.getFuture());
+	state Future<Void> connHousekeeping = housekeeping(ec);
 
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 	                                            ++docLayer->nrConnections);
 	try {
-		ec->startHousekeeping();
+		try {
+			loop {
+				// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no
+				// longer needed and can be popped
+				state Promise<Void> finished;
+				choose {
+					when(wait(onError)) {
+						if (verboseLogging)
+							TraceEvent("BD_serverClosedConnection").detail("connId", connectionId);
+						throw connection_failed();
+					}
+					when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
+						auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
 
-		loop {
-			// Will be broken (or set or whatever) only when the memory we are passing to processRequest is no longer
-			// needed and can be popped
-			state Promise<Void> finished;
-			choose {
-				when(wait(onError)) {
-					if (verboseLogging)
-						TraceEvent("BD_serverClosedConnection");
-					throw connection_failed();
-				}
-				when(wait(ec->bc->onBytesAvailable(sizeof(ExtMsgHeader)))) {
-					auto headerBytes = ec->bc->peekExact(sizeof(ExtMsgHeader));
+						state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
 
-					state ExtMsgHeader* header = (ExtMsgHeader*)headerBytes.begin();
+						// FIXME: Check for unreasonable lengths
 
-					// FIXME: Check for unreasonable lengths
+						wait(ec->bc->onBytesAvailable(header->messageLength));
+						auto messageBytes = ec->bc->peekExact(header->messageLength);
 
-					wait(ec->bc->onBytesAvailable(header->messageLength));
-					auto messageBytes = ec->bc->peekExact(header->messageLength);
+						DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
+						                                                header->messageLength);
 
-					DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_MESSAGE_SZ,
-					                                                header->messageLength);
+						/* We don't use hdr in this call because the second peek may
+						   have triggered a copy that the first did not, but it's nice
+						   for everything at and below processRequest to assume that
+						   body - header == sizeof(ExtMsgHeader) */
+						ec->updateMaxReceivedRequestID(header->requestID);
+						wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
+						                    messageBytes.begin() + sizeof(ExtMsgHeader), finished));
 
-					/* We don't use hdr in this call because the second peek may
-					   have triggered a copy that the first did not, but it's nice
-					   for everything at and below processRequest to assume that
-					   body - header == sizeof(ExtMsgHeader) */
-					ec->updateMaxReceivedRequestID(header->requestID);
-					wait(processRequest(ec, (ExtMsgHeader*)messageBytes.begin(),
-					                    messageBytes.begin() + sizeof(ExtMsgHeader), finished));
-
-					ec->bc->advance(header->messageLength);
-					msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
+						ec->bc->advance(header->messageLength);
+						msg_size_inuse.send(std::make_pair(header->messageLength, finished.getFuture()));
+					}
 				}
 			}
+		} catch (Error& e) {
+			if (e.code() != error_code_connection_failed)
+				TraceEvent(SevError, "BD_unexpectedConnFailure").detail("connId", connectionId).error(e);
+
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
+			                                            --docLayer->nrConnections);
+			return Void();
 		}
-	} catch (Error& e) {
+	} catch (...) {
+		TraceEvent(SevError, "BD_unknownConnFailure").detail("connId", connectionId).error(unknown_error());
 		DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CONNECTIONS,
 		                                            --docLayer->nrConnections);
 		return Void();
@@ -423,6 +461,34 @@ ACTOR static void runUnitTests(StringRef testPattern) {
 
 } // namespace Tests
 
+ACTOR void publishProcessMetrics() {
+	// Give time to systemMonitor to log events.
+	wait(delay(5.0));
+
+	TraceEvent("BD_processMetricsPublisher");
+	try {
+		loop {
+			wait(delay(5.0));
+			auto processMetrics = latestEventCache.get("ProcessMetrics");
+			double processMetricsElapsed = processMetrics.getDouble("Elapsed");
+			double cpuSeconds = processMetrics.getDouble("CPUSeconds");
+			double mainThreadCPUSeconds = processMetrics.getDouble("MainThreadCPUSeconds");
+
+			double cpuUsage = std::max(0.0, cpuSeconds / processMetricsElapsed) * 100;
+			double mainThreadCPUUsage = std::max(0.0, mainThreadCPUSeconds / processMetricsElapsed) * 100;
+
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_CPU_PERCENTAGE, cpuUsage);
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MAIN_THREAD_CPU_PERCENTAGE,
+			                                            mainThreadCPUUsage);
+			DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_MEMORY_USAGE,
+			                                            processMetrics.getInt64("Memory"));
+		};
+	} catch (...) {
+		TraceEvent("BD_processMetricsPublisherException");
+		throw;
+	}
+}
+
 typedef std::vector<std::pair<FDBNetworkOption, Standalone<StringRef>>> NetworkOptionsT;
 
 ACTOR void setup(NetworkAddress na,
@@ -496,7 +562,8 @@ ACTOR void setup(NetworkAddress na,
 					when(wait(t)) {
 						TraceEvent(SevError, "StartupFailure")
 						    .detail("phase", "ConnectToCluster")
-						    .detail("timeout", soFar);
+						    .detail("timeout", soFar)
+						    .error(timed_out());
 					}
 				}
 			} catch (Error& e) {
@@ -555,6 +622,7 @@ ACTOR void setup(NetworkAddress na,
 	} else {
 		extProxy(na, NetworkAddress::parse(format("127.0.0.1:%d", proxyto.get())));
 	}
+	publishProcessMetrics();
 }
 
 // Change stream connection handler

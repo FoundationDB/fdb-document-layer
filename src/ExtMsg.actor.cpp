@@ -591,7 +591,7 @@ void ExtMsgReply::write(Reference<ExtConnection> nmc) {
 	}
 
 	if (verboseLogging)
-		TraceEvent("BD_msgReply").detail("Message", toString());
+		TraceEvent("BD_msgReply").detail("Message", toString()).detail("connId", nmc->connectionId);
 	if (verboseConsoleOutput)
 		fprintf(stderr, "S -> C: %s\n\n", toString().c_str());
 

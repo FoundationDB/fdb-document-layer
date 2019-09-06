@@ -141,6 +141,9 @@ MetricStat& MetricStat::captureNewValue(int64_t val) {
 			sum += val;
 			avg = (double)sum / (double)count;
 			return *this;
+		default:
+			// Issue #16: Added default return statement to fix the warning during compilation
+			return *this;
 		}
 	}
 }

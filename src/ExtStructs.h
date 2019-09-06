@@ -146,7 +146,6 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Reference<Plan> wrapOperationPlanOplog(Reference<Plan> plan,
 										Reference<IOplogInserter> oplogInserter, 
 										Reference<UnboundCollectionContext> cx);
-	void startHousekeeping();
 	Future<Void> beforeWrite(int desiredPermits = 1);
 	Future<Void> afterWrite(Future<WriteResult> result, int releasePermits = 1);
 
@@ -189,7 +188,6 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 private:
 	Future<Void> currentWriteLocked;
 	Reference<FlowLock> lock;
-	Future<Void> housekeeping;
 	int32_t maxReceivedRequestID;
 	int32_t nextServerGeneratedRequestID;
 };

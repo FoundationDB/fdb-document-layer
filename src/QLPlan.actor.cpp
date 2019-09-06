@@ -246,9 +246,9 @@ Optional<Reference<Plan>> IndexScanPlan::push_down(Reference<UnboundCollectionCo
 		default:
 			return Optional<Reference<Plan>>();
 		}
-	} else {
-		return Optional<Reference<Plan>>();
 	}
+	// Issue #16: Added return statement in right place to fix the warning during compilation
+	return Optional<Reference<Plan>>();
 }
 
 ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,
@@ -321,6 +321,7 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
 	// Each key has a document ID as its last entry
 	state Key lastKey;
 	state FlowLock* outputLock = checkpoint->getDocumentFinishedLock();
+	state uint32_t nrDocs = 0;
 	try {
 		loop {
 			state KeyValue kv = waitNext(index_keys);
@@ -330,8 +331,10 @@ ACTOR static Future<Void> toDocInfo(PlanCheckpoint* checkpoint,
 			Standalone<StringRef> last(DataKey::decode_item_rev(kv.key, 0), kv.arena());
 			Reference<ScanReturnedContext> output(new ScanReturnedContext(base->getSubContext(last), scanID, lastKey));
 			dis.send(output);
+			nrDocs++;
 		}
 	} catch (Error& e) {
+		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_IDX_SCAN_DOCS, nrDocs);
 		if (e.code() == error_code_actor_cancelled) {
 			if (checkpoint->splitBoundWanted())
 				checkpoint->splitBound(scanID) = keyAfter(lastKey);
@@ -526,6 +529,7 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
 	state FlowLock* outputLock = checkpoint->getDocumentFinishedLock();
 	state Standalone<StringRef> lastPK;
 	state Key lastKey;
+	state uint32_t nrDocs = 0;
 	try {
 		loop {
 			state KeyValue kv = waitNext(kvs);
@@ -537,12 +541,14 @@ ACTOR static Future<Void> doPKScan(PlanCheckpoint* checkpoint,
 				wait(outputLock->take());
 				output.send(Reference<ScanReturnedContext>(
 				    new ScanReturnedContext(cx->cx->getSubContext(lastPK), scanID, Key(kv.key, kv.arena()))));
+				nrDocs++;
 			}
 			// This needs to happen down here, so that we don't reset the split bound one later if we're cancelled while
 			// failing to get the lock.
 			lastKey = Key(kv.key, kv.arena());
 		}
 	} catch (Error& e) {
+		DocumentLayer::metricReporter->captureMeter(DocLayerConstants::MT_RATE_TABLE_SCAN_DOCS, nrDocs);
 		if (e.code() == error_code_actor_cancelled) {
 			if (checkpoint->splitBoundWanted()) {
 				DataKey splitKey = DataKey::decode_bytes(lastKey);

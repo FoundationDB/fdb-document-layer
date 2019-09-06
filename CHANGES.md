@@ -1,10 +1,22 @@
 ## Release notes
 
-## 1.7.2
+### 1.8.1
+
+* [#209](https://github.com/FoundationDB/fdb-document-layer/pull/209) - CPU and memory usage metris. And Table/Index scan metrics
+* [#210](https://github.com/FoundationDB/fdb-document-layer/pull/210) - Network thread CPU usage metrics
+
+### 1.8.0
+
+* [#94](https://github.com/FoundationDB/fdb-document-layer/issues/94) - Added `renameCollection` command
+* [#129](https://github.com/FoundationDB/fdb-document-layer/issues/129) - Moved to FDB dependency 6.0 -> 6.1
+* [#194](https://github.com/FoundationDB/fdb-document-layer/pull/194) - Fixed unnecessary memory copies with `DataKey` and `DataValue`.
+* [#202](https://github.com/FoundationDB/fdb-document-layer/issues/202) - Fix for a memory leak on new connections
+
+### 1.7.2
 
 * [#185](https://github.com/FoundationDB/fdb-document-layer/pull/185) Fix for compound index selection query planner
 
-## 1.7.1
+### 1.7.1
 
 * [#135](https://github.com/FoundationDB/fdb-document-layer/issues/135) Fix for None value handling in arrays
 * [#175](https://github.com/FoundationDB/fdb-document-layer/pull/175) Fix the bug that command `dropIndex`'s error message misses some fields
