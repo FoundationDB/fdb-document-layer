@@ -242,15 +242,29 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 	    : cx(cx), index(index), begin(begin), end(end), matchedPrefix(matchedPrefix) {}
 	bson::BSONObj describe() override {
 		// #17: Added decode_key_part to update explain output with user readable keys
-		std::string bound_begin = begin.present() ? DataValue::decode_key_part(begin.get()).toString() : "-inf";
-		std::string bound_end = end.present() ? DataValue::decode_key_part(begin.get()).toString() : "+inf";
+		std::string bound_begin;
+		std::string bound_end;
+		bson::BSONObjBuilder bound;
+		size_t pos;
+
+		DataKey begin_key = DataKey::decode_bytes(begin.get());
+		DataKey end_key = DataKey::decode_bytes(end.get());
+
+		for (int i = 0; i < begin_key.size(); ++i) {
+			bound_begin = DataValue::decode_key_part(begin_key[i]).toString();
+			bound_end = DataValue::decode_key_part(end_key[i]).toString();
+			pos = bound_end.find('-', 0);
+			if (pos != std::string::npos) {
+				bound_end.erase(pos, 1);
+			}
+			bound.append(matchedPrefix[i], BSON("begin" << bound_begin << "end" << bound_end));
+		}
+
 		return BSON(
 		    // clang-format off
 			"type" << "index scan" <<
 			"index name" << index->indexName <<
-			"bounds" << BSON(
-				"begin" << bound_begin <<
-				"end" << bound_end)
+			"bounds" << bound.obj()
 		    // clang-format on
 		);
 	}

@@ -85,6 +85,7 @@ enum class DVTypeCode : uint8_t {
 	MIN_KEY = 0,
 	NULL_ELEMENT = 20,
 	NUMBER = 30,
+	SPL_CHAR = 31,
 	STRING = 40,
 	OBJECT = 50,
 	PACKED_OBJECT = 51,

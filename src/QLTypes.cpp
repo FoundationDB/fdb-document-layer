@@ -56,6 +56,7 @@ DVTypeCode DataValue::getSortType() const {
 bson::BSONType DataValue::getBSONType() const {
 	switch (getSortType()) {
 	case DVTypeCode::NUMBER:
+	case DVTypeCode::SPL_CHAR:
 		return (bson::BSONType)representation[11];
 	case DVTypeCode::STRING:
 		return bson::BSONType::String;
@@ -152,7 +153,7 @@ DataValue DataValue::decode_key_part(StringRef key) {
 	try {
 		if (type == DVTypeCode::STRING || type == DVTypeCode::PACKED_ARRAY || type == DVTypeCode::PACKED_OBJECT) {
 			return DataValue(StringRef(unescape_nulls(key)));
-		} else if (type == DVTypeCode::NUMBER) {
+		} else if (type == DVTypeCode::NUMBER || type == DVTypeCode::SPL_CHAR) {
 			return decode_key_part(key, bson::BSONType::NumberDouble);
 		} else {
 			return DataValue(key);
@@ -164,7 +165,7 @@ DataValue DataValue::decode_key_part(StringRef key) {
 }
 
 DataValue DataValue::decode_key_part(StringRef numKey, bson::BSONType numCode) {
-	if ((DVTypeCode)numKey[0] == DVTypeCode::NUMBER) {
+	if ((DVTypeCode)numKey[0] == DVTypeCode::NUMBER || (DVTypeCode)numKey[0] == DVTypeCode::SPL_CHAR) {
 		if (numCode == bson::BSONType::NumberInt || numCode == bson::BSONType::NumberLong ||
 		    numCode == bson::BSONType::NumberDouble) {
 			Standalone<StringRef> s = makeString(12);
@@ -530,7 +531,7 @@ int64_t DataValue::getLong() const {
 
 double DataValue::getDouble() const {
 	ASSERT(representation.size() == 12);
-	ASSERT(getSortType() == DVTypeCode::NUMBER);
+	ASSERT((getSortType() == DVTypeCode::NUMBER) || (getSortType() == DVTypeCode::SPL_CHAR));
 	ASSERT(representation[11] == 1);
 
 	LongDouble r;
@@ -627,6 +628,7 @@ static size_t find_string_terminator(const uint8_t* bytes, size_t max_length_plu
 static int getKeyPartLength(const uint8_t* ptr, size_t max_length_plus_one) {
 	switch (DVTypeCode(*ptr)) {
 	case DVTypeCode::NUMBER:
+	case DVTypeCode::SPL_CHAR:
 		return 11;
 
 	case DVTypeCode::STRING:
