@@ -206,6 +206,7 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)
 				return;
+
 			throw e;
 		}
 	
@@ -213,10 +214,9 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 			bson::BSONObj query = BSON("ts" << BSON("$lte" << ts));
 			Reference<Plan> plan = planQuery(cx, query);
 			plan = deletePlan(plan, cx, std::numeric_limits<int64_t>::max());
-			plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
+			plan = Reference<Plan>(new NonIsolatedPlan(plan, false, cx, docLayer->database, docLayer->mm));
 			int64_t _ = wait(executeUntilCompletionTransactionally(plan, dtr));
 		} catch (Error& e) {
-			TraceEvent(SevError, "OplogMonitorDeleteFailure").error(e);
 			fprintf(stderr, "Unable to delete oplog by ts %f\n", ts);			
 		}
 }

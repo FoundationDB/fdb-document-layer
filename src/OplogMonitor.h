@@ -27,7 +27,6 @@
 #include "DocLayer.h"
 #include "ExtStructs.h"
 
-
 void oplogSendTimestamp(PromiseStream<double> times, double ts);
 void oplogRunUpdateScanner(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream);
 void oplogRunStreamWatcher(Reference<DocumentLayer> docLayer, FutureStream<double> times);

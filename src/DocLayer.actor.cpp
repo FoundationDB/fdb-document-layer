@@ -623,10 +623,13 @@ ACTOR void setup(NetworkAddress na,
 		watcher->watch();
 
 		// Oplog monitor
-		double opDuration = 259200000; // 3 days
-		state std::function<void()> opMon = [&](){ oplogMonitor(docLayer, opDuration); };
-		oplogMonitor(docLayer, opDuration);
-		uncancellable(recurring(opMon, 5.0, TaskMaxPriority));
+		double oplogDuration = 172800000; // oplog deletion after 2 days
+		state std::function<void()> opMon = [=]{
+			static Reference<DocumentLayer> dl = docLayer;
+			oplogMonitor(dl, oplogDuration);
+		};
+		opMon();
+		uncancellable(recurring(opMon, 600.0, TaskMaxPriority));
 
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
 		extServer(docLayer, na, watcher);
