@@ -22,173 +22,8 @@
 #include "ExtUtil.actor.h"
 #include "ExtMsg.actor.h"
 #include "QLPlan.actor.h"
+#include "OplogMonitor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
-
-ACTOR Future<Reference<DirectorySubspace>> watcherGetTSDirectory(Reference<DocumentLayer> docLayer) {
-	Reference<DirectoryLayer> d = Reference<DirectoryLayer>(new DirectoryLayer());
-	Reference<DirectorySubspace> ds = wait(runRYWTransaction(docLayer->database, [d](Reference<DocTransaction> tr) {
-		    return d->createOrOpen(tr->tr, {LiteralStringRef("Oplog"), LiteralStringRef("Updates")});
-	    },
-	    -1, 0));
-
-	return ds;
-}
-
-FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
-	return dir->pack(LiteralStringRef("timestamp"), true);
-}
-
-void sendTimestamp(PromiseStream<double> times, double ts) {
-	try {
-		times.send(ts);
-	} catch(Error &e) {
-		fprintf(stdout, "Timestamp send error: %s\n", e.what());
-	}
-}
-
-ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, FutureStream<double> times) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-	state double ts = 0.0;
-
-	loop {
-		try {
-			try {
-				state Future<Void> timeout = Never();
-				state int cnt = 0;
-
-				loop choose {
-					when(double tmpTs = waitNext(times)) {																
-						ts = tmpTs;
-						cnt++;
-
-						if (cnt == 1) {
-							timeout = delay(0.1, TaskMaxPriority);
-						}
-
-						if (cnt == 5) {
-							timeout = delay(0.3, TaskMaxPriority);
-						}
-
-						if (cnt >= 500) {
-							throw end_of_stream();
-						}
-					}										
-					when(wait(timeout)) {
-						throw end_of_stream();
-					}
-				}
-			} catch (Error& e) {
-				if (e.code() != error_code_end_of_stream)
-					throw;
-			}
-
-			state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
-			updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
-			wait(updTr->tr->commit());
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher ts update error: %s\n", e.what());
-		}
-	}
-}
-
-ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
-	state double lastTs = -1.0;
-	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-
-	loop {
-		try {
-			state double newTs = waitNext(times);
-			if (lastTs == -1.0) {
-				lastTs = newTs;
-				continue;
-			}
-			if (lastTs == newTs) {
-				continue;
-			}
-
-			if (changeStream->countConnections() > 0) {
-				state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-				state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
-				bson::BSONObj selectors = BSON("$gt" << lastTs << "$lte" << newTs);
-				bson::BSONObj query = BSON("ts" << selectors);
-		
-				state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
-				state Reference<Plan> plan = planQuery(cx, query);
-				plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
-				state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
-				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-
-				try {
-					loop {
-						choose {
-							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-								DataValue oDv = wait(doc->toDataValue());
-								bson::BSONObj obj = oDv.getPackedObject().getOwned();
-								flowControlLock->release();
-								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-							}
-						}
-					}
-				} catch (Error& e) {
-					checkpoint->stop();
-					if (e.code() != error_code_end_of_stream) {						
-						throw;
-					}
-				}
-			}
-
-			lastTs = newTs;
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher scan error: %s\n", e.what());
-		}
-	}
-}
-
-ACTOR void watcherTimestampWatchingActor(
-	PromiseStream<double> times, 
-	Reference<DocumentLayer> docLayer) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-	state double ts = 0.0;
-	state double prevTs = -1.0;
-
-	loop {
-		try {
-			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-			state Future<Void> watch = dtr->tr->watch(tsKey);
-			state Future<Optional<FDBStandalone<StringRef>>> futureTs = dtr->tr->get(tsKey);			
-			wait(dtr->tr->commit());
-			dtr->tr->reset();
-
-			Optional<FDBStandalone<StringRef>> tsBefore = wait(futureTs);
-			if (tsBefore.present()) {
-				ts = *(double*)tsBefore.get().begin();
-			}
-
-			if (ts == prevTs) {
-				wait(watch || delay(5.0));
-				futureTs = dtr->tr->get(tsKey);
-				wait(dtr->tr->commit());
-
-				Optional<FDBStandalone<StringRef>> tsAfter = wait(futureTs);
-				if (tsAfter.present()) {
-					ts = *(double*)tsAfter.get().begin();
-				}
-
-				if (ts == prevTs) {
-					continue;
-				}
-			}
-	
-			prevTs = ts;
-			sendTimestamp(times, ts);
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher watching error: %s\n", e.what());
-			wait(delay(1.0, TaskMaxPriority));
-		}
-	}
-}
 
 // Create connection change stream
 FutureStream<Standalone<StringRef>> ExtChangeStream::newConnection(int64_t connectionId) {
@@ -222,14 +57,14 @@ int ExtChangeStream::countConnections() {
 
 // Update timestamp key
 void ExtChangeWatcher::update(double timestamp) {
-	sendTimestamp(tsStreamWriter, timestamp);
+	oplogSendTimestamp(tsStreamWriter, timestamp);
 }
 
 // Watching for updates
 void ExtChangeWatcher::watch() {
-	watcherScanUpdates(tsScanFuture, docLayer, changeStream);	
-	watcherTimestampUpdateActor(docLayer, tsStreamReader);
-	watcherTimestampWatchingActor(tsScanPromise, docLayer);	
+	oplogRunUpdateScanner(tsScanFuture, docLayer, changeStream);	
+	oplogRunStreamWatcher(docLayer, tsStreamReader);
+	oplogRunTimestampWatcher(tsScanPromise, docLayer);
 }
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {

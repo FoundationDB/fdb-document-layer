@@ -18,6 +18,7 @@ add_executable(fdbdoc
         MetadataManager.h
         Oplogger.h
         Oplogger.cpp
+        OplogMonitor.h
         QLContext.h
         QLExpression.h
         QLOperations.h
@@ -37,6 +38,7 @@ set(ACTOR_FILES
         ExtStructs.actor.cpp
         ExtUtil.actor.cpp
         MetadataManager.actor.cpp
+        OplogMonitor.actor.cpp
         QLContext.actor.cpp
         QLExpression.actor.cpp
         QLPlan.actor.cpp

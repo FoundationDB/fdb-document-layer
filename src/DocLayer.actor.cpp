@@ -40,6 +40,7 @@
 #include "ExtMsg.actor.h"
 #include "IMetric.h"
 #include "StatusService.actor.h"
+#include "OplogMonitor.h"
 
 #include "flow/SystemMonitor.h"
 
@@ -610,9 +611,15 @@ ACTOR void setup(NetworkAddress na,
 			}
 		}
 		
-		
+		// Changes watcher
 		state Reference<ExtChangeWatcher> watcher = Reference<ExtChangeWatcher>(new ExtChangeWatcher(docLayer, changeStream));
 		watcher->watch();
+
+		// Oplog monitor
+		double opDuration = 259200000; // 3 days
+		state std::function<void()> opMon = [&](){ oplogMonitor(docLayer, opDuration); };
+		oplogMonitor(docLayer, opDuration);
+		uncancellable(recurring(opMon, 5.0, TaskMaxPriority));
 
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
 		extServer(docLayer, na, watcher);
