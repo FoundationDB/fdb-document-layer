@@ -1,5 +1,12 @@
 ## Release notes
 
+
+### 1.8.2
+
+* [#212](http://github.com/FoundationDB/fdb-document-layer/pull/212) - Avoids deadlock in connection handler over failures
+* [#212](http://github.com/FoundationDB/fdb-document-layer/pull/212) - Add new connection rate metrics
+* [#212](http://github.com/FoundationDB/fdb-document-layer/pull/212) - Publish CPU metrics at high priority, so we wont miss metrics under load
+
 ### 1.8.1
 
 * [#209](https://github.com/FoundationDB/fdb-document-layer/pull/209) - CPU and memory usage metris. And Table/Index scan metrics

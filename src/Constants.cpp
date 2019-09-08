@@ -83,6 +83,7 @@ const char* INDEX_STATUS_BUILDING = "building";
 const char* INDEX_STATUS_ERROR = "error";
 
 const char* MT_GUAGE_ACTIVE_CONNECTIONS = "dl_active_connections";
+const char* MT_RATE_NEW_CONNECTIONS = "dl_new_connections";
 const char* MT_GUAGE_ACTIVE_CURSORS = "dl_active_cursors";
 const char* MT_HIST_MESSAGE_SZ = "dl_message_size_bytes";
 const char* MT_TIME_QUERY_LATENCY_US = "dl_query_latency_useconds";

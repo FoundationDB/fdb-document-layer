@@ -100,6 +100,7 @@ extern const char* INDEX_STATUS_ERROR;
 
 // Metrics
 extern const char* MT_GUAGE_ACTIVE_CONNECTIONS;
+extern const char* MT_RATE_NEW_CONNECTIONS;
 extern const char* MT_GUAGE_ACTIVE_CURSORS;
 extern const char* MT_HIST_MESSAGE_SZ;
 extern const char* MT_TIME_QUERY_LATENCY_US;
