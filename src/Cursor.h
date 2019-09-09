@@ -33,6 +33,7 @@ struct Cursor : ReferenceCounted<Cursor>, NonCopyable {
 	int32_t returned;
 	std::map<int64_t, Reference<Cursor>>* siblings;
 	time_t expiry;
+	static std::map<int64_t, Reference<Cursor>> allCursors;
 
 	Cursor(FutureStream<Reference<ScanReturnedContext>> docs, Reference<PlanCheckpoint> checkpoint)
 	    : docs(docs), checkpoint(checkpoint), returned(0) {
@@ -47,6 +48,7 @@ struct Cursor : ReferenceCounted<Cursor>, NonCopyable {
 
 	static void pluck(Reference<Cursor> cursor);
 	static Reference<Cursor> add(std::map<int64_t, Reference<Cursor>>& siblings, Reference<Cursor> cursor);
+	static Reference<Cursor> get(int64_t id);
 };
 
 #endif /*** _CURSOR_H_ */

@@ -193,7 +193,7 @@ ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
 		// through this connection. Prune all the cursors before cancelling
 		// this actor.
 		if (e.code() == error_code_actor_cancelled)
-			Cursor::prune(ec->cursors, true);
+			Cursor::prune(ec->cursors, true);					
 		throw;
 	}
 }

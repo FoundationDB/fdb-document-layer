@@ -23,6 +23,10 @@
 #include "Knobs.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
+// Cursors for accessibility via difference connections.
+// Dirty but fast fix.
+std::map<int64_t, Reference<Cursor>> Cursor::allCursors;
+
 int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneAll) {
 	time_t now = time(nullptr);
 	int32_t pruned = 0;
@@ -30,7 +34,7 @@ int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneA
 
 	try {
 		for (auto it = cursors.begin(); it != cursors.end();) {
-			if (it->second && (pruneAll || now >= it->second->expiry)) {
+			if (it->second && (pruneAll || now >= it->second->expiry)) {				
 				to_be_pruned.push_back(it->second);
 			}
 			++it;
@@ -51,6 +55,7 @@ int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneA
 
 void Cursor::pluck(Reference<Cursor> cursor) {
 	if (cursor) {
+		allCursors.erase(cursor->id);
 		cursor->siblings->erase(cursor->id);
 		cursor->checkpoint->stop();
 		DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CURSORS,
@@ -61,6 +66,11 @@ void Cursor::pluck(Reference<Cursor> cursor) {
 Reference<Cursor> Cursor::add(std::map<int64_t, Reference<Cursor>>& siblings, Reference<Cursor> cursor) {
 	cursor->siblings = &siblings;
 	siblings[cursor->id] = cursor;
+	allCursors[cursor->id] = cursor;
 	DocumentLayer::metricReporter->captureGauge(DocLayerConstants::MT_GUAGE_ACTIVE_CURSORS, siblings.size());
 	return cursor;
+}
+
+Reference<Cursor> Cursor::get(int64_t id) {
+	return allCursors[id];
 }

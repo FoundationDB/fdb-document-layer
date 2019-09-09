@@ -1181,7 +1181,11 @@ ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Referen
 	state Reference<ExtMsgReply> reply = Reference<ExtMsgReply>(new ExtMsgReply(getMore->header));
 	state Reference<Cursor> cursor = ec->cursors[getMore->cursorID];
 
-	if (cursor) {
+	if (!cursor) {
+		cursor = Cursor::get(getMore->cursorID);
+	}
+
+	if (cursor) {	
 		try {
 			int32_t returned = wait(addDocumentsFromCursor(cursor, reply, getMore->numberToReturn));
 			reply->replyHeader.startingFrom = cursor->returned - returned;
@@ -1334,7 +1338,7 @@ Future<Void> doKillCursorsRun(Reference<ExtMsgKillCursors> msg, Reference<ExtCon
 	// BufferedConnection is. So do this copy for now to be conservative.
 	int32_t numberOfCursorIDs = msg->numberOfCursorIDs;
 
-	while (numberOfCursorIDs--) {
+	while (numberOfCursorIDs--) {				
 		Cursor::pluck(ec->cursors[*ptr++]);
 	}
 
