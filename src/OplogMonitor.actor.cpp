@@ -206,7 +206,6 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 		} catch (Error& e) {
 			if (e.code() == error_code_collection_not_found)
 				return;
-
 			throw e;
 		}
 	
