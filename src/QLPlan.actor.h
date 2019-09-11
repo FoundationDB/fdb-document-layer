@@ -241,7 +241,8 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 	              std::vector<std::string> matchedPrefix)
 	    : cx(cx), index(index), begin(begin), end(end), matchedPrefix(matchedPrefix) {}
 	bson::BSONObj describe() override {
-		// #17: Added decode_key_part to update explain output with user readable keys
+		// #17: Added decode_bytes and decode_key_part to update explain output with user readable keys
+
 		std::string bound_begin;
 		std::string bound_end;
 		bson::BSONObjBuilder bound;
@@ -253,9 +254,11 @@ struct IndexScanPlan : ConcretePlan<IndexScanPlan> {
 		for (int i = 0; i < begin_key.size(); ++i) {
 			bound_begin = DataValue::decode_key_part(begin_key[i]).toString();
 			bound_end = DataValue::decode_key_part(end_key[i]).toString();
-			pos = bound_end.find('-', 0);
-			if (pos != std::string::npos) {
-				bound_end.erase(pos, 1);
+			if ((DVTypeCode)end_key[i][0] == DVTypeCode::SPL_CHAR) {
+				pos = bound_end.find('-', 0);
+				if (pos != std::string::npos) {
+					bound_end.erase(pos, 1);
+				}
 			}
 			bound.append(matchedPrefix[i], BSON("begin" << bound_begin << "end" << bound_end));
 		}

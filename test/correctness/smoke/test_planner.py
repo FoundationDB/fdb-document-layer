@@ -44,6 +44,28 @@ class Predicates(object):
         else:
             return False
 
+    #issue-17: Added decode_bytes and decode_key_part to update explain output with user readable keys
+    # To check begin and end keys in bounds in explanation
+    @staticmethod
+    def check_bound(index_name, begin, end, explanation):
+        this_type = explanation['type']
+        if this_type == 'union':
+            return all([Predicates.check_bound(index_name, begin, end, p) for p in explanation['plans']])
+        elif 'source_plan' in explanation:
+            return Predicates.check_bound(index_name, begin, end, explanation['source_plan'])
+        elif index_name in explanation['bounds']:
+            bound = explanation['bounds'][index_name]
+            if bound['begin'] == begin and bound['end'] == end:
+                return True
+            elif bound['begin'] == begin and bound['end'] == 'nan.0':
+                # This check needed because in MacOS decode byte '0x1f' returns 'nan.0' instead of 'inf.0'.
+                return True
+            else:
+                return False
+        else:
+            return False
+
+
     @staticmethod
     def pk_lookup(explanation):
         this_type = explanation['type']
@@ -437,3 +459,73 @@ def test_compound_index_multi_match(fixture_collection):
     ret = fixture_collection.find(query).explain()
     assert Predicates.only_index_named('da', ret['explanation'])
     assert Predicates.no_table_scan(ret['explanation'])
+
+#issue-17: Added decode_bytes and decode_key_part to update explain output with user readable keys
+# check bound range test
+def test_bounds_in_basic_query_explain(fixture_collection):
+    fixture_collection.create_index([('a', 1), ('b', 1)])
+    query = {
+            'a' : 'A',
+            'b' : 64
+            }
+    ret = fixture_collection.find(query).explain()
+    # Predicates.check_bound(index_name, begin_key, end_key, explanation)
+
+    # Check whether, index name 'a', begin key 'A' and end key in 'A' are present in explanation
+    assert Predicates.check_bound('a', '"A"', '"A"', ret['explanation'])
+    # Check whether, index name 'b', begin key '64.0' and end key in '64.0' are present in explanation
+    assert Predicates.check_bound('b', '64.0', '64.0', ret['explanation'])
+
+
+def test_bounds_in_operator_query_explain(fixture_collection):
+    fixture_collection.create_index(keys=[('d', 1), ('b', 1), ('c', 1)], name='compound')
+    fixture_collection.create_index(keys=[('d', 1)], name='simple')
+    query = {
+            '$and':
+            [{'d':
+                {'$gt': 1}
+                }
+            ]}
+    ret = fixture_collection.find(query).explain()
+    explanation = ret['explanation']
+    # Predicates.check_bound(index_name, begin_key, end_key, explanation)
+
+    # Check whether, index name 'd', begin key '1.0' and end key in 'inf.0' are present in explanation
+    # For range 1.0 < x < inf.0
+    assert Predicates.check_bound('d', '1.0', 'inf.0', ret['explanation'])
+
+    query = {
+            '$and':
+            [{'d':
+                {'$lt': 1}
+                }
+            ]}
+    ret = fixture_collection.find(query).explain()
+    explanation = ret['explanation']
+    # Check whether, index name 'd', begin key '-inf.0' and end key in '1.0' are present in explanation
+    # For range -inf.0 < x < 1.0
+    assert Predicates.check_bound('d', '-inf.0', '1.0', ret['explanation'])
+
+    query = {
+            '$and':
+            [{'d':
+                {'$lt': -5}
+                }
+            ]}
+    ret = fixture_collection.find(query).explain()
+    explanation = ret['explanation']
+    # Check whether, index name 'd', begin key '-inf.0' and end key in '-5.0' are present in explanation
+    # For range -inf.0 < x < -5.0
+    assert Predicates.check_bound('d', '-inf.0', '-5.0', ret['explanation'])
+
+    query = {
+            '$and':
+            [{'d':
+                {'$gt': -5}
+                }
+            ]}
+    ret = fixture_collection.find(query).explain()
+    explanation = ret['explanation']
+    # Check whether, index name 'd', begin key '-5.0' and end key in 'inf.0' are present in explanation
+    # For range -5.0 < x < inf.0
+    assert Predicates.check_bound('d', '-5.0', 'inf.0', ret['explanation'])

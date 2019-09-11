@@ -80,12 +80,19 @@ public:
 #else
 typedef long double LongDouble;
 #endif
+// #17: Added decode_bytes and decode_key_part to update explain output with user readable keys
+
+/* In case query has '$gt' or '$lt' operator then field elements are represent in range,
+ * like '//x01e < x < 1' (for '$lt') and '1 < x < //x01f' (for '$gt'), where //x01e represent.
+ * To determine those bytes, enable a check for '0x1f' in 'DVTypeCode' as SPL_CHAR,
+ * for '0x1e' in 'DVTypeCode' already enabled as 'NUMBER'.
+ */
 
 enum class DVTypeCode : uint8_t {
 	MIN_KEY = 0,
 	NULL_ELEMENT = 20,
 	NUMBER = 30,
-	SPL_CHAR = 31,
+	SPL_CHAR = 31, // ASCII value for SPL_CHAR = 31 is '\0x1f'
 	STRING = 40,
 	OBJECT = 50,
 	PACKED_OBJECT = 51,
