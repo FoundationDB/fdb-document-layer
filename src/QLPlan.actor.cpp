@@ -1158,8 +1158,8 @@ ACTOR static Future<Void> doOplogInsert(PlanCheckpoint* checkpoint,
 				throw;
 		}
 
-		if (oplogger->isEnabled()) {
-			// Oplog. Commit operations.
+		if (oplogger->isEnabled()) {			
+			// Oplog. Commit operations.			
 			state Reference<UnboundCollectionContext> ucx = wait(oplogger->getUnboundContext(mm, tr));
 			state Reference<CollectionContext> ctx = ucx->bindCollectionContext(tr);
 			
@@ -1168,7 +1168,7 @@ ACTOR static Future<Void> doOplogInsert(PlanCheckpoint* checkpoint,
 			for (; i < logs.size(); i++) {
 				Reference<IReadWriteContext> _doc = wait(logs[i]);
 				wait(_doc->commitChanges());		
-			}
+			}			
 		}
 
 		throw end_of_stream();
@@ -1269,7 +1269,7 @@ ACTOR static Future<Void> findAndModify(PlanCheckpoint* outerCheckpoint,
                                         bool projectNew,
                                         PromiseStream<Reference<ScanReturnedContext>> output) {
 	if (!dtr)
-		dtr = NonIsolatedPlan::newTransaction(database);		
+		dtr = NonIsolatedPlan::newTransaction(database);	
 	state Reference<PlanCheckpoint> innerCheckpoint(new PlanCheckpoint);
 	state int nTransactions = 1;
 	state FlowLock* outerLock = outerCheckpoint->getDocumentFinishedLock();
