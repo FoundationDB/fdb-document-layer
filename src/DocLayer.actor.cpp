@@ -505,7 +505,7 @@ ACTOR void setup(NetworkAddress na,
                  std::string fdbDatacenterID) {
 	state FDB::API* fdb;
 	try {
-		fdb = FDB::API::selectAPIVersion(510);
+		fdb = FDB::API::selectAPIVersion(610);
 		for (auto& knob : client_knobs)
 			fdb->setNetworkOption(FDBNetworkOption::FDB_NET_OPTION_KNOB, knob.first + "=" + knob.second);
 		for (auto& opt : client_network_options)
