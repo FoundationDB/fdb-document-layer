@@ -401,6 +401,40 @@ updates = (
     },
 )
 
+#156: staticValidateUpdateObject function is moved to updateDocument constructor
+
+def test_upsert_exception_error_1(fixture_collection):
+    collection = fixture_collection
+
+    collection.delete_many({})
+
+    collection.insert_one({'_id':1, "B":[{'a':1}]})
+    #'_id' cannot be modified
+    #In case try to update '_id' it should throw an error
+    try:
+        collection.update_one({'_id':1}, {'$set': {'_id': 2}}, upsert=True)
+    except OperationFailure as e:
+        serverErrObj = e.details
+        assert serverErrObj['code'] != None
+        # 20010 : You may not modify '_id' in an update
+        assert serverErrObj['code'] == 20010, "Expected:20010, Found: {}".format(serverErrObj)
+
+
+def test_upsert_exception_error_2(fixture_collection):
+    collection = fixture_collection
+
+    collection.delete_many({})
+
+    collection.insert_one({'_id':1, "B":"qty"})
+    #'$rename' operator should not be empty
+    #In case '$rename' operator is empty it should throw an error
+    try:
+        collection.update_one({'_id':1}, {'$rename': {}}, upsert=True)
+    except OperationFailure as e:
+        serverErrObj = e.details
+        assert serverErrObj['code'] != None
+        # 26840 : Update operator has empty object for parameter. You must specify a field.
+        assert serverErrObj['code'] == 26840, "Expected:26840, Found: {}".format(serverErrObj)
 
 def operators_test_with_depth(dl_collection, depth):
     for update in updates:

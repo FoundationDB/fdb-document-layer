@@ -568,24 +568,22 @@ ACTOR static Future<Reference<ExtMsgReply>> doFindAndModify(Reference<ExtConnect
 		if ((isremove && isupdate) || !(isremove || isupdate))
 			throw bad_find_and_modify();
 
-		if (isoperatorUpdate) {
-			staticValidateUpdateObject(updateDoc, false, isupsert);
-		}
-
 		state Reference<DocTransaction> tr = ec->getOperationTransaction();
 		state Reference<UnboundCollectionContext> ucx = wait(ec->mm->getUnboundCollectionContext(tr, query->ns));
+		state Reference<UnboundCollectionContext> cx =
+		    Reference<UnboundCollectionContext>(new UnboundCollectionContext(*ucx));
 
 		state Reference<IUpdateOp> updater;
 		state Reference<IInsertOp> upserter;
 		if (isremove)
 			updater = ref(new DeleteDocument());
 		else if (isoperatorUpdate)
-			updater = operatorUpdate(updateDoc);
+			updater = operatorUpdate(cx, updateDoc, false, isupsert);
 		else
 			updater = replaceUpdate(updateDoc);
 		if (isupsert) {
 			if (isoperatorUpdate)
-				upserter = operatorUpsert(selector, updateDoc);
+				upserter = operatorUpsert(cx, selector, updateDoc);
 			else
 				upserter = simpleUpsert(selector, updateDoc);
 		}

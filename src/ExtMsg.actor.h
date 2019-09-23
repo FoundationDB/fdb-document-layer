@@ -238,7 +238,6 @@ private:
 };
 
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, const bson::BSONObj& query);
-std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool multi, bool upsert);
 ACTOR Future<WriteCmdResult> attemptIndexInsertion(bson::BSONObj firstDoc,
                                                    Reference<ExtConnection> ec,
                                                    Reference<DocTransaction> tr,
@@ -256,9 +255,14 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
                                          Reference<ExtConnection> ec);
 
 // FIXME: these don't really belong here either
-Reference<IUpdateOp> operatorUpdate(bson::BSONObj const& msgUpdate);
+Reference<IUpdateOp> operatorUpdate(Reference<UnboundCollectionContext> cx,
+                                    bson::BSONObj const& msgUpdate,
+                                    bool multi,
+                                    bool upsert);
 Reference<IUpdateOp> replaceUpdate(bson::BSONObj const& replaceWith);
 Reference<IInsertOp> simpleUpsert(bson::BSONObj const& selector, bson::BSONObj const& update);
-Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj const& update);
+Reference<IInsertOp> operatorUpsert(Reference<UnboundCollectionContext> ucx,
+                                    bson::BSONObj const& selector,
+                                    bson::BSONObj const& update);
 
 #endif /* _EXT_MSG_ACTOR_H_ */
