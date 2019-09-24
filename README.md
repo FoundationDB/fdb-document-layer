@@ -2,19 +2,19 @@
 
 ### Feauters:
 1. Oplog simulation
-2. Changes stream server
+2. Change stream server
 
 ### Using: 
 ```
 fdbdoc -l 127.0.0.1:27016 -nl 127.0.0.1:8081
 ```
-1. "nl" - is address for changes stream server
+1. "nl" - is address for change stream server
 
-### Changes stream server
+### Change stream server
 Provides changes to port for listeners which are connected on port over tcp.
 
-Message fromat is:
-1. 8 byte for body size
+Message format is:
+1. 8 bytes for body size (LittleEndian Unit64)
 2. One byte delimiter
 3. Message body (bson object from local.oplog.rs in binary)
 
