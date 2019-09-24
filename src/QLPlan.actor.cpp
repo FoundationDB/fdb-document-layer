@@ -88,10 +88,10 @@ Optional<Reference<Plan>> TableScanPlan::push_down(Reference<UnboundCollectionCo
                                                    Reference<IPredicate> query) {
 	switch (query->getTypeCode()) {
 	case IPredicate::ANY: {
-		auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());
+		auto anyPred = dynamic_cast<AnyPredicate*>(query.getPtr());		
 		if (anyPred->expr->get_index_key() == DocLayerConstants::ID_FIELD) {
 			Optional<DataValue> begin, end;
-			anyPred->pred->get_range(begin, end);
+			anyPred->pred->get_range(begin, end);			
 			if (begin.present() || end.present()) {
 				if (anyPred->pred->range_is_tight()) {
 					return ref(new PrimaryKeyLookupPlan(cx, begin, end));
@@ -262,7 +262,7 @@ ACTOR static Future<Void> doFilter(PlanCheckpoint* checkpoint,
 		loop {
 			try {
 				choose {
-					when(Reference<ScanReturnedContext> nextInput = waitNext(input)) {
+					when(Reference<ScanReturnedContext> nextInput = waitNext(input)) {						
 						futures.push_back(std::pair<Reference<ScanReturnedContext>, Future<bool>>(
 						    nextInput, predicate->evaluate(nextInput)));
 					}

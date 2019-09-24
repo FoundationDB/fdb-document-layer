@@ -146,10 +146,11 @@ Reference<IPredicate> queryToPredicate(bson::BSONObj const& query, bool toplevel
 			}
 		} else if (el.isABSONObj() && !is_literal_match(el.Obj())) {
 			// If this is a top-level _id path then force use of elemMatch because _id can NOT be an array.
-			if (toplevel && strcmp(el.fieldName(), DocLayerConstants::ID_FIELD) == 0)
-				terms.push_back(ExtValueOperator::toPredicate("$elemMatch", el.fieldName(), el));
-			else
-				valueQueryToPredicates(el.Obj(), el.fieldName(), terms);
+			// TODO: Fix. It isn't working for {_id: {"$in":[...]}}
+			//if (toplevel && strcmp(el.fieldName(), DocLayerConstants::ID_FIELD) == 0)
+			//	terms.push_back(ExtValueOperator::toPredicate("$elemMatch", el.fieldName(), el));
+			//else
+			valueQueryToPredicates(el.Obj(), el.fieldName(), terms);
 		} else {
 			terms.push_back(eq_predicate(el, el.fieldName()));
 		}
@@ -160,7 +161,7 @@ Reference<IPredicate> queryToPredicate(bson::BSONObj const& query, bool toplevel
 
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, bson::BSONObj const& query) {
 	auto predicate = queryToPredicate(query, true);
-	auto simplifiedPredicate = predicate->simplify();
+	auto simplifiedPredicate = predicate->simplify();	
 
 	Reference<Plan> plan = Reference<Plan>(
 	    FilterPlan::construct_filter_plan(cx, Reference<Plan>(new TableScanPlan(cx)), simplifiedPredicate));

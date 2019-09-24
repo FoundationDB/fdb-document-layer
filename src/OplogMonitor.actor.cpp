@@ -216,7 +216,7 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 			plan = Reference<Plan>(new NonIsolatedPlan(plan, false, cx, docLayer->database, docLayer->mm));
 			int64_t _ = wait(executeUntilCompletionTransactionally(plan, dtr));
 		} catch (Error& e) {
-			fprintf(stderr, "Unable to delete oplog by ts %f\n", ts);			
+			fprintf(stderr, "Unable to delete oplog by ts %f\n", ts);
 		}
 }
 

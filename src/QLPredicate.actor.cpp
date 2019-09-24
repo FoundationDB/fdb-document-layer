@@ -123,7 +123,7 @@ Reference<IPredicate> AndPredicate::simplify() {
 	}
 
 	// AND of one term is just that term
-	if (combine.other.size() == 1) {
+	if (combine.other.size() == 1) {		
 		return combine.other[0];
 	}
 
@@ -265,7 +265,7 @@ std::string ArraySizePredicate::toString() {
 	return format("ARRAY_SIZE(%d)", size);
 }
 
-Future<bool> EqPredicate::evaluate(Reference<IReadContext> const& context) {
+Future<bool> EqPredicate::evaluate(Reference<IReadContext> const& context) {	
 	DataValue v = value;
 	Future<DataValue> fdv = getMaybeRecursive(context, StringRef());
 	return map(fdv, [v](DataValue dv) { return dv.compare(v) == 0; });
@@ -363,7 +363,7 @@ std::string RangePredicate::toString() {
 	return s;
 }
 
-void RangePredicate::get_range(Optional<DataValue>& min, Optional<DataValue>& max) {
+void RangePredicate::get_range(Optional<DataValue>& min, Optional<DataValue>& max) {	
 	min = min_value;
 	max = max_value;
 }

@@ -1,0 +1,9 @@
+FROM ubuntu:19.04
+
+COPY ./build-doc/bin /app
+COPY ./build/fdb.cluster /app/fdb.cluster
+
+ADD https://www.foundationdb.org/downloads/6.1.12/ubuntu/installers/foundationdb-clients_6.1.12-1_amd64.deb /tmp/fdb.deb
+RUN dpkg -i /tmp/fdb.deb
+
+ENTRYPOINT /bin/bash -c "/app/fdbdoc -C /app/fdb.cluster -V -l 0.0.0.0:27016 -nl 0.0.0.0:8081"
