@@ -1,3 +1,32 @@
+# Fork description
+
+### Feauters:
+1. Oplog simulation
+2. Changes stream server
+
+### Using: 
+```
+fdbdoc -l 127.0.0.1:27016 -nl 127.0.0.1:8081
+```
+1. "nl" - is address for changes stream server
+
+### Changes stream server
+Provides changes to port for listeners which are connected on port over tcp.
+
+Message fromat is:
+1. 8 byte for body size
+2. One byte delimiter
+3. Message body (bson object from local.oplog.rs in binary)
+
+### Recomendations:
+1. When local.oplog.rs will be created by doc layer, it's good to add index on "ts" field for best performance.
+
+### Known limitations:
+1. Writes logs only for "i", "u", "d" operations (no drops and other operations)
+2. Oplog structure has one difference from mongodb, that's exclusion "$" sign from field names (because doc layer has some limitations by it)
+3. "Capped" collection is simple deletion documents by time (only last 2 days are stored)
+4. Performance is decreased by increased transactions number because oplog (~1.8-2x times)
+
 # FoundationDB Document Layer
 
 The FoundationDB Document Layer is a stateless microserver that exposes a document-oriented database API. The Document Layer speaks the MongoDB® wire protocol, allowing the use of the MongoDB® API via existing MongoDB® client bindings. All persistent data are stored in the FoundationDB Key-Value Store.
