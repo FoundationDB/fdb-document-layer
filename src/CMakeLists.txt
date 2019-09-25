@@ -51,7 +51,6 @@ set(ACTOR_FILES
 add_subdirectory(../thirdparty ${CMAKE_BINARY_DIR}/thirdparty)
 include(${CMAKE_SOURCE_DIR}/cmake/FlowConfig.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/GitVersion.cmake)
-include(${CMAKE_SOURCE_DIR}/cmake/Packaging.cmake)
 
 if(DO_IDE_BUILD)
     target_sources(fdbdoc PRIVATE ${ACTOR_FILES})
@@ -129,3 +128,13 @@ target_compile_options(fdbdoc
 
 install(TARGETS fdbdoc RUNTIME DESTINATION bin)
 install(PROGRAMS ${FdbMonitor_EXECUTABLE_PATH} DESTINATION lib/foundationdb/document)
+
+# 60:Don't build packages part of default build
+add_custom_target(packages
+        COMMENT "Building Packages for ${CMAKE_SYSTEM_NAME}"
+        DEPENDS fdbdoc)
+set_target_properties(packages PROPERTIES WITH_PACKAGES yes)
+get_target_property(VAR packages WITH_PACKAGES)
+if(VAR STREQUAL yes)
+        include(${CMAKE_SOURCE_DIR}/cmake/Packaging.cmake)
+endif()
