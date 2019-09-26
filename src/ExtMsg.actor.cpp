@@ -161,7 +161,7 @@ Reference<IPredicate> queryToPredicate(bson::BSONObj const& query, bool toplevel
 
 Reference<Plan> planQuery(Reference<UnboundCollectionContext> cx, bson::BSONObj const& query) {
 	auto predicate = queryToPredicate(query, true);
-	auto simplifiedPredicate = predicate->simplify();	
+	auto simplifiedPredicate = predicate->simplify();
 
 	Reference<Plan> plan = Reference<Plan>(
 	    FilterPlan::construct_filter_plan(cx, Reference<Plan>(new TableScanPlan(cx)), simplifiedPredicate));
@@ -1276,7 +1276,7 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
-				nrDeletedRecords += deletedRecords;		
+				nrDeletedRecords += deletedRecords;
 			} catch (Error& e) {
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
 				// clang-format off
@@ -1339,7 +1339,7 @@ Future<Void> doKillCursorsRun(Reference<ExtMsgKillCursors> msg, Reference<ExtCon
 	// BufferedConnection is. So do this copy for now to be conservative.
 	int32_t numberOfCursorIDs = msg->numberOfCursorIDs;
 
-	while (numberOfCursorIDs--) {				
+	while (numberOfCursorIDs--) {
 		Cursor::pluck(ec->cursors[*ptr++]);
 	}
 

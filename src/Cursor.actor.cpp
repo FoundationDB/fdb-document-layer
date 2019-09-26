@@ -34,7 +34,7 @@ int32_t Cursor::prune(std::map<int64_t, Reference<Cursor>>& cursors, bool pruneA
 
 	try {
 		for (auto it = cursors.begin(); it != cursors.end();) {
-			if (it->second && (pruneAll || now >= it->second->expiry)) {				
+			if (it->second && (pruneAll || now >= it->second->expiry)) {
 				to_be_pruned.push_back(it->second);
 			}
 			++it;

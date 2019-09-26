@@ -193,7 +193,7 @@ ACTOR Future<Void> housekeeping(Reference<ExtConnection> ec) {
 		// through this connection. Prune all the cursors before cancelling
 		// this actor.
 		if (e.code() == error_code_actor_cancelled)
-			Cursor::prune(ec->cursors, true);					
+			Cursor::prune(ec->cursors, true);
 		throw;
 	}
 }
@@ -622,14 +622,13 @@ ACTOR void setup(NetworkAddress na,
 		state Reference<ExtChangeWatcher> watcher = Reference<ExtChangeWatcher>(new ExtChangeWatcher(docLayer, changeStream));
 		watcher->watch();
 
-		// Oplog monitor
-		double oplogDuration = 172800000; // oplog deletion after 2 days
+		// Oplog monitor		
 		state std::function<void()> opMon = [=]{
 			static Reference<DocumentLayer> dl = docLayer;
-			oplogMonitor(dl, oplogDuration);
+			oplogMonitor(dl, DocLayerConstants::OPLOG_EXPIRATION_TIME);
 		};
 		opMon();
-		uncancellable(recurring(opMon, 600.0, TaskMaxPriority));
+		uncancellable(recurring(opMon, DocLayerConstants::OPLOG_CLEAN_INTERVAL, TaskMaxPriority));
 
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
 		extServer(docLayer, na, watcher);

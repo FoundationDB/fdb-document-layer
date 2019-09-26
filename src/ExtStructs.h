@@ -139,7 +139,7 @@ struct ExtConnection : ReferenceCounted<ExtConnection>, NonCopyable {
 	Future<WriteResult> lastWrite;
 	Reference<ExtChangeWatcher> watcher;
 
-	Reference<DocTransaction> getOperationTransaction();	
+	Reference<DocTransaction> getOperationTransaction();
 	Reference<Plan> wrapOperationPlan(Reference<Plan> plan, bool isReadOnly, Reference<UnboundCollectionContext> cx);
 	Reference<Plan> isolatedWrapOperationPlan(Reference<Plan> plan);
 	Reference<Plan> isolatedWrapOperationPlan(Reference<Plan> plan, int64_t timeout, int64_t retryLimit);

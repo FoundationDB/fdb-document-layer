@@ -51,7 +51,7 @@ struct ConcreteInsertOp : IInsertOp, ReferenceCounted<Concrete>, FastAllocated<C
 };
 
 struct DeleteDocument : ConcreteUpdateOp<DeleteDocument> {
-	Future<Void> update(Reference<IReadWriteContext> document) override {	
+	Future<Void> update(Reference<IReadWriteContext> document) override {
 		document->clearDescendants();
 		document->clearRoot();
 		return Future<Void>(Void());

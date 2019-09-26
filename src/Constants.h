@@ -46,6 +46,12 @@ extern const std::string INDICES_KEY;
 extern const std::string SYSTEM_INDEXES;
 extern const std::string SYSTEM_NAMESPACES;
 
+// Oplog expiration time in mills
+extern const double OPLOG_EXPIRATION_TIME;
+
+// Clean loop delay in mills
+extern const double OPLOG_CLEAN_INTERVAL;
+
 // Oplog namespace info
 extern const std::string OPLOG_DB;
 extern const std::string OPLOG_COL;

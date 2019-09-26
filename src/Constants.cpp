@@ -37,6 +37,9 @@ const std::string INDICES_KEY = "indices";
 const std::string SYSTEM_INDEXES = "system.indexes";
 const std::string SYSTEM_NAMESPACES = "system.namespaces";
 
+const double OPLOG_EXPIRATION_TIME = 172800000; // delete oplog 2 days ago
+const double OPLOG_CLEAN_INTERVAL = 600; // clean every 10 minutes
+
 const std::string OPLOG_DB = "local";
 const std::string OPLOG_COL = "oplog.rs";
 
