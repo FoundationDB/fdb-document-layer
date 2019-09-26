@@ -123,7 +123,7 @@ Reference<IPredicate> AndPredicate::simplify() {
 	}
 
 	// AND of one term is just that term
-	if (combine.other.size() == 1) {		
+	if (combine.other.size() == 1) {
 		return combine.other[0];
 	}
 
