@@ -126,6 +126,34 @@ target_compile_options(fdbdoc
             -fno-omit-frame-pointer
         )
 
+# 91: Strip debug symbols into separate file
+
+set(strip_source_file "${CMAKE_BINARY_DIR}/bin/fdbdoc")
+
+if(APPLE)
+	set(DSYMUTIL "dsymutil")
+	set(STRIP "strip")
+	set(strip_destination_file ${strip_source_file}.dwarf)
+	add_custom_command(
+          TARGET fdbdoc
+          COMMAND ${DSYMUTIL} --flat --minimize ${strip_source_file}
+          COMMAND ${STRIP} -u -r ${strip_source_file}
+        )
+	# set fdbdoc.dwarf file for make clean command
+	set_directory_properties(PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${strip_source_file}.dwarf)
+else()
+	set(OBJCOPY "objcopy")
+        set(strip_destination_file ${strip_source_file}.debug)
+	add_custom_command(
+	  TARGET fdbdoc
+          COMMAND ${OBJCOPY} --only-keep-debug ${strip_source_file} ${strip_destination_file}
+          COMMAND ${OBJCOPY} --strip-unneeded ${strip_source_file}
+          COMMAND ${OBJCOPY} --add-gnu-debuglink=${strip_destination_file} ${strip_source_file}
+        )
+	# set fdbdoc.debug file for make clean command
+	set_directory_properties(PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${strip_source_file}.debug)
+endif()
+
 install(TARGETS fdbdoc RUNTIME DESTINATION bin)
 install(PROGRAMS ${FdbMonitor_EXECUTABLE_PATH} DESTINATION lib/foundationdb/document)
 
