@@ -85,6 +85,13 @@ DOCLAYER_ERROR(wire_protocol_mismatch, 29966, "Wire protocol mismatch. Bad messa
 DOCLAYER_ERROR(no_index_name, 29967, "No index name specified");
 DOCLAYER_ERROR(unsupported_index_type, 29969, "Document Layer does not support this index type, yet.");
 
+DOCLAYER_ERROR(access_denied_use_admin_db, 29972, "access denied; use admin db");
+DOCLAYER_ERROR(not_really_talking_to_mongodb, 29973, "not really talking to mongodb");
+DOCLAYER_ERROR(index_must_be_a_string_or_an_object, 29974, "'index' must be a string or an object");
+DOCLAYER_ERROR(unsupported_fdb_version_for_kvstatus,
+               29975,
+               "This command is supported only with version 3.0 and above of the KV Store, if you are using an older "
+               "FDB version please use the fdbcli utility to check its status.");
 DOCLAYER_ERROR(collection_name_does_not_exist, 29976, "Collection name does not exist.");
 DOCLAYER_ERROR(collection_name_already_exist, 29977, "Collection name already exist.");
 DOCLAYER_ERROR(old_and_new_collection_name_cannot_be_same, 29978, "Old and New collection name cannot be same.");

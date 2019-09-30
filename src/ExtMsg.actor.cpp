@@ -487,7 +487,7 @@ ACTOR static Future<Void> runQuery(Reference<ExtConnection> ec,
 	} catch (Error& e) {
 		if (e.code() != error_code_end_of_stream) {
 			reply = Reference<ExtMsgReply>(new ExtMsgReply(msg->header, msg->query));
-			reply->addDocument(BSON("$err" << e.what() << "code" << e.code() << "ok" << 1.0));
+			reply->setError(e);
 			reply->setResponseFlags(2 /*0b0010*/);
 			replyStream.send(reply);
 		}
@@ -1115,8 +1115,8 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 			TraceEvent(SevError, "ExtMsgUpdateFailure").error(e);
 			// clang-format off
 			cmdResult.writeErrors.push_back(BSON("index" << idx <<
+			                                     "$err" << e.name() <<
 			                                     "code" << e.code() <<
-			                                     "$err" << e.what() <<
 			                                     "errmsg" << e.what()));
 			// clang-format on
 			if (ordered)
@@ -1182,6 +1182,7 @@ ACTOR static Future<Void> doGetMoreRun(Reference<ExtMsgGetMore> getMore, Referen
 			cursor->refresh();
 		} catch (Error& e) {
 			reply->setError(e);
+			reply->setResponseFlags(2 /*0b0010*/);
 		}
 	} else {
 		reply->addResponseFlag(1 /*0b0001*/);
@@ -1269,8 +1270,8 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
 				// clang-format off
 				writeErrors.push_back(BSON("index" << idx <<
+				                           "$err" << e.name() <<
 				                           "code" << e.code() <<
-				                           "$err" << e.what() <<
 				                           "errmsg" << e.what()));
 				// clang-format on
 				if (ordered)

@@ -113,22 +113,20 @@ struct ExtMsgReply : ExtMsg, FastAllocated<ExtMsgReply> {
 		replyHeader.documentCount++;
 	}
 
-	void setError(std::string msg, int code) {
+	void setError(std::string msg, int code, std::string errmsg) {
 		// Clear if response contains any outstanding documents
 		documents.clear();
 		replyHeader.documentCount = 0;
 
-		// Set query failure flag
-		addResponseFlag(2);
-
 		// clang-format off
 		addDocument(BSON("ok" << 0 <<
 		                 "$err" << msg <<
-		                 "code" << code));
+		                 "code" << code <<
+				 "errmsg" << errmsg));
 		// clang-format on
 	}
 
-	void setError(Error e) { setError(e.what(), e.code()); }
+	void setError(Error e) { setError(e.name(), e.code(), e.what()); }
 
 	void setResponseFlags(int32_t flags) { replyHeader.responseFlags = flags; }
 
