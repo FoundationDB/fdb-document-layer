@@ -1,6 +1,10 @@
 ## Release notes
 
 
+### 1.8.3
+
+* [#214](http://github.com/FoundationDB/fdb-document-layer/pull/214) - Bump FoundationDB API version to 610. This is a workaround to avoid the 6.1 -> 6.2 upgrade issue being [fixed](https://github.com/apple/foundationdb/pull/2169) in FoundationDB.
+
 ### 1.8.2
 
 * [#212](http://github.com/FoundationDB/fdb-document-layer/pull/212) - Avoids deadlock in connection handler over failures
