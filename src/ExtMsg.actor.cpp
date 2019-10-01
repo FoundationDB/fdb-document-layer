@@ -962,45 +962,6 @@ void staticValidateModifiedFields(std::string fieldName,
 	}
 }
 
-std::vector<std::string> staticValidateUpdateObject(bson::BSONObj update, bool multi, bool upsert) {
-	std::set<std::string> affectedFields;
-	std::set<std::string> prefixesOfAffectedFields;
-	for (auto i = update.begin(); i.more();) {
-
-		auto el = i.next();
-		std::string operatorName = el.fieldName();
-		if (!el.isABSONObj() || el.Obj().nFields() == 0) {
-			throw update_operator_empty_parameter();
-		}
-
-		if (upsert && operatorName == DocLayerConstants::SET_ON_INSERT)
-			operatorName = DocLayerConstants::SET;
-
-		for (auto j = el.Obj().begin(); j.more();) {
-			bson::BSONElement subel = j.next();
-			auto fn = std::string(subel.fieldName());
-			if (fn == DocLayerConstants::ID_FIELD) {
-				if (operatorName != DocLayerConstants::SET && operatorName != DocLayerConstants::SET_ON_INSERT) {
-					throw cant_modify_id();
-				}
-			}
-			staticValidateModifiedFields(fn, &affectedFields, &prefixesOfAffectedFields);
-			if (operatorName == DocLayerConstants::RENAME) {
-				if (!subel.isString())
-					throw bad_rename_target();
-				staticValidateModifiedFields(subel.String(), &affectedFields, &prefixesOfAffectedFields);
-			}
-		}
-	}
-
-	std::vector<std::string> bannedIndexFields;
-	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(affectedFields), std::end(affectedFields));
-	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(prefixesOfAffectedFields),
-	                         std::end(prefixesOfAffectedFields));
-
-	return bannedIndexFields;
-}
-
 bool shouldCreateRoot(std::string operatorName) {
 	return operatorName == DocLayerConstants::SET || operatorName == DocLayerConstants::INC ||
 	       operatorName == DocLayerConstants::MUL || operatorName == DocLayerConstants::CURRENT_DATE ||
@@ -1008,28 +969,49 @@ bool shouldCreateRoot(std::string operatorName) {
 	       operatorName == DocLayerConstants::PUSH || operatorName == DocLayerConstants::ADD_TO_SET;
 }
 
+// #156: staticValidateUpdateObject function is moved to updateDocument constructor
+
+/* staticValidateUpdateObject function part has more similar and related functionalities
+ * present in updateDocument constructor. Instead of using StaticValidateUpdate function
+ * part, that part is moved to updateDocument constructor. So there is no need to call staticValidateUpdate
+ * function separately, if operatorUpdate is enabled it will execute updateDocument which now has
+ * staticValidateUpdate functionalities also.
+ */
+
 ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
+                                  Reference<UnboundCollectionContext> ucx,
                                   bson::BSONObj update,
                                   bool upsert,
-                                  Future<Standalone<StringRef>> fEncodedId) {
+                                  bool multi = false) {
+
+	state std::set<std::string> affectedFields;
+	state std::set<std::string> prefixesOfAffectedFields;
 	state std::vector<Future<Void>> futures;
-	state Standalone<StringRef> encodedId = wait(fEncodedId);
+	state Standalone<StringRef> encodedId = wait(cx->getKeyEncodedId());
 	for (auto i = update.begin(); i.more();) {
 		auto el = i.next();
 
 		std::string operatorName = el.fieldName();
+		if (!el.isABSONObj() || el.Obj().nFields() == 0) {
+			throw update_operator_empty_parameter();
+		}
+
 		if (upsert && operatorName == DocLayerConstants::SET_ON_INSERT)
 			operatorName = DocLayerConstants::SET;
 		for (auto j = el.Obj().begin(); j.more();) {
 			bson::BSONElement subel = j.next();
 			auto fn = std::string(subel.fieldName());
 			if (fn == DocLayerConstants::ID_FIELD) {
-				if (operatorName == DocLayerConstants::SET || operatorName == DocLayerConstants::SET_ON_INSERT) {
+				if (operatorName != DocLayerConstants::SET && operatorName != DocLayerConstants::SET_ON_INSERT) {
+					throw cant_modify_id();
+				} else if (operatorName == DocLayerConstants::SET || operatorName == DocLayerConstants::SET_ON_INSERT) {
 					if (extractEncodedIds(subel.wrap()).get().keyEncoded != encodedId) {
 						throw cant_modify_id();
 					}
 				}
 			}
+
+			staticValidateModifiedFields(fn, &affectedFields, &prefixesOfAffectedFields);
 			if (shouldCreateRoot(operatorName)) {
 				auto upOneFn = upOneLevel(fn);
 				if (!upOneFn.empty())
@@ -1042,7 +1024,10 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 					futures.push_back(ensureValidObject(cx, upOneFn, getLastPart(fn), false));
 			}
 			if (operatorName == DocLayerConstants::RENAME) {
+				if (!subel.isString())
+					throw bad_rename_target();
 				auto renameTarget = subel.String();
+				staticValidateModifiedFields(renameTarget, &affectedFields, &prefixesOfAffectedFields);
 				auto upOneRenameTarget = upOneLevel(renameTarget);
 				if (!upOneRenameTarget.empty())
 					futures.push_back(ensureValidObject(cx, renameTarget, upOneRenameTarget, false));
@@ -1054,6 +1039,11 @@ ACTOR Future<Void> updateDocument(Reference<IReadWriteContext> cx,
 			futures.push_back(ExtUpdateOperator::execute(operatorName, cx, encodeMaybeDotted(fn), subel));
 		}
 	}
+	std::vector<std::string> bannedIndexFields;
+	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(affectedFields), std::end(affectedFields));
+	bannedIndexFields.insert(std::end(bannedIndexFields), std::begin(prefixesOfAffectedFields),
+	                         std::end(prefixesOfAffectedFields));
+	ucx->setBannedFieldNames(bannedIndexFields);
 	wait(waitForAll(futures));
 	return Void();
 }
@@ -1068,32 +1058,27 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 		try {
 			state ExtUpdateCmd* cmd = &((*cmds)[idx]);
 			state int isoperatorUpdate = hasOperatorFieldnames(cmd->update, 0);
-			state std::vector<std::string> bannedIndexFields;
 
 			if (!isoperatorUpdate && cmd->multi) {
 				throw literal_multi_update();
 			}
-
-			if (isoperatorUpdate) {
-				bannedIndexFields = staticValidateUpdateObject(cmd->update, cmd->multi, cmd->upsert);
-			}
+			// #156: staticValidateUpdateObject function is moved to updateDocument constructor
 
 			state Optional<bson::BSONObj> upserted = Optional<bson::BSONObj>();
 			state Reference<DocTransaction> dtr = ec->getOperationTransaction();
 			Reference<UnboundCollectionContext> ocx = wait(ec->mm->getUnboundCollectionContext(dtr, ns));
 			state Reference<UnboundCollectionContext> cx =
 			    Reference<UnboundCollectionContext>(new UnboundCollectionContext(*ocx));
-			cx->setBannedFieldNames(bannedIndexFields);
 
 			Reference<IUpdateOp> updater;
 			Reference<IInsertOp> upserter;
 			if (isoperatorUpdate)
-				updater = operatorUpdate(cmd->update);
+				updater = operatorUpdate(cx, cmd->update, cmd->multi, cmd->upsert);
 			else
 				updater = replaceUpdate(cmd->update);
 			if (cmd->upsert) {
 				if (isoperatorUpdate)
-					upserter = operatorUpsert(cmd->selector, cmd->update);
+					upserter = operatorUpsert(cx, cmd->selector, cmd->update);
 				else
 					upserter = simpleUpsert(cmd->selector, cmd->update);
 			}
@@ -1341,12 +1326,18 @@ Future<Void> ExtMsgKillCursors::run(Reference<ExtConnection> ec) {
 /* FIXME: These don't really belong here*/
 
 struct ExtOperatorUpdate : ConcreteUpdateOp<ExtOperatorUpdate> {
+	Reference<UnboundCollectionContext> cx;
 	bson::BSONObj msgUpdate;
-
-	explicit ExtOperatorUpdate(bson::BSONObj const& msgUpdate) : msgUpdate(msgUpdate) {}
+	bool upsert;
+	bool multi;
+	explicit ExtOperatorUpdate(Reference<UnboundCollectionContext> cx,
+	                           bson::BSONObj const& msgUpdate,
+	                           bool multi,
+	                           bool upsert)
+	    : msgUpdate(msgUpdate), multi(multi), upsert(upsert), cx(cx) {}
 
 	Future<Void> update(Reference<IReadWriteContext> document) override {
-		return updateDocument(document, msgUpdate, false, document->getKeyEncodedId());
+		return updateDocument(document, cx, msgUpdate, upsert, multi);
 	}
 
 	std::string describe() override { return "OperatorUpdate(" + msgUpdate.toString() + ")"; }
@@ -1393,10 +1384,12 @@ struct ExtReplaceUpdate : ConcreteUpdateOp<ExtReplaceUpdate> {
 };
 
 struct ExtOperatorUpsert : ConcreteInsertOp<ExtOperatorUpsert> {
+	Reference<UnboundCollectionContext> ucx;
 	bson::BSONObj selector;
 	bson::BSONObj update;
 
-	ExtOperatorUpsert(bson::BSONObj selector, bson::BSONObj update) : selector(selector), update(update) {}
+	ExtOperatorUpsert(Reference<UnboundCollectionContext> ucx, bson::BSONObj selector, bson::BSONObj update)
+	    : selector(selector), update(update), ucx(ucx) {}
 
 	ACTOR static Future<Reference<IReadWriteContext>> upsertActor(ExtOperatorUpsert* self,
 	                                                              Reference<CollectionContext> cx) {
@@ -1411,7 +1404,7 @@ struct ExtOperatorUpsert : ConcreteInsertOp<ExtOperatorUpsert> {
 			thingToInsert = transformOperatorQueryToUpdatableDocument(self->selector);
 		}
 		state Reference<IReadWriteContext> dcx = wait(insertDocument(cx, thingToInsert, encodedIds));
-		wait(updateDocument(dcx, self->update, true, dcx->getKeyEncodedId()));
+		wait(updateDocument(dcx, self->ucx, self->update, true));
 		return dcx;
 	}
 
@@ -1442,8 +1435,11 @@ struct ExtSimpleUpsert : ConcreteInsertOp<ExtSimpleUpsert> {
 	}
 };
 
-Reference<IUpdateOp> operatorUpdate(bson::BSONObj const& msgUpdate) {
-	return ref(new ExtOperatorUpdate(msgUpdate));
+Reference<IUpdateOp> operatorUpdate(Reference<UnboundCollectionContext> cx,
+                                    bson::BSONObj const& msgUpdate,
+                                    bool multi,
+                                    bool upsert) {
+	return ref(new ExtOperatorUpdate(cx, msgUpdate, multi, upsert));
 }
 Reference<IUpdateOp> replaceUpdate(bson::BSONObj const& replaceWith) {
 	return ref(new ExtReplaceUpdate(replaceWith));
@@ -1451,6 +1447,8 @@ Reference<IUpdateOp> replaceUpdate(bson::BSONObj const& replaceWith) {
 Reference<IInsertOp> simpleUpsert(bson::BSONObj const& selector, bson::BSONObj const& update) {
 	return ref(new ExtSimpleUpsert(selector, update));
 }
-Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj const& update) {
-	return ref(new ExtOperatorUpsert(selector, update));
+Reference<IInsertOp> operatorUpsert(Reference<UnboundCollectionContext> cx,
+                                    bson::BSONObj const& selector,
+                                    bson::BSONObj const& update) {
+	return ref(new ExtOperatorUpsert(cx, selector, update));
 }
