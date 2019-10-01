@@ -266,15 +266,10 @@ ACTOR Future<Void> extServerConnection(Reference<DocumentLayer> docLayer,
 	}
 }
 
-ACTOR void extServer(Reference<DocumentLayer> docLayer, NetworkAddress addr) {
+ACTOR void extServer(Reference<DocumentLayer> docLayer, Reference<IListener> listener) {
 	state ActorCollection connections(false);
 	state int64_t nextConnectionId = 1;
 	try {
-		state Reference<IListener> listener = INetworkConnections::net()->listen(addr);
-
-		TraceEvent("BD_server").detail("version", FDB_DOC_VT_PACKAGE_NAME).detail("address", addr.toString());
-		fprintf(stdout, "FdbDocServer (%s): listening on %s\n", FDB_DOC_VT_PACKAGE_NAME, addr.toString().c_str());
-
 		loop choose {
 			when(Reference<IConnection> conn = wait(listener->accept())) {
 				Reference<BufferedConnection> bc(new BufferedConnection(conn));
@@ -529,6 +524,22 @@ ACTOR void setup(NetworkAddress na,
 	if (!proxyto.present()) {
 		state Reference<DocumentLayer> docLayer;
 		state Reference<Database> db;
+
+		// #133: The Document Layer instances open their listening connection before reading from their FoundationDB
+		// cluster
+		try {
+			state Reference<IListener> listener = INetworkConnections::net()->listen(na);
+			TraceEvent("BD_server").detail("version", FDB_DOC_VT_PACKAGE_NAME).detail("address", na.toString());
+			fprintf(stdout, "FdbDocServer (%s): listening on %s\n", FDB_DOC_VT_PACKAGE_NAME, na.toString().c_str());
+
+		} catch (Error& e) {
+
+			TraceEvent(SevError, "BD_server").error(e);
+			fprintf(stderr, "FdbDocServer: fatal error: %s\n", e.what());
+			g_network->stop();
+			throw;
+		}
+
 		try {
 			db = fdb->createDatabase(clusterFile);
 			if (!fdbDatacenterID.empty()) {
@@ -612,7 +623,7 @@ ACTOR void setup(NetworkAddress na,
 			}
 		}
 		statusUpdateActor(FDB_DOC_VT_PACKAGE_NAME, na.ip.toString(), na.port, docLayer, timer() * 1000);
-		extServer(docLayer, na);
+		extServer(docLayer, listener);
 
 		if (!unitTestPattern.empty())
 			Tests::g_docLayer = docLayer;
