@@ -318,7 +318,7 @@ def random_elem_match_predicate():
             else:
                 r = global_prng.choice([global_prng.uniform(0, 0.4), global_prng.uniform(0.5, 0.9)])
             q = random_query(r)
-            q = {k: q.values()[0][k] for k in q.values()[0]}
+            q = {k: list(q.values())[0][k] for k in list(q.values())[0]}
             e.update(q)
         return ('$elemMatch', e)
 
@@ -337,10 +337,10 @@ def random_ne_predicate():
 
 def random_not_predicate():
     r = global_prng.uniform(0, 0.9)
-    q = random_query(r).values()[0]
+    q = list(random_query(r).values())[0]
     while type(q) is list or not generator_options.allow_general_nots and ('$not' in q or '$regex' in q):
         r = global_prng.uniform(0, 0.9)
-        q = random_query(r).values()[0]
+        q = list(random_query(r).values())[0]
     return ('$not', q)
 
 
@@ -419,12 +419,12 @@ def random_update_operator_mul():
 
 def random_update_operator_rename():
     doc = {}
-    while len(doc.keys()) == 0:
+    while len(list(doc.keys())) == 0:
         for i in range(0, global_prng.randint(0, 3)):
             old_name = random_field_name()
             new_name = random_field_name()
-            if old_name != new_name and old_name not in doc.values() and new_name not in doc.keys(
-            ) and new_name not in doc.values():
+            if old_name != new_name and old_name not in list(doc.values()) and new_name not in list(doc.keys()
+            ) and new_name not in list(doc.values()):
                 doc[old_name] = new_name
     return {'$rename': doc}
 

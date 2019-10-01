@@ -78,11 +78,11 @@ def show_statistics(ns):
         name for name in os.listdir(run_path)
         if os.path.isfile(os.path.join(run_path, name)) and not name.endswith('.timeout')
     ])
-    print "Total tests run: ", str(run_count)
+    print ("Total tests run: ", str(run_count))
 
     failed_count = len(
         [f for f in os.listdir(run_path) if f.endswith('.failed') and os.path.isfile(os.path.join(run_path, f))])
-    print "Failing tests  : ", str(failed_count)
+    print ("Failing tests  : ", str(failed_count))
 
     # this assumes that the database name we use for testing is "test" and we are interested in doclayer
     used_mem = float(0.0)
@@ -91,7 +91,7 @@ def show_statistics(ns):
         client = pymongo.MongoClient(ns['doclayer_host'], ns['doclayer_port'], max_pool_size=1)
         cmd_output = client.test.command("getmemoryusage")
         used_mem = float(cmd_output['process memory usage'])
-    print "Used memory by FDBDOC : ", str(used_mem)
+    print ("Used memory by FDBDOC : ", str(used_mem))
 
 
 def non_block_readline(output):
@@ -159,9 +159,9 @@ def test_auto_forever(ns):
                 run_min = (curr_time - start_time) / 60
 
                 if 0 < num_min < run_min and is_time_to_stop == False:
-                    print "Time to stop, time to run was set to", num_min
-                    print "Start time:", time.asctime(time.localtime(start_time))
-                    print "Finish time:", time.asctime(time.localtime(curr_time))
+                    print ("Time to stop, time to run was set to", num_min)
+                    print ("Start time:", time.asctime(time.localtime(start_time)))
+                    print ("Finish time:", time.asctime(time.localtime(curr_time)))
                     is_time_to_stop = True
 
                 # if test run did not updated itself in 2 minutes, perhaps it is stuck ?
@@ -171,7 +171,7 @@ def test_auto_forever(ns):
                     if stop_unresponsive:
                         fname = run_path + "journal_" + str(instances[ii]) + ".running"
                         fname = util.rename_file(fname, ".timeout")
-                        print "Process was stopped because of timeout, check out this file for more info : ", fname
+                        print ("Process was stopped because of timeout, check out this file for more info : ", fname)
                     kill_process(processes[ii])
                     del processes[ii]
                     del instances[ii]
@@ -187,10 +187,10 @@ def test_auto_forever(ns):
                     sys.stdout.flush()
 
         except Exception as inst:
-            print inst
-            print "Unexpected error:", sys.exc_info()[0]
+            print (inst)
+            print ("Unexpected error:", sys.exc_info()[0])
             pass
-    print "AUTOMATION FINISHED ITS WORK"
+    print ("AUTOMATION FINISHED ITS WORK")
 
 
 if __name__ == '__main__':

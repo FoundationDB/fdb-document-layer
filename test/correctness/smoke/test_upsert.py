@@ -156,7 +156,7 @@ def create_upsert_dotted_selector_operator_test_with_operator_in_initial_positio
 
 def create_operator_tests(operators, depth, update):
     return [
-        func(operator, object, depth, update) for name, func in globals().iteritems()
+        func(operator, object, depth, update) for name, func in globals().items()
         if name.startswith('create_upsert_') for operator, object in operators
     ]
 
@@ -404,7 +404,7 @@ updates = (
 
 def operators_test_with_depth(dl_collection, depth):
     for update in updates:
-        for operator_type, operators in operator_types.iteritems():
+        for operator_type, operators in operator_types.items():
             for test_cfg in create_operator_tests(operators, depth, update):
                 run_and_compare(dl_collection, test_cfg)
 
@@ -431,7 +431,7 @@ def test_operators_with_depth_4(fixture_collection):
 
 def operators_permutation_test_with_depth(dl_collection, depth):
     oplist = []
-    for _, operators in operator_types.iteritems():
+    for _, operators in operator_types.items():
         for op in operators:
             oplist.append(op)
 

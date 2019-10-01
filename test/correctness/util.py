@@ -30,11 +30,9 @@ from bisect import bisect_left, bisect
 from collections import OrderedDict
 from collections import defaultdict
 from datetime import datetime
-from types import NoneType
-
 import bson.timestamp
 from bson import ObjectId, binary
-
+NoneType = type(None)
 from gen import HashableOrderedDict
 import gen
 
@@ -78,13 +76,12 @@ BSON_type_codes = {
     datetime: 9,
     NoneType: 10,
     int: 16,
-    bson.timestamp.Timestamp: 17,
-    long: 18
+    bson.timestamp.Timestamp: 17
 }
 
 
 def is_literal(d):
-    return True not in [k[0] == '$' for k in d.keys()]
+    return True not in [k[0] == '$' for k in list(d.keys())]
 
 
 def is_numeric_type_code(code):
@@ -94,6 +91,11 @@ def is_numeric_type_code(code):
 def is_numeric(field):
     return type(field) in BSON_type_codes and is_numeric_type_code(BSON_type_codes[type(field)])
 
+def cmp(term1,term2):
+    if(term1 is None or term2 is None):
+        return False
+    else:
+        return (term1>term2) - (term1<term2)
 
 def comparable(term1, term2):
     t1 = type(term1)
@@ -203,12 +205,12 @@ def mongo_compare_ordered_dict_items(lhs, rhs):
     if lhs == rhs:
         return 0
 
-    for kl, vl in lhs.iteritems():
-        index = lhs.keys().index(kl)
+    for kl, vl in lhs.items():
+        index = list(lhs.keys()).index(kl)
         if (index + 1) > len(rhs):
             # lhs is longer(bigger) that rhs
             return 1
-        ret = mongo_compare_pair(kl, vl, rhs.keys()[index], rhs.values()[index])
+        ret = mongo_compare_pair(kl, vl, list(rhs.keys())[index], list(rhs.values())[index])
         if ret != 0:
             return ret
 
@@ -284,7 +286,7 @@ def mongo_sort_list(array, reverse=False):
             d[type(v)].append(v)
     # print 'd0=', d
 
-    for k in d.keys():
+    for k in list(d.keys()):
         if k == OrderedDict:
             d[k] = mongo_sort_list_of_ordered_dict(d[k], reverse=reverse)
         elif k == dict:
@@ -314,7 +316,7 @@ def mongo_sort_list_by_field(array, field_name, reverse=False):
     new_array1 = list()
     new_array2 = list()
     for v in array:
-        if isinstance(v, (dict, OrderedDict)) and field_name in v.keys() and v[field_name] is not None:
+        if isinstance(v, (dict, OrderedDict)) and field_name in list(v.keys()) and v[field_name] is not None:
             new_array2.append(v)
         else:
             new_array1.append(v)
@@ -331,7 +333,7 @@ def has_item(context, key):
     try:
         # print 'key:', key, context
         if not isinstance(key, (str, int)):
-            print 'key', key, 'should be either string or integer!'
+            print ('key', key, 'should be either string or integer!')
             return False
 
         if isinstance(context, (dict, OrderedDict)):
@@ -345,7 +347,7 @@ def has_item(context, key):
             return False
 
         if not isinstance(key, str):
-            print 'key', key, 'is not string!'
+            print ('key', key, 'is not string!')
             return False
 
         cur, _, rest = key.partition('.')
@@ -366,9 +368,9 @@ def mongo_sort_list_by_fields(array, field_name_map):
     for v in array:
         if isinstance(v, (dict, OrderedDict)):
             match = False
-            for field_name in field_name_map.keys():
+            for field_name in list(field_name_map.keys()):
                 # print 'field_name:', field_name, v
-                if field_name in v.keys() and v[field_name] is not None:
+                if field_name in list(v.keys()) and v[field_name] is not None:
                     lists_need_to_sort[field_name].append(v)
                     match = True
                     break
@@ -385,8 +387,8 @@ def mongo_sort_list_by_fields(array, field_name_map):
     # print 'new_list:', new_list
     # print 'lists_need_to_sort:', lists_need_to_sort
 
-    for k in field_name_map.keys()[::-1]:
-        if k in lists_need_to_sort.keys():
+    for k in list(field_name_map.keys())[::-1]:
+        if k in list(lists_need_to_sort.keys()):
             # print 'k=', k, lists_need_to_sort[k]
             reverse = (field_name_map[k] != 1)
             new_k, _, _ = k.partition('.')
@@ -408,7 +410,7 @@ def mongo_sort_list_by_fields_list(array, field_name_list):
     return mongo_sort_list_by_fields(array, field_name_map)
 
 def sort_id_field(doc):
-    if '_id' in doc.keys() and isinstance(doc['_id'], dict):
+    if '_id' in list(doc.keys()) and isinstance(doc['_id'], dict):
         od = HashableOrderedDict()
         for k,v in sorted(doc['_id'].items(), key=lambda kv: kv[0]):
             od[k] = v
@@ -434,7 +436,7 @@ def get_object(str_field, doc):
 def deep_convert_to_unordered(in_thing):
     if type(in_thing) in (dict, OrderedDict, HashableOrderedDict):
         return_dict = {}
-        for k, v in in_thing.iteritems():
+        for k, v in in_thing.items():
             return_dict[k] = deep_convert_to_unordered(v)
         return return_dict
     elif type(in_thing) is list:
@@ -447,7 +449,7 @@ def deep_convert_to_unordered(in_thing):
 def deep_convert_to_ordered(in_thing):
     if type(in_thing) in (dict, OrderedDict):
         return_dict = OrderedDict()
-        for k, v in in_thing.iteritems():
+        for k, v in in_thing.items():
             return_dict[k] = deep_convert_to_ordered(v)
         return return_dict
     elif type(in_thing) is list:
@@ -477,7 +479,7 @@ def has_operator(obj, depth=0):
         else:
             return False
     if isinstance(obj, (dict, OrderedDict)):
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             result = has_operator(k, depth + 1) or has_operator(v, depth + 1)
             if result:
                 operator, depth = result
@@ -507,11 +509,11 @@ def deep_convert_compound_string_to_dict(obj):
             obj[i] = deep_convert_compound_string_to_dict(obj[i])
     if isinstance(obj, dict):
         mutable = OrderedDict(obj)
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             if isinstance(k, str):
                 oo = convert_compound_string_to_dict(k, v)
                 del mutable[k]
-                for kk, vv in oo.iteritems():
+                for kk, vv in oo.items():
                     mutable[kk] = deep_convert_compound_string_to_dict(vv)
         obj = mutable
 
@@ -790,24 +792,24 @@ class MongoModelNondeterministicList(object):
                 assert j == len(result2)
             except:
                 if not failed:
-                    print '\nSorted list mismatch at index (%d, %d)!' % (i, j)
+                    print ('\nSorted list mismatch at index (%d, %d)!' % (i, j))
 
-                    print 'Query: %r' % self.query
-                    print 'Projection: %r' % self.projection
-                    print 'Sort: %r' % self.sort
-                    print 'Skip: %r' % self.skip
-                    print 'Limit: %r' % self.limit
-                    print '\n------------First Mismatch-----------'
-                    print '\n  %s' % format_result(self, result1, i)
-                    print '  %s\n' % format_result(other, result2, j)
+                    print ('Query: %r' % self.query)
+                    print ('Projection: %r' % self.projection)
+                    print ('Sort: %r' % self.sort)
+                    print ('Skip: %r' % self.skip)
+                    print ('Limit: %r' % self.limit)
+                    print ('\n------------First Mismatch-----------')
+                    print ('\n  %s' % format_result(self, result1, i))
+                    print ('  %s\n' % format_result(other, result2, j))
 
                     failed = True
 
-                print '\n------------Model Sort Tuple: %r-----------' % self.get_sort_key_values(result1[0])
+                print ('\n------------Model Sort Tuple: %r-----------' % self.get_sort_key_values(result1[0]))
 
                 for i in range(0, max(len(result1), len(result2))):
-                    print '\n%d: %s' % (i, format_result(self, result1, i))
-                    print '%d: %s' % (i, format_result(other, result2, i))
+                    print ('\n%d: %s' % (i, format_result(self, result1, i)))
+                    print ('%d: %s' % (i, format_result(other, result2, i)))
 
         return not failed
 
@@ -894,7 +896,7 @@ def debug_predicate(f):
     def x(val, query, options):
         print('\nRunning predicate:\n  val=%r,\n  query=%r:' % (val, query)),
         result = f(val, query, options)
-        print result
+        print (result)
         return result
 
     return x
@@ -959,7 +961,7 @@ def process_query_operator(path, array, query, val_func, options):
                 op = '$regex'
             else:
                 assert len(expression) == 1
-                op = expression.keys()[0]
+                op = list(expression.keys())[0]
 
             if op == '$elemMatch':
                 # This is emulating mongo's apparent behavior to require filter items to only match one filter from an $elemMatch (not all of them)
@@ -1038,12 +1040,12 @@ def deep_convert_datetime_to_integer(obj):
         return int(obj.time / 3600)
     elif type(obj) is dict:
         new_obj = {}
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             new_obj[k] = deep_convert_datetime_to_integer(v)
         return new_obj
     elif type(obj) is OrderedDict:
         new_obj = OrderedDict()
-        for k, v in obj.iteritems():
+        for k, v in obj.items():
             new_obj[k] = deep_convert_datetime_to_integer(v)
         return new_obj
     elif type(obj) is list:
@@ -1059,10 +1061,10 @@ traceLevel = 'error'
 def trace(trace_level, *args):
     if TRACE_LEVEL_DEFINE.index(trace_level) <= TRACE_LEVEL_DEFINE.index(traceLevel):
         if trace_level == 'error':
-            print '\033[91m',
+            print ('\033[91m',)
         for x in args:
-            print x,
-        print '\033[0m'
+            print (x,)
+        print ('\033[0m')
 
 
 def generate_list_of_ordered_dict_from_json(list_json_string):
@@ -1124,7 +1126,7 @@ def weaken_tests_for_doclayer():
 
 
 def get_cmd_line(ns):
-    seed = random.randint(0, sys.maxint)
+    seed = random.randint(0, sys.maxsize)
     gen.global_prng = random.Random(seed)
 
     # Generate the random data
@@ -1235,7 +1237,7 @@ def test_sort_key_fetcher():
 
     fetcher = SortKeyFetcher(query1, doc1, ModelOptions(''))
     result = tuple([fetcher.get_sort_value(k, dir) for (k, dir) in sort1])
-    print result
+    print (result)
 
 
 def test_mongo_nondeterministic_list():

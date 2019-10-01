@@ -31,7 +31,7 @@ from mongo_model import MongoModel
 
 def operator_queries(base_query):
     q_list = [base_query]
-    q_list.extend([{base_query.keys()[0]: {operator: base_query.values()[0]}} for operator in value_operators])
+    q_list.extend([{list(base_query.keys())[0]: {operator: list(base_query.values())[0]}} for operator in value_operators])
     return q_list
 
 
@@ -346,7 +346,7 @@ def test_non_deterministic_query():
     ]
 
     for idx, test_item in enumerate(data):
-        print "\n========== test", idx, "=========="
+        print ("\n========== test", idx, "==========")
         (sort, limit, skip, query, input_data, result, expected) = test_item
         input_data = util.generate_list_of_ordered_dict_from_json(input_data)
         result = util.generate_list_of_ordered_dict_from_json(result)
@@ -383,7 +383,7 @@ def test_is_ambiguous_field_name_in_array():
     ]
 
     for idx, test_item in enumerate(data):
-        print "\n========== isAmbiguousFieldNameInArray test", idx, "=========="
+        print ("\n========== isAmbiguousFieldNameInArray test", idx, "==========")
         (src_list, path, ambiguous) = test_item
         src_list = util.generate_list_of_ordered_dict_from_json(src_list)
         for obj in src_list:
