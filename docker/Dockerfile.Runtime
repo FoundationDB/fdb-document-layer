@@ -1,6 +1,6 @@
 FROM ubuntu:19.04
 
-COPY ./build-doc/bin /app
+COPY ./build/bin /app
 COPY ./config/fdb.cluster /app/fdb.cluster
 COPY ./config/clients.deb /tmp/fdb.deb
 RUN dpkg -i /tmp/fdb.deb

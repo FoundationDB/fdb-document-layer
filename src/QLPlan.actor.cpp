@@ -1137,38 +1137,45 @@ ACTOR static Future<Void> doOplogInsert(PlanCheckpoint* checkpoint,
 										PromiseStream<Reference<ScanReturnedContext>> output) {
 	state Deque<Future<Reference<IReadWriteContext>>> inserts;
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-	state Reference<Oplogger> oplogger = ref(new Oplogger(ns, oplogInserter));
+	state Reference<Oplogger> oplogger = ref(new Oplogger(ns, oplogInserter));	
+	state Deque<Future<Reference<IReadWriteContext>>> logs;
 
 	try {
 		try {		
 			if (oplogger->isEnabled()) {
+				state Reference<UnboundCollectionContext> ucx = wait(oplogger->getUnboundContext(mm, tr));
+				state Reference<CollectionContext> ctx = ucx->bindCollectionContext(tr);
+
 				// Oplog. Add inserts.
 				for (const auto& d : *docs) {
 					oplogger->addUpdatedDoc(d);
 				}
+				
+				logs = oplogger->buildOplogs(ctx);
 			}
 
 			loop choose {
 				when(state Reference<ScanReturnedContext> doc = waitNext(input)) {
 					output.send(doc);
 				}
-			}	
+				when(Reference<IReadWriteContext> _doc = wait(logs.empty() ? Never() : logs.front())) {
+					// Oplog. Commit operations.
+					wait(_doc->commitChanges());
+					logs.pop_front();
+				}
+			}
 		} catch (Error& e) {
 			if (e.code() != error_code_end_of_stream)
 				throw;
 		}
 
-		if (oplogger->isEnabled()) {			
-			// Oplog. Commit operations.			
-			state Reference<UnboundCollectionContext> ucx = wait(oplogger->getUnboundContext(mm, tr));
-			state Reference<CollectionContext> ctx = ucx->bindCollectionContext(tr);
-			
-			state int i = 0;
-			state Deque<Future<Reference<IReadWriteContext>>> logs = oplogger->buildOplogs(ctx);
-			for (; i < logs.size(); i++) {
-				Reference<IReadWriteContext> _doc = wait(logs[i]);
-				wait(_doc->commitChanges());		
-			}			
+		if (oplogger->isEnabled()) {
+			// Oplog. Commit operations.
+			while(!logs.empty()) {
+				Reference<IReadWriteContext> _doc = wait(logs.front());
+				wait(_doc->commitChanges());
+				logs.pop_front();
+			}
 		}
 
 		throw end_of_stream();
