@@ -654,11 +654,10 @@ ACTOR Future<Void> extChangeConnection(Reference<BufferedConnection> bc,
 				when(wait(onError)) {
 					throw success();
 				}
-				when(Standalone<StringRef>msg = waitNext(messages)) {
+				when(Standalone<StringRef> msg = waitNext(messages)) {
 					int64_t mSize = msg.size();
-					bc->write(StringRef((uint8_t*)&(mSize), sizeof(int64_t)));
-					bc->write(LiteralStringRef("\n"));
-					bc->write(msg);
+					auto sizePart = StringRef((uint8_t*)&mSize, sizeof(int64_t));
+					bc->write(sizePart.withSuffix(LiteralStringRef("\n")).withSuffix(msg));
 				}
 			}
 		}

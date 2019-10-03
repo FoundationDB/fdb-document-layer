@@ -55,6 +55,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
 	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
 	state double ts = 0.0;
+	state double lastTs = 0.0;
 
 	loop {
 		try {
@@ -63,7 +64,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 				state int cnt = 0;
 
 				loop choose {
-					when(double tmpTs = waitNext(times)) {																
+					when(double tmpTs = waitNext(times)) {
 						ts = tmpTs;
 						cnt++;
 
@@ -72,10 +73,10 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 						}
 
 						if (cnt == 5) {
-							timeout = delay(0.3, TaskMaxPriority);
+							timeout = delay(0.5, TaskMaxPriority);
 						}
 
-						if (cnt >= 500) {
+						if (cnt == 10000) {
 							throw end_of_stream();
 						}
 					}										
@@ -87,6 +88,12 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 				if (e.code() != error_code_end_of_stream)
 					throw;
 			}
+
+			if (ts == lastTs) {
+				continue;
+			}
+			
+			lastTs = ts;
 
 			state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
 			updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
@@ -104,12 +111,44 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 
 	loop {
 		try {
-			state double newTs = waitNext(times);
+			state double newTs = -1.0; 
+
+			try {
+				state Future<Void> timeout = Never();
+				state int cnt = 0;
+
+				loop choose {
+					when(double tmpTs = waitNext(times)) {
+						newTs = tmpTs;
+						cnt++;
+
+						if (cnt == 1) {
+							timeout = delay(0.1, TaskMaxPriority);
+						}
+
+						if (cnt == 5) {
+							timeout = delay(0.5, TaskMaxPriority);
+						}
+
+						if (cnt == 10000) {
+							throw end_of_stream();
+						}
+					}
+					when(wait(timeout)) {
+						throw end_of_stream();
+					}
+				}
+			} catch (Error& e) {
+				if (e.code() != error_code_end_of_stream)
+					throw;
+			}
+
 			if (lastTs == -1.0) {
 				lastTs = newTs;
 				continue;
 			}
-			if (lastTs == newTs) {
+
+			if (lastTs == newTs || newTs == -1.0) {
 				continue;
 			}
 
@@ -123,23 +162,34 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 				plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
 				state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
 				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+				state Deque<Future<DataValue>> bufferedObjects;
 
 				try {
 					loop {
 						choose {
 							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-								DataValue oDv = wait(doc->toDataValue());
-								bson::BSONObj obj = oDv.getPackedObject().getOwned();
-								flowControlLock->release();
+								bufferedObjects.push_back(doc->toDataValue());
+							}
+							when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
+								bson::BSONObj obj = dv.getPackedObject().getOwned();
 								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
+								bufferedObjects.pop_front();
+								flowControlLock->release();
 							}
 						}
 					}
 				} catch (Error& e) {
 					checkpoint->stop();
-					if (e.code() != error_code_end_of_stream) {						
+					if (e.code() != error_code_end_of_stream) {
 						throw;
 					}
+				}
+
+				while (!bufferedObjects.empty()) {
+					DataValue dv = wait(bufferedObjects.front());
+					bson::BSONObj obj = dv.getPackedObject().getOwned();
+					changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
+					bufferedObjects.pop_front();				
 				}
 			}
 
@@ -161,7 +211,7 @@ ACTOR void watcherTimestampWatchingActor(PromiseStream<double> times, Reference<
 		try {
 			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
 			state Future<Void> watch = dtr->tr->watch(tsKey);
-			state Future<Optional<FDBStandalone<StringRef>>> futureTs = dtr->tr->get(tsKey);			
+			state Future<Optional<FDBStandalone<StringRef>>> futureTs = dtr->tr->get(tsKey);
 			wait(dtr->tr->commit());
 			dtr->tr->reset();
 
@@ -170,7 +220,7 @@ ACTOR void watcherTimestampWatchingActor(PromiseStream<double> times, Reference<
 				ts = *(double*)tsBefore.get().begin();
 			}
 
-			if (ts == prevTs) {
+			if (ts == prevTs) {	
 				wait(watch || delay(5.0));
 				futureTs = dtr->tr->get(tsKey);
 				wait(dtr->tr->commit());

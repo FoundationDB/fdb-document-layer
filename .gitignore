@@ -60,3 +60,4 @@ build*/
 
 *.egg-info/
 fdb.cluster
+config
