@@ -76,6 +76,7 @@ DOCLAYER_ERROR(multiple_index_construction, 20004, "tried to create multiple ind
 DOCLAYER_ERROR(unique_index_background_construction, 20005, "tried to create unique indexes in background");
 DOCLAYER_ERROR(empty_set_on_insert, 20009, "$setOnInsert is empty");
 DOCLAYER_ERROR(cant_modify_id, 20010, "You may not modify '_id' in an update");
+DOCLAYER_ERROR(unable_to_fetch_the_hostinfo, 20011, "Unable to fetch the HostInfo");
 
 DOCLAYER_ERROR(update_operator_empty_parameter,
                26840,

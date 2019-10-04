@@ -27,6 +27,7 @@
 #include "ExtMsg.actor.h"
 #include "ExtUtil.actor.h"
 
+#include "HostInfo.h"
 #include "QLPlan.actor.h"
 #include "QLProjection.actor.h"
 
@@ -497,6 +498,30 @@ struct RenameCollectionCmd {
 	}
 };
 REGISTER_CMD(RenameCollectionCmd, "renamecollection");
+
+struct HostInfoCmd {
+	static const char* name;
+	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
+	                                           Reference<ExtMsgQuery> query,
+	                                           Reference<ExtMsgReply> reply) {
+		diagnostics::HOSTINFO hostInfo;
+		bson::BSONObj systemInfo = hostInfo.getSystemInfo();
+		bson::BSONObj osInfo = hostInfo.getOsInfo();
+		bson::BSONObj extraInfo = hostInfo.getExtraInfo();
+		try {
+			if (!systemInfo.isEmpty() || !osInfo.isEmpty() || !extraInfo.isEmpty()) {
+				reply->addDocument(
+				    BSON("system" << systemInfo << "os" << osInfo << "extra" << extraInfo << "ok" << 1.0));
+			} else {
+				throw unable_to_fetch_the_hostinfo();
+			}
+		} catch (Error& e) {
+			reply->addDocument(BSON("$err" << e.what() << "code" << e.code() << "ok" << 1.0));
+		}
+		return Future<Reference<ExtMsgReply>>(reply);
+	}
+};
+REGISTER_CMD(HostInfoCmd, "hostinfo");
 
 ACTOR static Future<Reference<ExtMsgReply>> getStreamCount(Reference<ExtConnection> ec,
                                                            Reference<ExtMsgQuery> query,
