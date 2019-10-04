@@ -27,6 +27,7 @@
 #include "ExtMsg.actor.h"
 #include "ExtUtil.actor.h"
 
+#include "HostInfo.h"
 #include "QLPlan.actor.h"
 #include "QLProjection.actor.h"
 
@@ -503,7 +504,7 @@ struct HostInfoCmd {
 	static Future<Reference<ExtMsgReply>> call(Reference<ExtConnection> ec,
 	                                           Reference<ExtMsgQuery> query,
 	                                           Reference<ExtMsgReply> reply) {
-		bson::HOSTINFO hostInfo;
+		diagnostics::HOSTINFO hostInfo;
 		bson::BSONObj systemInfo = hostInfo.getSystemInfo();
 		bson::BSONObj osInfo = hostInfo.getOsInfo();
 		bson::BSONObj extraInfo = hostInfo.getExtraInfo();

@@ -22,7 +22,7 @@ add_executable(fdbdoc
         QLPredicate.h
         QLTypes.cpp
         QLTypes.h
-        version.cpp Constants.cpp Constants.h)
+        version.cpp Constants.cpp Constants.h HostInfo.cpp HostInfo.h)
 
 set(ACTOR_FILES
         BufferedConnection.actor.cpp
