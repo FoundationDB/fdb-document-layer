@@ -57,6 +57,12 @@ const char* OP_FIELD_NS = "ns";
 const char* OP_FIELD_O2 = "o2";
 const char* OP_FIELD_O = "o";
 
+const int CHNG_WALL_FIRST_CNT = 1;
+const double CHNG_WALL_FIRST_TIMEOUT = 0.128;
+const int CHNG_WALL_SECOND_CNT = 5;
+const double CHNG_WALL_SECOND_TIMEOUT = 0.256;
+const int CHNG_WALL_HARD_CNT = 10000;
+
 const char* ID_FIELD = "_id";
 const char* KEY_FIELD = "key";
 const char* BUILD_ID_FIELD = "build id";

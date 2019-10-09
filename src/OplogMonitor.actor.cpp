@@ -56,31 +56,39 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
 	state double ts = 0.0;
 	state double lastTs = 0.0;
+	state int cnt = 0;
+	state Future<Void> timeout = Never();
 
 	loop {
 		try {
-			try {
-				state Future<Void> timeout = Never();
-				state int cnt = 0;
+			try {		
+				timeout = Never();
+				cnt = 0;
 
 				loop choose {
 					when(double tmpTs = waitNext(times)) {
 						ts = tmpTs;
 						cnt++;
 
-						if (cnt == 1) {
-							timeout = delay(0.1, TaskMaxPriority);
+						if (cnt == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
+							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == 5) {
-							timeout = delay(0.5, TaskMaxPriority);
+						if (cnt == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
+							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == 10000) {
+						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
 							throw end_of_stream();
 						}
-					}										
+					}
 					when(wait(timeout)) {
+						while(times.isReady()) {
+							double tmpTs = waitNext(times);
+							ts = tmpTs;
+							cnt++;
+						}
+
 						throw end_of_stream();
 					}
 				}
@@ -94,7 +102,6 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 			}
 			
 			lastTs = ts;
-
 			state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
 			updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
 			wait(updTr->tr->commit());
@@ -104,14 +111,58 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 	}
 }
 
+// Get documents from oplog
+ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Namespace ns, double tsFrom, double tsTo, PromiseStream<bson::BSONObj> output) {
+	state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
+	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
+	bson::BSONObj query = BSON("ts" << BSON("$gt" << tsFrom << "$lte" << tsTo));
+
+	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
+	state Reference<Plan> plan = planQuery(cx, query);
+	plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
+	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state Deque<Future<DataValue>> bufferedObjects;	
+
+	try {
+		loop {
+			choose {
+				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
+					bufferedObjects.push_back(doc->toDataValue());
+				}
+				when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
+					bson::BSONObj obj = dv.getPackedObject().getOwned();
+					output.send(obj);
+					bufferedObjects.pop_front();
+					flowControlLock->release();
+				}
+			}
+		}
+	} catch (Error& e) {
+		checkpoint->stop();
+		if (e.code() != error_code_end_of_stream) {
+			throw;
+		}
+	}
+
+	while (!bufferedObjects.empty()) {
+		DataValue dv = wait(bufferedObjects.front());
+		bson::BSONObj obj = dv.getPackedObject().getOwned();
+		output.send(obj);
+		bufferedObjects.pop_front();
+	}
+
+	output.sendError(end_of_stream());
+}
+
 // Scan updates from oplog and send to change stream
 ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
 	state double lastTs = -1.0;
-	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);	
 
 	loop {
 		try {
-			state double newTs = -1.0; 
+			state double newTs = -1.0;
 
 			try {
 				state Future<Void> timeout = Never();
@@ -122,77 +173,57 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 						newTs = tmpTs;
 						cnt++;
 
-						if (cnt == 1) {
-							timeout = delay(0.1, TaskMaxPriority);
+						if (cnt == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
+							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == 5) {
-							timeout = delay(0.5, TaskMaxPriority);
+						if (cnt == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
+							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == 10000) {
+						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
 							throw end_of_stream();
 						}
 					}
 					when(wait(timeout)) {
+						while(times.isReady()) {
+							double tmpTs = waitNext(times);
+							newTs = tmpTs;
+						}
+
 						throw end_of_stream();
-					}
+					}					
 				}
 			} catch (Error& e) {
 				if (e.code() != error_code_end_of_stream)
 					throw;
 			}
 
-			if (lastTs == -1.0) {
+			if (lastTs == -1) {
 				lastTs = newTs;
 				continue;
 			}
 
-			if (lastTs == newTs || newTs == -1.0) {
+			if (lastTs == newTs || newTs == -1) {
 				continue;
 			}
 
 			if (changeStream->countConnections() > 0) {
-				state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-				state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));				
-				bson::BSONObj query = BSON("ts" << BSON("$gt" << lastTs << "$lte" << newTs));
-		
-				state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
-				state Reference<Plan> plan = planQuery(cx, query);
-				plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
-				state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
-				state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-				state Deque<Future<DataValue>> bufferedObjects;
+				state PromiseStream<bson::BSONObj> bsonWriter;
+				state FutureStream<bson::BSONObj> bsonReader = bsonWriter.getFuture();
+				watcherQuery(docLayer, ns, lastTs, newTs, bsonWriter);
 
 				try {
-					loop {
-						choose {
-							when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-								bufferedObjects.push_back(doc->toDataValue());
-							}
-							when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
-								bson::BSONObj obj = dv.getPackedObject().getOwned();
-								changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-								bufferedObjects.pop_front();
-								flowControlLock->release();
-							}
+					loop choose {
+						when(bson::BSONObj obj = waitNext(bsonReader)) {
+							changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
 						}
 					}
-				} catch (Error& e) {
-					checkpoint->stop();
-					if (e.code() != error_code_end_of_stream) {
+				} catch (Error &e) {
+					if (e.code() != error_code_end_of_stream)
 						throw;
-					}
-				}
-
-				while (!bufferedObjects.empty()) {
-					DataValue dv = wait(bufferedObjects.front());
-					bson::BSONObj obj = dv.getPackedObject().getOwned();
-					changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-					bufferedObjects.pop_front();				
 				}
 			}
-
 			lastTs = newTs;
 		} catch(Error &e) {
 			fprintf(stderr, "Watcher scan error: %s\n", e.what());
