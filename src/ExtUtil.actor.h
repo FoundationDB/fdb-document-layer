@@ -221,7 +221,6 @@ Future<Void> mapAsync2(GenFutureStream<T> input, F actorFunc, PromiseStream<U> o
 ACTOR template <class Function>
 Future<decltype(fake<Function>()(Reference<DocTransaction>()).getValue())>
 runRYWTransaction(Reference<FDB::Database> cx, Function func, int64_t retryLimit, int64_t timeout) {
-
 	state Reference<FDB::Transaction> tr = cx->createTransaction();
 	try {
 		loop {
@@ -244,7 +243,6 @@ runRYWTransaction(Reference<FDB::Database> cx, Function func, int64_t retryLimit
 
 				return result;
 			}
-
 			catch (Error& e) {
 				if (e.code() == error_code_commit_unknown_result)
 					throw;

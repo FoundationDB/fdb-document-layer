@@ -50,6 +50,43 @@ FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
 	return dir->pack(LiteralStringRef("timestamp"), true);
 }
 
+// Get counter key
+FDB::Key watcherGetCntKey(Reference<DirectorySubspace> dir, int64_t ts) {
+	FDB::Tuple tuple;
+	tuple.append(LiteralStringRef("counter"), true).append(ts);
+	return dir->pack(tuple);
+}
+
+// Get prefix for counter
+FDB::Key watcherCntPrefix(Reference<DirectorySubspace> dir) {
+	FDB::Tuple tuple;
+	tuple.append(LiteralStringRef("counter"), true);
+
+	return dir->pack(tuple);
+}
+
+// Get key range by timestamps
+FDB::KeyRange watcherGetCntRange(Reference<DirectorySubspace> dir, int64_t tsStart, int64_t tsEnd) {		
+	FDB::Key begin = watcherGetCntKey(dir, tsStart);
+	FDB::Key end = watcherCntPrefix(dir);
+
+	return KeyRangeRef(keyAfter(begin), end.toString() + '\xFF');
+}
+
+// Get all counter keys
+FDB::KeyRange watcherGetCntAllRange(Reference<DirectorySubspace> dir) {		
+	FDB::Key key = watcherCntPrefix(dir);
+	return KeyRangeRef(key.toString() + '\x00', key.toString() + '\xFF');
+}
+
+ACTOR Future<Void> writeTs(Reference<DocumentLayer> docLayer, Reference<DirectorySubspace> tsDir, double ts, int cnt, FDB::Key tsKey) {
+	state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
+	updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
+	wait(updTr->tr->commit());	
+
+	return Void();
+}
+
 // Run timestamp stream watcher
 ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, FutureStream<double> times) {
 	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
@@ -79,6 +116,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 						}
 
 						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
+							//fprintf(stdout, "[Debug][Time] Counter trigger - %d\n", cnt);
 							throw end_of_stream();
 						}
 					}
@@ -88,7 +126,7 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 							ts = tmpTs;
 							cnt++;
 						}
-
+						//fprintf(stdout, "[Debug][Time] Timeout trigger - %d\n", cnt);
 						throw end_of_stream();
 					}
 				}
@@ -100,35 +138,68 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 			if (ts == lastTs) {
 				continue;
 			}
-			
-			lastTs = ts;
-			state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
-			updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
-			wait(updTr->tr->commit());
+
+			wait(writeTs(docLayer, timestampDir, ts, cnt, tsKey));
+			lastTs = ts;			
 		} catch(Error &e) {
 			fprintf(stderr, "Watcher ts update error: %s\n", e.what());
 		}
 	}
 }
 
-// Get documents from oplog
-ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Namespace ns, double tsFrom, double tsTo, PromiseStream<bson::BSONObj> output) {
-	state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
-	bson::BSONObj query = BSON("ts" << BSON("$gt" << tsFrom << "$lte" << tsTo));
+ACTOR Future<long int> getLimit(Reference<DocumentLayer> docLayer,  Reference<DirectorySubspace> dir, double lastTs, double newTs) {
+	state int64_t iLastTs = int64_t(lastTs);
+	state int64_t iNewTs = int64_t(newTs);
+	state int64_t limit = -1;
 
+	state Reference<DocTransaction> rangeTr = NonIsolatedPlan::newTransaction(docLayer->database);
+	auto kr = watcherGetCntRange(dir, iLastTs, iNewTs);
+	Future<FDBStandalone<RangeResultRef>> rrr = rangeTr->tr->getRange(kr);
+	state FDBStandalone<RangeResultRef> rrrf = wait(rrr);
+
+	if (!rrrf.empty()) {
+		for (int i = 0; i < rrrf.size(); i++) {
+			FDB::KeyValueRef fdbKV = rrrf[i];
+			FDB::ValueRef vr = fdbKV.value;
+
+			FDB::Tuple kk = dir->unpack(fdbKV.key);
+
+			auto strRef = kk.getString(0);
+			int64_t vv = kk.getInt(1);
+			int val = (*(int*)vr.begin());
+
+			limit += val;
+
+			if (val == iNewTs) {
+				break;
+			}
+
+			//fprintf(stdout, "KEY: %s.%ld, VAL: %d\n", strRef.toString().c_str(), vv, val);
+		}
+	}
+
+	return limit;
+}
+
+// Get documents from oplog
+ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Reference<DirectorySubspace> dir, Namespace ns, double tsFrom, double tsTo, PromiseStream<bson::BSONObj> output) {
+	state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
+	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));	
+	bson::BSONObj query = BSON("ts" << BSON("$gt" << tsFrom << "$lte" << tsTo));
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 	state Reference<Plan> plan = planQuery(cx, query);
+
 	plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
 	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-	state Deque<Future<DataValue>> bufferedObjects;	
+	state Deque<Future<DataValue>> bufferedObjects;
 
+	//fprintf(stdout, "[Debug][Scan] Start: %f - %f\n", tsFrom, tsTo);
 	try {
 		loop {
 			choose {
 				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-					bufferedObjects.push_back(doc->toDataValue());
+					bufferedObjects.push_back(doc->toDataValue());					
 				}
 				when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
 					bson::BSONObj obj = dv.getPackedObject().getOwned();
@@ -152,13 +223,15 @@ ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Namespace ns, double 
 		bufferedObjects.pop_front();
 	}
 
+	//fprintf(stdout, "[Debug][Scan] Finish: %f - %f\n", tsFrom, tsTo);
 	output.sendError(end_of_stream());
 }
 
 // Scan updates from oplog and send to change stream
 ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
 	state double lastTs = -1.0;
-	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);	
+	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
+	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
 
 	loop {
 		try {
@@ -174,14 +247,15 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 						cnt++;
 
 						if (cnt == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
-							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT, TaskMaxPriority);
+							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT * 0.8, TaskMaxPriority);
 						}
 
 						if (cnt == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
-							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT, TaskMaxPriority);
+							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT * 0.8, TaskMaxPriority);
 						}
 
 						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
+							//fprintf(stdout, "[Debug][Trigger***] Scan: Counter trigger - %d\n", cnt);
 							throw end_of_stream();
 						}
 					}
@@ -189,8 +263,10 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 						while(times.isReady()) {
 							double tmpTs = waitNext(times);
 							newTs = tmpTs;
+							cnt++;
 						}
 
+						//fprintf(stdout, "[Debug][Trigger***] Scan: Timeout trigger - %d\n", cnt);
 						throw end_of_stream();
 					}					
 				}
@@ -211,7 +287,7 @@ ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLaye
 			if (changeStream->countConnections() > 0) {
 				state PromiseStream<bson::BSONObj> bsonWriter;
 				state FutureStream<bson::BSONObj> bsonReader = bsonWriter.getFuture();
-				watcherQuery(docLayer, ns, lastTs, newTs, bsonWriter);
+				watcherQuery(docLayer, timestampDir, ns, lastTs, newTs, bsonWriter);
 
 				try {
 					loop choose {

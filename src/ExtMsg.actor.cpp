@@ -354,7 +354,7 @@ ACTOR static Future<int32_t> addDocumentsFromCursor(Reference<Cursor> cursor,
 				// that doc is wrapping a BsonContext, which means toDataValue() is synchronous.
 				bson::BSONObj obj = doc->toDataValue().get().getPackedObject().getOwned();
 				cursor->checkpoint->getDocumentFinishedLock()->release();
-				reply->addDocument(obj);
+				reply->addDocument(obj);				
 
 				remaining--;
 				returned++;
