@@ -113,19 +113,19 @@ struct ExtChangeStream : ReferenceCounted<ExtChangeStream>, NonCopyable {
 
 struct ExtChangeWatcher: ReferenceCounted<ExtChangeWatcher>, NonCopyable {
 	Reference<DocumentLayer> docLayer;
-	Reference<ExtChangeStream> changeStream;
-	FutureStream<double> tsStreamReader;
-	PromiseStream<double> tsStreamWriter;
-	PromiseStream<double> tsScanPromise;
-	FutureStream<double> tsScanFuture;
+	Reference<ExtChangeStream> changeStream;	
+	PromiseStream<std::string> logStreamWriter;
+	FutureStream<std::string> logStreamReader;
+	PromiseStream<std::pair<std::string, std::string>> keysWriter;
+	FutureStream<std::pair<std::string, std::string>> keysReader;
 
 	ExtChangeWatcher(Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream): 
-	docLayer(docLayer), changeStream(changeStream) {
-		tsStreamReader = tsStreamWriter.getFuture();
-		tsScanFuture = tsScanPromise.getFuture();
+	docLayer(docLayer), changeStream(changeStream) {		
+		logStreamReader = logStreamWriter.getFuture();
+		keysReader = keysWriter.getFuture();
 	};
 
-	void update(double timestamp);
+	void log(std::string oId);
 	void watch();
 };
 

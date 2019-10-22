@@ -894,15 +894,20 @@ ACTOR Future<WriteCmdResult> doInsertCmd(Namespace ns,
 	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_INSERT_SZ, insertSize);
 	DocumentLayer::metricReporter->captureHistogram(DocLayerConstants::MT_HIST_DOCS_PER_INSERT, documents->size());
 
+	state Reference<DocInserter> docInserter;	
 	Reference<Plan> plan = ref(new InsertPlan(inserts, ec->mm, ns));
 
 	if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
-		Reference<IOplogInserter> opInserter(new DocInserter(ec->watcher));
-		plan = oplogInsertPlan(plan, documents, opInserter, ec->mm, ns);
+		docInserter = ref(new DocInserter(ec->watcher));
+		plan = oplogInsertPlan(plan, documents, docInserter, ec->mm, ns);
 	}
 
 	plan = ec->isolatedWrapOperationPlan(plan);
 	int64_t i = wait(executeUntilCompletionTransactionally(plan, tr));
+
+	if(docInserter.isValid()) {
+		docInserter->commit();
+	}
 
 	DocumentLayer::metricReporter->captureTime(DocLayerConstants::MT_TIME_INSERT_LATENCY_US,
 	                                           (timer_int() - startTime) / 1000);
@@ -1106,14 +1111,25 @@ ACTOR Future<WriteCmdResult> doUpdateCmd(Namespace ns,
 					upserter = simpleUpsert(cmd->selector, cmd->update);
 			}
 
+			state Reference<DocInserter> docInserter;
 			Reference<Plan> plan = planQuery(cx, cmd->selector);
 			plan =
 			    ref(new UpdatePlan(plan, updater, upserter, cmd->multi ? std::numeric_limits<int64_t>::max() : 1, cx));
-			plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->watcher)), cx);
+			
+			if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
+				docInserter = ref(new DocInserter(ec->watcher));
+				plan = ec->wrapOperationPlanOplog(plan, docInserter, cx);
+			} else {
+				plan = ec->wrapOperationPlan(plan, false, cx);
+			}
 
 			std::pair<int64_t, Reference<ScanReturnedContext>> pair =
 			    wait(executeUntilCompletionAndReturnLastTransactionally(plan, dtr));
 			cmdResult.n += pair.first;
+
+			if (docInserter.isValid()) {
+				docInserter->commit();
+			}
 
 			if (cmd->upsert && pair.first == 1 && pair.second->scanId() == -1) {
 				Standalone<StringRef> upsertedId = wait(pair.second->getKeyEncodedId());
@@ -1269,14 +1285,25 @@ ACTOR Future<WriteCmdResult> doDeleteCmd(Namespace ns,
 		state int idx;
 		for (it = selectors->begin(), idx = 0; it != selectors->end(); it++, idx++) {
 			try {
+				state Reference<DocInserter> docInserter;
 				Reference<Plan> plan = planQuery(cx, it->getField("q").Obj());
 				const int64_t limit = it->getField("limit").numberLong();
 				plan = deletePlan(plan, cx, limit == 0 ? std::numeric_limits<int64_t>::max() : limit);
-				plan = ec->wrapOperationPlanOplog(plan, ref(new DocInserter(ec->watcher)), cx);
+
+				if (strcmp(ns.first.c_str(), DocLayerConstants::OPLOG_DB.c_str()) != 0) {
+					docInserter = ref(new DocInserter(ec->watcher));
+					plan = ec->wrapOperationPlanOplog(plan, docInserter, cx);
+				} else {
+					plan = ec->wrapOperationPlan(plan, false, cx);
+				}
 
 				// TODO: BM: <rdar://problem/40661843> DocLayer: Make bulk deletes efficient
 				int64_t deletedRecords = wait(executeUntilCompletionTransactionally(plan, dtr));
 				nrDeletedRecords += deletedRecords;
+
+				if (docInserter.isValid()) {
+					docInserter->commit();
+				}
 			} catch (Error& e) {
 				TraceEvent(SevError, "ExtMsgDeleteFailure").error(e);
 				// clang-format off
@@ -1467,7 +1494,18 @@ Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj
 	return ref(new ExtOperatorUpsert(selector, update));
 }
 
-Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {	
-	watcher->update((double)obj.getField(DocLayerConstants::OP_FIELD_TS)._numberLong());
-	return insertDocument(cx, obj, Optional<IdInfo>());
+Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
+	bson::OID oId = bson::OID::gen();
+	Standalone<StringRef> encodedId = DataValue(oId).encode_key_part();
+	Optional<IdInfo> id = IdInfo(encodedId, encodedId,  Optional<bson::BSONObj>());
+
+	ids.push_back(oId.toString());
+	return insertDocument(cx, obj, id);
+}
+
+void DocInserter::commit() {
+	while(!ids.empty()) {
+		watcher->log(ids.front());
+		ids.pop_front();
+	}
 }

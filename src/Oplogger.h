@@ -34,6 +34,7 @@ struct IOplogInserter {
 	virtual void addref() = 0;
 	virtual void delref() = 0;
     virtual Future<Reference<IReadWriteContext>> insert(Reference<CollectionContext> cx, bson::BSONObj obj) = 0;
+	virtual void commit() = 0;
 };
 
 // OploagActor - documents inserter

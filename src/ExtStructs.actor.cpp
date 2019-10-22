@@ -18,11 +18,11 @@
  * limitations under the License.
  */
 
+#include "OplogMonitor.actor.h"
 #include "ExtStructs.h"
 #include "ExtUtil.actor.h"
 #include "ExtMsg.actor.h"
 #include "QLPlan.actor.h"
-#include "OplogMonitor.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
 // Create connection change stream
@@ -55,16 +55,16 @@ int ExtChangeStream::countConnections() {
 	return connections.size();
 }
 
-// Update timestamp key
-void ExtChangeWatcher::update(double timestamp) {
-	oplogSendTimestamp(tsStreamWriter, timestamp);
+// Insert oplog document id into virtual log
+void ExtChangeWatcher::log(std::string oId) {
+	sendLogId(logStreamWriter, oId);
 }
 
 // Watching for updates
 void ExtChangeWatcher::watch() {
-	oplogRunUpdateScanner(tsScanFuture, docLayer, changeStream);	
-	oplogRunStreamWatcher(docLayer, tsStreamReader);
-	oplogRunTimestampWatcher(tsScanPromise, docLayer);
+	logStreamWatcherActor(docLayer, keysWriter);
+	logStreamScanActor(docLayer, changeStream, keysReader);
+	logStreamReaderActor(docLayer, logStreamReader);
 }
 
 Reference<DocTransaction> ExtConnection::getOperationTransaction() {

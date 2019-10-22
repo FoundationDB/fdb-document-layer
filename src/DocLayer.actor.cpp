@@ -40,7 +40,7 @@
 #include "ExtMsg.actor.h"
 #include "IMetric.h"
 #include "StatusService.actor.h"
-#include "OplogMonitor.h"
+#include "OplogMonitor.actor.h"
 
 #include "flow/SystemMonitor.h"
 

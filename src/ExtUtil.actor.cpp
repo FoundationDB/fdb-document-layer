@@ -501,7 +501,7 @@ Reference<IPredicate> eq_predicate(const bson::BSONElement& el, const std::strin
 		dv = DataValue(bson::BSONArray(el.Obj()));
 	} else {
 		dv = DataValue(sortBsonObj(el.Obj()));
-	}
+	}	
 
 	return any_predicate(prefix, ref(new EqPredicate(dv)));
 }

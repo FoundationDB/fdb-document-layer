@@ -18,115 +18,215 @@
  * limitations under the License.
  */
 
-#include "OplogMonitor.h"
+#include "OplogMonitor.actor.h"
 #include "ExtUtil.actor.h"
 #include "ExtMsg.actor.h"
+#include "flow/flow.h"
 #include "flow/actorcompiler.h" // This must be the last #include.
 
 using namespace FDB;
 
-// Send timestamp to stream
-void sendTimestamp(PromiseStream<double> times, double ts) {
+static const Key LOGS_ITEM = LiteralStringRef("logs/item");
+static const Key LOGS_COUNT = LiteralStringRef("logs/count");
+
+// Add versionstamp with sequence index to the end
+StringRef versionStampAtEnd(StringRef const& str, Arena& arena, uint16_t index) {
+	int32_t size = str.size();
+	uint16_t lIdx = bigEndian16(index);
+	uint8_t* s = new (arena) uint8_t[size + 16];
+	memcpy(s, str.begin(), size);
+	memset(&s[size], 0, 12);
+	memcpy(&s[size+12], &size, 4);
+	memcpy(&s[size+10], &lIdx, 2);
+	return StringRef(s,size + 16);
+}
+
+// Add versionstamp with sequence index to the end
+Standalone<StringRef> versionStampAtEnd(StringRef const& str, uint16_t index) {
+	Standalone<StringRef> r;
+	((StringRef &)r) = versionStampAtEnd(str, r.arena(), index);
+	return r;
+}
+
+// Send log id to logs stream
+void sendLogId(PromiseStream<std::string> logs, std::string oId) {
 	try {
-		times.send(ts);
+		logs.send(oId);
 	} catch(Error &e) {
-		fprintf(stdout, "Timestamp send error: %s\n", e.what());
+		fprintf(stdout, "Log id send error: %s\n", e.what());
 	}
 }
 
-// Get timestamp directory storage
-ACTOR Future<Reference<DirectorySubspace>> watcherGetTSDirectory(Reference<DocumentLayer> docLayer) {
+// Get virtual logs directory storage
+ACTOR Future<Reference<DirectorySubspace>> logsDirectory(Reference<DocumentLayer> docLayer) {
 	Reference<DirectoryLayer> d = Reference<DirectoryLayer>(new DirectoryLayer());
 	Reference<DirectorySubspace> ds = wait(runRYWTransaction(docLayer->database, [d](Reference<DocTransaction> tr) {
-		    return d->createOrOpen(tr->tr, {LiteralStringRef("Oplog"), LiteralStringRef("Updates")});
+		    return d->createOrOpen(tr->tr, {LiteralStringRef("Oplog"), LiteralStringRef("Stream")});
 	    },
 	    -1, 0));
 
 	return ds;
 }
 
-// Get timestamp subspace key
-FDB::Key watcherGetTSKey(Reference<DirectorySubspace> dir) {
-	return dir->pack(LiteralStringRef("timestamp"), true);
+// Read range with ids
+ACTOR void readIdsRange(
+	Reference<DocumentLayer> docLayer,
+	std::string begin,
+	std::string end,
+	PromiseStream<std::pair<std::string, std::string>> idsWriter) {
+	begin = keyAfter(begin).toString();
+	end = end + '\xFF';
+
+	state Reference<DocTransaction> tr = NonIsolatedPlan::newTransaction(docLayer->database);
+	state Future<FDBStandalone<RangeResultRef>> nextRead = tr->tr->getRange(KeyRangeRef(begin, end));
+
+	loop {
+		state FDBStandalone<RangeResultRef> rr = wait(nextRead);
+
+		if (rr.more) {
+			begin = keyAfter(rr.back().key).toString();
+			nextRead = tr->tr->getRange(KeyRangeRef(begin, end));
+		}
+
+		while (!rr.empty()) {
+			FDB::KeyValueRef fdbKV = rr.front();				
+			FDB::ValueRef vr = fdbKV.value;
+			idsWriter.send(std::pair<std::string, std::string>(fdbKV.key.toString(), vr.toString()));
+			rr.pop_front(1);
+		}
+
+		if (!rr.more) {
+			break;
+		}
+	}
+
+	idsWriter.sendError(end_of_stream());
 }
 
-// Get counter key
-FDB::Key watcherGetCntKey(Reference<DirectorySubspace> dir, int64_t ts) {
-	FDB::Tuple tuple;
-	tuple.append(LiteralStringRef("counter"), true).append(ts);
-	return dir->pack(tuple);
-}
+// Writes ids to fdb
+ACTOR Future<Void> writeIds(Reference<DocumentLayer> docLayer, std::vector<std::string> ids) {
+	state Reference<DirectorySubspace> dir = wait(logsDirectory(docLayer));
+	state FDB::Key logsKey = dir->pack(LOGS_ITEM);
+	state FDB::Key logsCount = dir->pack(LOGS_COUNT);
 
-// Get prefix for counter
-FDB::Key watcherCntPrefix(Reference<DirectorySubspace> dir) {
-	FDB::Tuple tuple;
-	tuple.append(LiteralStringRef("counter"), true);
+	int64_t retryLimit = -1;
+	int64_t timeout = 0;
 
-	return dir->pack(tuple);
-}
+	state Reference<DocTransaction> tr = NonIsolatedPlan::newTransaction(docLayer->database);
+	tr->tr->setOption(FDB_TR_OPTION_RETRY_LIMIT, StringRef((uint8_t*)&retryLimit, sizeof(retryLimit)));
+	tr->tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeout, sizeof(timeout)));
+	tr->tr->setOption(FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE);
+	tr->tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
 
-// Get key range by timestamps
-FDB::KeyRange watcherGetCntRange(Reference<DirectorySubspace> dir, int64_t tsStart, int64_t tsEnd) {		
-	FDB::Key begin = watcherGetCntKey(dir, tsStart);
-	FDB::Key end = watcherCntPrefix(dir);
+	// Clear whole range
+	// tr->tr->clear(KeyRangeRef(logsKey.toString(), logsKey.toString() + '\xFF'));
+	// wait(tr->tr->commit());
+	// tr->tr->reset();
 
-	return KeyRangeRef(keyAfter(begin), end.toString() + '\xFF');
-}
+	state Value logsVS;
+	state uint16_t idx = 0;
+	state uint64_t cnt = ids.size();
 
-// Get all counter keys
-FDB::KeyRange watcherGetCntAllRange(Reference<DirectorySubspace> dir) {		
-	FDB::Key key = watcherCntPrefix(dir);
-	return KeyRangeRef(key.toString() + '\x00', key.toString() + '\xFF');
-}
+	while(!ids.empty()) {
+		std::string id = ids.front();
+		ids.erase(ids.begin());
 
-ACTOR Future<Void> writeTs(Reference<DocumentLayer> docLayer, Reference<DirectorySubspace> tsDir, double ts, int cnt, FDB::Key tsKey) {
-	state Reference<DocTransaction> updTr = NonIsolatedPlan::newTransaction(docLayer->database);
-	updTr->tr->atomicOp(tsKey, StringRef((const uint8_t*)&ts, sizeof(double)), FDB_MUTATION_TYPE_MAX);
-	wait(updTr->tr->commit());	
+		logsVS = versionStampAtEnd(logsKey, idx);
+
+		tr->tr->atomicOp(logsVS, StringRef(id),  FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY);		
+		idx++;
+	}
+
+	tr->tr->atomicOp(logsKey, logsVS, FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE);
+	tr->tr->atomicOp(logsCount, StringRef((const uint8_t*)&cnt, sizeof(uint64_t)), FDB_MUTATION_TYPE_ADD);
+	wait(tr->tr->commit());	
 
 	return Void();
 }
 
-// Run timestamp stream watcher
-ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, FutureStream<double> times) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-	state double ts = 0.0;
-	state double lastTs = 0.0;
-	state int cnt = 0;
+// Run logs stream watcher
+ACTOR void logStreamWatcherActor(Reference<DocumentLayer> docLayer, PromiseStream<std::pair<std::string, std::string>> keysWriter) {
+	state Reference<DirectorySubspace> dir = wait(logsDirectory(docLayer));
+	state FDB::Key observable = dir->pack(LOGS_ITEM);
+	state Reference<DocTransaction> tr = NonIsolatedPlan::newTransaction(docLayer->database);
+	state std::string prev = "";
+	state std::string curr = "";
+
+	loop {
+		try {			
+			state Future<Void> watch = tr->tr->watch(observable);
+			state Optional<FDBStandalone<StringRef>> obsStrRef = wait(tr->tr->get(observable, true));
+
+			if (obsStrRef.present()) {
+				curr = obsStrRef.get().toString();
+			}
+
+			if (curr.compare(prev) == 0) {
+				wait(watch || delay(DocLayerConstants::CHNG_WATCH_TIMEOUT));
+
+				tr->tr->reset();
+				state Optional<FDBStandalone<StringRef>> newObsStrRef = wait(tr->tr->get(observable, true));
+
+				if (newObsStrRef.present()) {
+					curr = newObsStrRef.get().toString();
+				}
+
+				if (curr.compare(prev) == 0) {
+					continue;
+				}
+			}
+
+			if (prev.length() == 0) {
+				prev = curr;
+				continue;
+			}
+
+			keysWriter.send(std::pair<std::string, std::string>(prev, curr));
+			prev = curr;
+		} catch(Error &e) {
+			fprintf(stderr, "logStreamWatcherActor error: %s\n", e.what());
+			wait(delay(1.0, TaskMaxPriority));
+		}
+	}
+}
+
+// Run logs stream reader
+ACTOR void logStreamReaderActor(Reference<DocumentLayer> docLayer, FutureStream<std::string> idsStream) {		
+	state std::vector<std::string> ids;	
 	state Future<Void> timeout = Never();
 
 	loop {
 		try {
-			try {		
-				timeout = Never();
-				cnt = 0;
+			timeout = Never();
+			ids.clear();
 
+			try {
 				loop choose {
-					when(double tmpTs = waitNext(times)) {
-						ts = tmpTs;
-						cnt++;
+					when(std::string id = waitNext(idsStream)) {						
+						ids.push_back(id);
 
-						if (cnt == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
+						if (ids.size() == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
 							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
+						if (ids.size() == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
 							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT, TaskMaxPriority);
 						}
 
-						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
-							//fprintf(stdout, "[Debug][Time] Counter trigger - %d\n", cnt);
+						if (ids.size() >= DocLayerConstants::CHNG_WALL_HARD_CNT) {
 							throw end_of_stream();
 						}
 					}
 					when(wait(timeout)) {
-						while(times.isReady()) {
-							double tmpTs = waitNext(times);
-							ts = tmpTs;
-							cnt++;
-						}
-						//fprintf(stdout, "[Debug][Time] Timeout trigger - %d\n", cnt);
+						// while(idsStream.isReady()) {
+						// 	std::string id = waitNext(idsStream);							
+						// 	ids.push_back(id);
+
+						// 	if (ids.size() >= DocLayerConstants::CHNG_WALL_HARD_CNT) {
+						// 		throw end_of_stream();
+						// 	}
+						// }
+
 						throw end_of_stream();
 					}
 				}
@@ -135,71 +235,127 @@ ACTOR void watcherTimestampUpdateActor(Reference<DocumentLayer> docLayer, Future
 					throw;
 			}
 
-			if (ts == lastTs) {
-				continue;
+			if (verboseLogging) {
+				fprintf(stdout, "[Debug] Collected ids %lu\n", ids.size());
 			}
 
-			wait(writeTs(docLayer, timestampDir, ts, cnt, tsKey));
-			lastTs = ts;			
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher ts update error: %s\n", e.what());
+			wait(writeIds(docLayer, ids));
+		} catch (Error& e) {
+			fprintf(stderr, "Log stream reader error: %s\n", e.what());
 		}
 	}
 }
 
-ACTOR Future<long int> getLimit(Reference<DocumentLayer> docLayer,  Reference<DirectorySubspace> dir, double lastTs, double newTs) {
-	state int64_t iLastTs = int64_t(lastTs);
-	state int64_t iNewTs = int64_t(newTs);
-	state int64_t limit = -1;
+// Stream out documents from oplog by _ids
+ACTOR Future<Void> outStream(Reference<DocumentLayer> docLayer, Deque<std::string> oIds, Reference<ExtChangeStream> output) {
+	state PromiseStream<bson::BSONObj> bsonWriter;
+	state FutureStream<bson::BSONObj> bsonReader = bsonWriter.getFuture();
+	logStreamQuery(docLayer, oIds, bsonWriter);
 
-	state Reference<DocTransaction> rangeTr = NonIsolatedPlan::newTransaction(docLayer->database);
-	auto kr = watcherGetCntRange(dir, iLastTs, iNewTs);
-	Future<FDBStandalone<RangeResultRef>> rrr = rangeTr->tr->getRange(kr);
-	state FDBStandalone<RangeResultRef> rrrf = wait(rrr);
-
-	if (!rrrf.empty()) {
-		for (int i = 0; i < rrrf.size(); i++) {
-			FDB::KeyValueRef fdbKV = rrrf[i];
-			FDB::ValueRef vr = fdbKV.value;
-
-			FDB::Tuple kk = dir->unpack(fdbKV.key);
-
-			auto strRef = kk.getString(0);
-			int64_t vv = kk.getInt(1);
-			int val = (*(int*)vr.begin());
-
-			limit += val;
-
-			if (val == iNewTs) {
-				break;
+	state int cnt = 0;
+	try {
+		loop choose {
+			when(bson::BSONObj obj = waitNext(bsonReader)) {
+				cnt++;
+				output->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
 			}
-
-			//fprintf(stdout, "KEY: %s.%ld, VAL: %d\n", strRef.toString().c_str(), vv, val);
 		}
+	} catch (Error &e) {
+		if (e.code() != error_code_end_of_stream)
+			throw;
 	}
 
-	return limit;
+	if (verboseLogging) {
+		fprintf(stdout, "[Debug] Cnt found: %d\n", cnt);
+	}
+
+	return Void();
+}
+
+// Scan and streamout virtual log with _ids from oplog
+ACTOR void logStreamScanActor(
+    Reference<DocumentLayer> docLayer, 
+    Reference<ExtChangeStream> output,
+    FutureStream<std::pair<std::string, std::string>> keysReader
+) {
+	loop {
+		try {
+			try {
+				loop choose {
+					when(std::pair<std::string, std::string> rangeKeys = waitNext(keysReader)) {
+						if (output->countConnections() == 0) {
+							continue;
+						}
+
+						state PromiseStream<std::pair<std::string, std::string>> idsWriter;
+						state FutureStream<std::pair<std::string, std::string>> idsReader = idsWriter.getFuture();
+						state Deque<std::string> oIds;
+
+						readIdsRange(docLayer, rangeKeys.first, rangeKeys.second, idsWriter);
+
+						if (verboseLogging) {
+							fprintf(stdout, "[Debug] Read range started...\n");
+						}
+
+						try {
+							loop choose {
+								when(std::pair<std::string, std::string> kv = waitNext(idsReader)) {
+									oIds.push_back(kv.second);
+								}								
+							}
+						} catch (Error& e) {
+							if (e.code() != error_code_end_of_stream)
+								throw;
+						}
+
+						if (verboseLogging) {
+							fprintf(stdout, "[Debug] Read range finished %d.\n", oIds.size());
+						}		
+						
+						if (oIds.size() > 1) {
+							wait(outStream(docLayer, oIds, output));
+						}
+					}
+				}
+			} catch (Error& e) {
+				if (e.code() != error_code_end_of_stream)
+					throw;
+			}			
+		} catch(Error &e) {
+			fprintf(stderr, "logStreamScanActor error: %s\n", e.what());
+		}
+	}	
 }
 
 // Get documents from oplog
-ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Reference<DirectorySubspace> dir, Namespace ns, double tsFrom, double tsTo, PromiseStream<bson::BSONObj> output) {
+ACTOR void logStreamQuery(Reference<DocumentLayer> docLayer, Deque<std::string> oIds, PromiseStream<bson::BSONObj> output) {
+	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
 	state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));	
-	bson::BSONObj query = BSON("ts" << BSON("$gt" << tsFrom << "$lte" << tsTo));
+	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
-	state Reference<Plan> plan = planQuery(cx, query);
 
+	std::vector<bson::OID> ids;
+	while (!oIds.empty()) {
+		ids.push_back(bson::OID(oIds.front()));
+		oIds.pop_front();
+	}
+	std::sort(ids.begin(), ids.end(),  std::less<bson::OID>());	
+	
+	DataValue begin = DataValue(bson::OID(ids.front()));
+	DataValue end = DataValue(bson::OID(ids.back()));
+
+	state Reference<Plan> plan = ref(new PrimaryKeyLookupPlan(cx, begin, end));
 	plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
-	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
+	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
+
 	state Deque<Future<DataValue>> bufferedObjects;
 
-	//fprintf(stdout, "[Debug][Scan] Start: %f - %f\n", tsFrom, tsTo);
 	try {
 		loop {
 			choose {
 				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
-					bufferedObjects.push_back(doc->toDataValue());					
+					bufferedObjects.push_back(doc->toDataValue());
 				}
 				when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
 					bson::BSONObj obj = dv.getPackedObject().getOwned();
@@ -209,7 +365,7 @@ ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Reference<DirectorySu
 				}
 			}
 		}
-	} catch (Error& e) {
+	} catch (Error& e) {		
 		checkpoint->stop();
 		if (e.code() != error_code_end_of_stream) {
 			throw;
@@ -221,134 +377,10 @@ ACTOR void watcherQuery(Reference<DocumentLayer> docLayer, Reference<DirectorySu
 		bson::BSONObj obj = dv.getPackedObject().getOwned();
 		output.send(obj);
 		bufferedObjects.pop_front();
+		flowControlLock->release();
 	}
 
-	//fprintf(stdout, "[Debug][Scan] Finish: %f - %f\n", tsFrom, tsTo);
 	output.sendError(end_of_stream());
-}
-
-// Scan updates from oplog and send to change stream
-ACTOR void watcherScanUpdates(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
-	state double lastTs = -1.0;
-	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-
-	loop {
-		try {
-			state double newTs = -1.0;
-
-			try {
-				state Future<Void> timeout = Never();
-				state int cnt = 0;
-
-				loop choose {
-					when(double tmpTs = waitNext(times)) {
-						newTs = tmpTs;
-						cnt++;
-
-						if (cnt == DocLayerConstants::CHNG_WALL_FIRST_CNT) {
-							timeout = delay(DocLayerConstants::CHNG_WALL_FIRST_TIMEOUT * 0.8, TaskMaxPriority);
-						}
-
-						if (cnt == DocLayerConstants::CHNG_WALL_SECOND_CNT) {
-							timeout = delay(DocLayerConstants::CHNG_WALL_SECOND_TIMEOUT * 0.8, TaskMaxPriority);
-						}
-
-						if (cnt == DocLayerConstants::CHNG_WALL_HARD_CNT) {
-							//fprintf(stdout, "[Debug][Trigger***] Scan: Counter trigger - %d\n", cnt);
-							throw end_of_stream();
-						}
-					}
-					when(wait(timeout)) {
-						while(times.isReady()) {
-							double tmpTs = waitNext(times);
-							newTs = tmpTs;
-							cnt++;
-						}
-
-						//fprintf(stdout, "[Debug][Trigger***] Scan: Timeout trigger - %d\n", cnt);
-						throw end_of_stream();
-					}					
-				}
-			} catch (Error& e) {
-				if (e.code() != error_code_end_of_stream)
-					throw;
-			}
-
-			if (lastTs == -1) {
-				lastTs = newTs;
-				continue;
-			}
-
-			if (lastTs == newTs || newTs == -1) {
-				continue;
-			}
-
-			if (changeStream->countConnections() > 0) {
-				state PromiseStream<bson::BSONObj> bsonWriter;
-				state FutureStream<bson::BSONObj> bsonReader = bsonWriter.getFuture();
-				watcherQuery(docLayer, timestampDir, ns, lastTs, newTs, bsonWriter);
-
-				try {
-					loop choose {
-						when(bson::BSONObj obj = waitNext(bsonReader)) {
-							changeStream->writeMessage(StringRef((const uint8_t*)obj.objdata(), obj.objsize()));
-						}
-					}
-				} catch (Error &e) {
-					if (e.code() != error_code_end_of_stream)
-						throw;
-				}
-			}
-			lastTs = newTs;
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher scan error: %s\n", e.what());
-		}
-	}
-}
-
-// Run timestamp watcher
-ACTOR void watcherTimestampWatchingActor(PromiseStream<double> times, Reference<DocumentLayer> docLayer) {
-	state Reference<DirectorySubspace> timestampDir = wait(watcherGetTSDirectory(docLayer));
-	state FDB::Key tsKey = watcherGetTSKey(timestampDir);
-	state double ts = 0.0;
-	state double prevTs = -1.0;
-
-	loop {
-		try {
-			state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-			state Future<Void> watch = dtr->tr->watch(tsKey);
-			state Future<Optional<FDBStandalone<StringRef>>> futureTs = dtr->tr->get(tsKey);
-			wait(dtr->tr->commit());
-			dtr->tr->reset();
-
-			Optional<FDBStandalone<StringRef>> tsBefore = wait(futureTs);
-			if (tsBefore.present()) {
-				ts = *(double*)tsBefore.get().begin();
-			}
-
-			if (ts == prevTs) {	
-				wait(watch || delay(5.0));
-				futureTs = dtr->tr->get(tsKey);
-				wait(dtr->tr->commit());
-
-				Optional<FDBStandalone<StringRef>> tsAfter = wait(futureTs);
-				if (tsAfter.present()) {
-					ts = *(double*)tsAfter.get().begin();
-				}
-
-				if (ts == prevTs) {
-					continue;
-				}
-			}
-	
-			prevTs = ts;
-			sendTimestamp(times, ts);
-		} catch(Error &e) {
-			fprintf(stderr, "Watcher watching error: %s\n", e.what());
-			wait(delay(1.0, TaskMaxPriority));
-		}
-	}
 }
 
 // Delete expired oplogs by timestamp
@@ -375,26 +407,6 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 		} catch (Error& e) {
 			fprintf(stderr, "Unable to delete oplog by ts %f\n", ts);
 		}
-}
-
-// sendTimestamp helper
-void oplogSendTimestamp(PromiseStream<double> times, double ts) {
-    sendTimestamp(times, ts);
-}
-
-// watcherScanUpdates helper
-void oplogRunUpdateScanner(FutureStream<double> times, Reference<DocumentLayer> docLayer, Reference<ExtChangeStream> changeStream) {
-    watcherScanUpdates(times, docLayer, changeStream);
-}
-
-// watcherTimestampUpdateActor helper
-void oplogRunStreamWatcher(Reference<DocumentLayer> docLayer, FutureStream<double> times) {
-    watcherTimestampUpdateActor(docLayer, times);
-}
-
-// watcherTimestampWatchingActor helper
-void oplogRunTimestampWatcher(PromiseStream<double> times, Reference<DocumentLayer> docLayer) {
-    watcherTimestampWatchingActor(times, docLayer);
 }
 
 // Run oplog size monitor

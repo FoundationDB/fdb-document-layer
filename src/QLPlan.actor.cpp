@@ -502,7 +502,7 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
                                            DataValue begin,
                                            int scanID) {
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-	try {
+	try {		
 		state Standalone<StringRef> x = begin.encode_key_part();
 		FDB::KeyRangeRef scanBounds = checkpoint->getBounds(scanID);
 		if (x >= scanBounds.begin && x < scanBounds.end) {
@@ -621,7 +621,7 @@ ACTOR static Future<Void> doUnion(FutureStream<Reference<ScanReturnedContext>> a
 
 			if (aFuture.isError()) {
 				aFuture = Never();
-				aOpen = false;
+				aOpen = false;				
 			}
 			if (bFuture.isError()) {
 				bFuture = Never();
@@ -894,7 +894,7 @@ ACTOR static Future<Void> doNonIsolatedRW(PlanCheckpoint* outerCheckpoint,
 				while (!bufferedDocs.empty()) {
 					wait(outerLock->take());
 					Reference<ScanReturnedContext> finishedDoc = bufferedDocs.front();
-					output.send(finishedDoc);
+					output.send(finishedDoc);					
 					++oCount;
 					bufferedDocs.pop_front();
 				}
