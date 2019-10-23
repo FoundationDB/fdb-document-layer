@@ -1499,7 +1499,7 @@ Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionCon
 	Standalone<StringRef> encodedId = DataValue(oId).encode_key_part();
 	Optional<IdInfo> id = IdInfo(encodedId, encodedId,  Optional<bson::BSONObj>());
 
-	ids.push_back(oId.toString());
+	ids.push_back(oId.toString());	
 	return insertDocument(cx, obj, id);
 }
 

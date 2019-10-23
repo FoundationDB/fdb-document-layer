@@ -127,6 +127,18 @@ ACTOR Future<Void> writeIds(Reference<DocumentLayer> docLayer, std::vector<std::
 	state uint16_t idx = 0;
 	state uint64_t cnt = ids.size();
 
+	std::vector<bson::OID> bsonIds;
+	for (int i = 0; i < ids.size(); i++) {
+		bsonIds.push_back(bson::OID(ids[i]));
+	}
+	std::sort(bsonIds.begin(), bsonIds.end(), std::less<bson::OID>());
+
+	ids.clear();
+	while (!bsonIds.empty()) {
+		ids.push_back(bsonIds.front().toString());
+		bsonIds.erase(bsonIds.begin());
+	}
+
 	while(!ids.empty()) {
 		std::string id = ids.front();
 		ids.erase(ids.begin());
@@ -310,11 +322,9 @@ ACTOR void logStreamScanActor(
 
 						if (verboseLogging) {
 							fprintf(stdout, "[Debug] Read range finished %d.\n", oIds.size());
-						}		
-						
-						if (oIds.size() > 1) {
-							wait(outStream(docLayer, oIds, output));
 						}
+
+						wait(outStream(docLayer, oIds, output));						
 					}
 				}
 			} catch (Error& e) {
@@ -327,14 +337,34 @@ ACTOR void logStreamScanActor(
 	}	
 }
 
+Reference<Plan> unionPlan(std::vector<bson::OID> ids, Reference<UnboundCollectionContext> cx) {
+	DataValue dv = DataValue(ids.front());
+	ids.erase(ids.begin());
+
+	Reference<Plan> pk = ref(new PrimaryKeyLookupPlan(cx, dv, dv));
+	if (ids.empty()) {
+		return pk;
+	}
+
+	return ref(new UnionPlan(pk, unionPlan(ids, cx)));
+}
+
 // Get documents from oplog
 ACTOR void logStreamQuery(Reference<DocumentLayer> docLayer, Deque<std::string> oIds, PromiseStream<bson::BSONObj> output) {
+	int64_t retryLimit = -1;
+	int64_t timeout = 3000;
+
+	state Reference<DocTransaction> tr = NonIsolatedPlan::newTransaction(docLayer->database);
+	tr->tr->setOption(FDB_TR_OPTION_RETRY_LIMIT, StringRef((uint8_t*)&retryLimit, sizeof(retryLimit)));
+	tr->tr->setOption(FDB_TR_OPTION_TIMEOUT, StringRef((uint8_t*)&timeout, sizeof(timeout)));
+	tr->tr->setOption(FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE);
+	tr->tr->setOption(FDB_TR_OPTION_CAUSAL_READ_RISKY);
+
 	state Namespace ns = Namespace(DocLayerConstants::OPLOG_DB, DocLayerConstants::OPLOG_COL);
-	state Reference<DocTransaction> dtr = NonIsolatedPlan::newTransaction(docLayer->database);
-	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(dtr, ns, true));
+	state Reference<UnboundCollectionContext> cx = wait(docLayer->mm->getUnboundCollectionContext(tr, ns, true));
 	state Reference<PlanCheckpoint> checkpoint(new PlanCheckpoint);
 
-	std::vector<bson::OID> ids;
+	state std::vector<bson::OID> ids;
 	while (!oIds.empty()) {
 		ids.push_back(bson::OID(oIds.front()));
 		oIds.pop_front();
@@ -344,29 +374,35 @@ ACTOR void logStreamQuery(Reference<DocumentLayer> docLayer, Deque<std::string> 
 	DataValue begin = DataValue(bson::OID(ids.front()));
 	DataValue end = DataValue(bson::OID(ids.back()));
 
-	state Reference<Plan> plan = ref(new PrimaryKeyLookupPlan(cx, begin, end));
+	state Reference<Plan> plan = ref(new PrimaryKeyLookupPlan(cx, begin, end));// unionPlan(ids, cx);
 	plan = Reference<Plan>(new NonIsolatedPlan(plan, true, cx, docLayer->database, docLayer->mm));
 	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), dtr);
-
+	state FutureStream<Reference<ScanReturnedContext>> docs = plan->execute(checkpoint.getPtr(), tr);
 	state Deque<Future<DataValue>> bufferedObjects;
 
 	try {
 		loop {
 			choose {
-				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {
+				when(state Reference<ScanReturnedContext> doc = waitNext(docs)) {					
 					bufferedObjects.push_back(doc->toDataValue());
 				}
 				when(DataValue dv = wait(bufferedObjects.empty() ? Never() : bufferedObjects.front())) {
 					bson::BSONObj obj = dv.getPackedObject().getOwned();
-					output.send(obj);
+					bson::BSONElement el;
+					
+					if (obj.getObjectID(el)) {
+						bson::OID oId = el.OID();
+						if(std::find(ids.begin(),ids.end(),oId) != ids.end()) {        				
+							output.send(obj);
+						}
+					}
+
 					bufferedObjects.pop_front();
 					flowControlLock->release();
 				}
 			}
 		}
-	} catch (Error& e) {		
-		checkpoint->stop();
+	} catch (Error& e) {
 		if (e.code() != error_code_end_of_stream) {
 			throw;
 		}
@@ -374,8 +410,16 @@ ACTOR void logStreamQuery(Reference<DocumentLayer> docLayer, Deque<std::string> 
 
 	while (!bufferedObjects.empty()) {
 		DataValue dv = wait(bufferedObjects.front());
-		bson::BSONObj obj = dv.getPackedObject().getOwned();
-		output.send(obj);
+		bson::BSONObj obj = dv.getPackedObject().getOwned();		
+		bson::BSONElement el;
+					
+		if (obj.getObjectID(el)) {
+			bson::OID oId = el.OID();
+			if(std::find(ids.begin(),ids.end(),oId) != ids.end()) {        				
+				output.send(obj);
+			}
+		}
+
 		bufferedObjects.pop_front();
 		flowControlLock->release();
 	}

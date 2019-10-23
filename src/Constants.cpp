@@ -58,9 +58,9 @@ const char* OP_FIELD_O2 = "o2";
 const char* OP_FIELD_O = "o";
 
 const int CHNG_WALL_FIRST_CNT = 1;
-const double CHNG_WALL_FIRST_TIMEOUT = 0.032;
+const double CHNG_WALL_FIRST_TIMEOUT = 0.064;
 const int CHNG_WALL_SECOND_CNT = 5;
-const double CHNG_WALL_SECOND_TIMEOUT = 0.64;
+const double CHNG_WALL_SECOND_TIMEOUT = 0.128;
 const int CHNG_WALL_HARD_CNT = 10000;
 const double CHNG_WATCH_TIMEOUT = 0.128;
 

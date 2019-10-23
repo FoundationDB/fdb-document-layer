@@ -501,8 +501,8 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
                                            Reference<CollectionContext> cx,
                                            DataValue begin,
                                            int scanID) {
-	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();
-	try {		
+	state FlowLock* flowControlLock = checkpoint->getDocumentFinishedLock();	
+	try {
 		state Standalone<StringRef> x = begin.encode_key_part();
 		FDB::KeyRangeRef scanBounds = checkpoint->getBounds(scanID);
 		if (x >= scanBounds.begin && x < scanBounds.end) {
@@ -510,7 +510,7 @@ ACTOR static Future<Void> doSinglePKLookup(PlanCheckpoint* checkpoint,
 			if (odv.present()) {
 				wait(flowControlLock->take());
 				dis.send(Reference<ScanReturnedContext>(new ScanReturnedContext(
-				    cx->cx->getSubContext(begin.encode_key_part()), scanID, StringRef(begin.encode_key_part()))));
+					cx->cx->getSubContext(begin.encode_key_part()), scanID, StringRef(begin.encode_key_part()))));
 			}
 		}
 		throw end_of_stream();
