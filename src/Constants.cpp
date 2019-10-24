@@ -62,7 +62,9 @@ const double CHNG_WALL_FIRST_TIMEOUT = 0.064;
 const int CHNG_WALL_SECOND_CNT = 5;
 const double CHNG_WALL_SECOND_TIMEOUT = 0.128;
 const int CHNG_WALL_HARD_CNT = 10000;
-const double CHNG_WATCH_TIMEOUT = 0.128;
+const double CHNG_WATCH_TIMEOUT = 0.512;
+const uint64_t CHNG_VIRT_SIZE = 1000000;
+const uint64_t CHNG_VIRT_CLEAN = 200000;
 
 const char* ID_FIELD = "_id";
 const char* KEY_FIELD = "key";

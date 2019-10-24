@@ -56,8 +56,8 @@ int ExtChangeStream::countConnections() {
 }
 
 // Insert oplog document id into virtual log
-void ExtChangeWatcher::log(std::string oId) {
-	sendLogId(logStreamWriter, oId);
+void ExtChangeWatcher::log(std::map<std::string, bson::BSONObj> objs){
+	sendLogId(logStreamWriter, objs);
 }
 
 // Watching for updates

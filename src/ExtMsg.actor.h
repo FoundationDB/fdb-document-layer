@@ -240,8 +240,8 @@ private:
 };
 
 struct DocInserter: IOplogInserter, ReferenceCounted<DocInserter>, FastAllocated<DocInserter> {
-	Reference<ExtChangeWatcher> watcher;
-	Deque<std::string> ids;
+	Reference<ExtChangeWatcher> watcher;	
+	std::map<std::string, bson::BSONObj> objs;
 
 	void addref() override { ReferenceCounted<DocInserter>::addref(); }
 	void delref() override { ReferenceCounted<DocInserter>::delref(); }

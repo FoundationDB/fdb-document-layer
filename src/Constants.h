@@ -80,6 +80,8 @@ extern const int CHNG_WALL_SECOND_CNT;
 extern const double CHNG_WALL_SECOND_TIMEOUT;
 extern const int CHNG_WALL_HARD_CNT;
 extern const double CHNG_WATCH_TIMEOUT;
+extern const uint64_t CHNG_VIRT_SIZE;
+extern const uint64_t CHNG_VIRT_CLEAN;
 
 // BSON Field name constants
 extern const char* ID_FIELD;

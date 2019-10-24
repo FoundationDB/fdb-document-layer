@@ -59,7 +59,8 @@ Future<Reference<IReadWriteContext>> OplogActor::deleteOp(Reference<CollectionCo
 }
 
 void OplogActor::prepareBuilder(bson::BSONObjBuilder* builder, std::string op, std::string ns) {
-	(*builder).append(DocLayerConstants::OP_FIELD_TS, (long long)(timer() * 1000))
+	(*builder).append(DocLayerConstants::ID_FIELD, bson::OID::gen())
+			  .append(DocLayerConstants::OP_FIELD_TS, (long long)(timer() * 1000))
 		   	  .append(DocLayerConstants::OP_FIELD_V, int32_t(2))
 		   	  .append(DocLayerConstants::OP_FIELD_H, (long long)(g_random->randomInt64(INT64_MIN, INT64_MAX)))
 		      .append(DocLayerConstants::OP_FIELD_NS, ns)
