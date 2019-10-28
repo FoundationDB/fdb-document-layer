@@ -28,8 +28,9 @@ using namespace FDB;
 
 static const Key LOGS_OBJS = LiteralStringRef("logs/object");
 static const Key LOGS_COUNT = LiteralStringRef("logs/count");
-
 typedef std::function<bool(std::pair<bson::OID, bson::BSONObj>, std::pair<bson::OID, bson::BSONObj>)> ObjsCmp;
+static Reference<DirectorySubspace> logsDir;
+
 
 // Add versionstamp with sequence index to the end
 StringRef versionStampAtEnd(StringRef const& str, Arena& arena, uint16_t index) {
@@ -107,7 +108,7 @@ ACTOR void readRange(
 
 // Writes ids to fdb
 ACTOR Future<Void> writeIds(Reference<DocumentLayer> docLayer, std::set<std::pair<bson::OID, bson::BSONObj>, ObjsCmp> objs) {
-	state Reference<DirectorySubspace> dir = wait(logsDirectory(docLayer));
+	state Reference<DirectorySubspace> dir = logsDir;
 	state FDB::Key logsObjects = dir->pack(LOGS_OBJS);
 	state FDB::Key logsCount = dir->pack(LOGS_COUNT);
 
@@ -143,7 +144,7 @@ ACTOR Future<Void> writeIds(Reference<DocumentLayer> docLayer, std::set<std::pai
 
 // Run logs stream watcher
 ACTOR void logStreamWatcherActor(Reference<DocumentLayer> docLayer, PromiseStream<std::pair<std::string, std::string>> keysWriter) {
-	state Reference<DirectorySubspace> dir = wait(logsDirectory(docLayer));
+	state Reference<DirectorySubspace> dir = logsDir;
 	state FDB::Key observable = dir->pack(LOGS_OBJS);
 	state Reference<DocTransaction> tr = NonIsolatedPlan::newTransaction(docLayer->database);
 	state std::string prev = "";
@@ -339,7 +340,7 @@ ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts) {
 }
 
 ACTOR void clearVirtualRanges(Reference<DocumentLayer> docLayer) {
-	state Reference<DirectorySubspace> dir = wait(logsDirectory(docLayer));	
+	state Reference<DirectorySubspace> dir = logsDir;
 	state FDB::Key logsObjects = dir->pack(LOGS_OBJS);
 	state FDB::Key logsCount = dir->pack(LOGS_COUNT);
 	state uint64_t cntClean = DocLayerConstants::CHNG_VIRT_CLEAN;
@@ -402,6 +403,14 @@ ACTOR void clearVirtualRanges(Reference<DocumentLayer> docLayer) {
 			}
 		}
 	}	
+}
+
+// Initialize dirs for stream
+ACTOR Future<Void> initVirtualDirs(Reference<DocumentLayer> docLayer) {
+	Reference<DirectorySubspace> ds = wait(logsDirectory(docLayer));
+	logsDir = ds;
+
+	return Void();
 }
 
 // Run oplog size monitor

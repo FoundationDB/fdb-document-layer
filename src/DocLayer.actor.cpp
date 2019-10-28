@@ -618,6 +618,9 @@ ACTOR void setup(NetworkAddress na,
 			}
 		}
 		
+		// Init dirs
+		wait(initVirtualDirs(docLayer));
+
 		// Changes watcher
 		state Reference<ExtChangeWatcher> watcher = Reference<ExtChangeWatcher>(new ExtChangeWatcher(docLayer, changeStream));
 		watcher->watch();

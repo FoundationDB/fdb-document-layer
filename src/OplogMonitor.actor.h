@@ -35,8 +35,6 @@
 
 void sendLogId(PromiseStream<std::map<std::string, bson::BSONObj>> logsWriter, std::map<std::string, bson::BSONObj> objs);
 ACTOR Future<Reference<DirectorySubspace>> logsDirectory(Reference<DocumentLayer> docLayer);
-ACTOR Future<Void> outStream(Reference<DocumentLayer> docLayer, Deque<std::string> oIds, Reference<ExtChangeStream> output);
-ACTOR void logStreamQuery(Reference<DocumentLayer> docLayer, Deque<std::string> oIds, PromiseStream<bson::BSONObj> output);
 ACTOR void logStreamReaderActor(Reference<DocumentLayer> docLayer, FutureStream<std::map<std::string, bson::BSONObj>> objsReader);
 ACTOR void logStreamWatcherActor(Reference<DocumentLayer> docLayer, PromiseStream<std::pair<std::string, std::string>> keysWriter);
 ACTOR void logStreamScanActor(
@@ -46,6 +44,7 @@ ACTOR void logStreamScanActor(
 );
 
 ACTOR void deleteExpiredLogs(Reference<DocumentLayer> docLayer, double ts);
+ACTOR Future<Void> initVirtualDirs(Reference<DocumentLayer> docLayer);
 void oplogMonitor(Reference<DocumentLayer> docLayer, double logsDeletionOffset);
 
 #endif /* _OPLOG_MONITOR_ACTOR_H */

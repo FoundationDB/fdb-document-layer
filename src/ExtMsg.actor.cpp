@@ -1496,12 +1496,12 @@ Reference<IInsertOp> operatorUpsert(bson::BSONObj const& selector, bson::BSONObj
 
 Future<Reference<IReadWriteContext>> DocInserter::insert(Reference<CollectionContext> cx, bson::BSONObj obj) {
 	bson::BSONElement el;
-	if (obj.getObjectID(el)) {		
+	if (obj.getObjectID(el)) {	
 		objs.insert(std::pair<std::string, bson::BSONObj>(
 			el.OID().toString(),
 			obj.getOwned()
 		));
-	}
+	}	
 
 	return insertDocument(cx, obj, extractEncodedIds(obj));
 }

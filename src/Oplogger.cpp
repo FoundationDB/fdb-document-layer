@@ -83,7 +83,7 @@ bool Oplogger::isEnabled() {
 }
 
 Deque<Future<Reference<IReadWriteContext>>> Oplogger::buildOplogs(Reference<CollectionContext> ctx) {
-    Deque<Future<Reference<IReadWriteContext>>> oplogs;
+    Deque<Future<Reference<IReadWriteContext>>> oplogs;	
 
     for(auto o : operations) {
         if (o.second.second.isEmpty()) {
