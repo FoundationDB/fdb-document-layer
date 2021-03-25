@@ -35,7 +35,7 @@ setup(
         'pytest',
         'pymongo==3.6.1',
         'python-dateutil',
-        'PyYAML==4.2b4',
+        'PyYAML==5.4',
         'psutil',
         'coloredlogs==4.0.0'
     ],
