@@ -36,7 +36,7 @@ or
 [directories](https://apple.github.io/foundationdb/developer-guide.html#directories)
 in their default configurations. The name of the top-level directory
 used by the Document Layer can be specified in the [configuration file
-](configuration.md) and defaults to `document`. This allows multiple Document Layer
+](configuration.html) and defaults to `document`. This allows multiple Document Layer
 deployments to co-exist on a single FoundationDB cluster.
 
 ## Installing the Document Layer
@@ -47,7 +47,7 @@ installer.
 
 ### Cluster file specification
 
-The FoundationDB Document Layer package installs a [configuration file](configuration.md) 
+The FoundationDB Document Layer package installs a [configuration file](configuration.html) 
 that specifies the default [cluster
 file](https://apple.github.io/foundationdb/administration.html#cluster-files)
 to be located at `/usr/local/etc/foundationdb/fdb.cluster`. After installation, you
@@ -59,7 +59,7 @@ You can test that the Document Layer is working by connecting to it with
 the `mongo` CLI distributed with MongoDB® (e.g.
 `mongo 127.0.0.1:27016`). The default port on which the Document Layer
 listens is `27016`, but the port can be changed in the [configuration
-file](configuration.md) if needed. Be sure to insert and read back a small
+file](configuration.html) if needed. Be sure to insert and read back a small
 document to ensure that the Document Layer is successfully communicating
 with the Key-Value Store.
 
