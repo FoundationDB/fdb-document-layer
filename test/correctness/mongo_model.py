@@ -1112,6 +1112,31 @@ class MongoCollection(object):
             raise MongoModelException("bad query!")
         return selector
 
+    def delete_one(self, query):
+        """Delete one document that matches the query. Notice when comparing the result of this with the result from
+           document layer, user may see difference because MongoModel does not use indexes when doing query, while
+           document layer does and thus document layer might delete a different doc here.
+        """
+        if len(query) == 0:
+            for k in self.data.keys():
+                del self.data[k]
+                return
+        queryKey = query.keys()[0]
+        for k, item in self.data.iteritems():
+            if evaluate(queryKey, query[queryKey], item, self.options):
+                del self.data[k]
+                return
+
+    def delete_many(self, query):
+        if len(query) == 0:
+            self.data = SortedDict()
+            return
+        queryKey = query.keys()[0]
+        for k, item in self.data.iteritems():
+            if evaluate(queryKey, query[queryKey], item, self.options):
+                del self.data[k]
+
+
     def update(self, query, update, upsert, multi):
         isOperatorUpdate = self.has_operator_expressions(update)
         if not isOperatorUpdate and multi:
